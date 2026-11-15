@@ -1,0 +1,6 @@
+# Test fixtures only: fixed fake secrets used by the WordPress end-to-end test and the fake-SMTP tests. Nothing real lives here.
+[extend]
+useDefault = true
+[allowlist]
+description = "synthetic test credentials"
+paths = ['''tests/docker/wordpress-e2e\.sh''', '''tests/cases/12_jobs_mail_alerts\.php''']
