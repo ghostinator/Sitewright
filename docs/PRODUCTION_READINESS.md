@@ -22,7 +22,7 @@ Updated with every commit of the production-readiness phase. Verdict stays **SAF
 | 6 | Site integration: WordPress plugin (Sitewright calls the site; nothing needs to be public), 404 collection, redirect enforcement | **Done and tested against real WordPress 6** (`tests/docker/wordpress-e2e.sh`: 29 checks incl. signatures, replay, nonce, enforcement, hostile rules, SSRF) + `tests/cases/14_sites.php`. UI for sites still to do |
 | 7 | Location edit UI with opening hours and JSON-LD view | **Done** (jsdom tests; browser suite below exercises it end to end) |
 | 8 | Permanent browser test suite (`tests/browser`, Playwright in Docker against Apache + MariaDB + worker) | **Done**: 8 tests. First run found two real bugs (duplicate security headers; hidden `required` field blocked the MFA code step) |
-| 9 | Google Search Console OAuth | planned (mock-tested only until credentials exist) |
+| 9 | Google Search Console OAuth (PKCE, session-bound single-use state, read-only scope, encrypted refresh token, daily import) | **Done in code, mock-tested only** (`tests/cases/15_gsc.php`, 17 checks incl. replay, wrong state, revoked grant, idempotent import). Not exercised against real Google: needs your OAuth client |
 
 ## Still needs you (cannot be done by me)
 * Independent penetration test; trademark check on "Sitewright"; legal review of crawling third parties; privacy-notice controller name.

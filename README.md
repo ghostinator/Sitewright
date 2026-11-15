@@ -92,6 +92,8 @@ tests/docker/smoke.sh up         # Apache root (:8081) + sub-path (:8082/seo) + 
 
 Layout: `public/` (only web-exposed directory) · `core/` framework · `modules/` controllers · `config/` · `database/migrations/` · `bin/` CLI tools · `tests/` · `docs/`.
 
+Features beyond the original tools: user accounts with roles, e-mail password reset, TOTP two-step sign-in, audit log, background worker (crawl, images, mail, alerts), alerts to e-mail/Teams/Telegram, connected WordPress sites (404 capture and redirect enforcement through a plugin), Google Search Console import. Test everything locally with `tests/all.sh`.
+
 See [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) for what is done and what remains before production use.
 
 ## License

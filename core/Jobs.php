@@ -142,6 +142,7 @@ final class Jobs
         if ($type === 'mail') { return Mailer::handleJob($payload); }
         if ($type === 'alert') { return Alerts::handleJob($payload); }
         if ($type === 'site_sync') { return SiteSync::handleJob($payload); }
+        if ($type === 'gsc_sync') { return Gsc::handleJob($payload); }
         if (isset(self::$handlers[$type])) {
             return (self::$handlers[$type])($payload);
         }

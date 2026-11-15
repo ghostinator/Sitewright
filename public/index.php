@@ -144,7 +144,8 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
 
                 <div class="view" id="view-analytics"><div class="card">
                     <h3>Keyword Analytics</h3>
-                    <p class="text-muted">Shows keyword data you have added or imported via the API (<code>POST /api/analytics/keyword</code>, <code>/api/analytics/import-keywords</code>). There is no Google Search Console connection.</p>
+                    <p class="text-muted">Keyword data comes from Google Search Console (read-only, connect below) and from anything you add or import through the API.</p>
+                    <div id="gsc-box" class="list-area"></div>
                     <div id="analytics-dashboard"></div>
                 </div></div>
 

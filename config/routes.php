@@ -36,6 +36,13 @@ return [
     ['POST',   '/api/sites/{id}/sync',          $C . 'SiteController@sync',      ['role' => 'admin']],
     ['POST',   '/api/sites/{id}/rotate-secret', $C . 'SiteController@rotate',    ['role' => 'admin']],
     ['DELETE', '/api/sites/{id}',               $C . 'SiteController@delete',    ['role' => 'admin']],
+    ['GET',    '/api/gsc',                      $C . 'GscController@status',      ['role' => 'admin']],
+    ['POST',   '/api/gsc/connect',              $C . 'GscController@connect',     ['role' => 'admin']],
+    ['GET',    '/api/gsc/callback',             $C . 'GscController@callback',    ['role' => 'admin']],
+    ['GET',    '/api/gsc/{id}/properties',      $C . 'GscController@properties',  ['role' => 'admin']],
+    ['POST',   '/api/gsc/{id}/property',        $C . 'GscController@setProperty', ['role' => 'admin']],
+    ['POST',   '/api/gsc/{id}/sync',            $C . 'GscController@sync',        ['role' => 'admin']],
+    ['DELETE', '/api/gsc/{id}',                 $C . 'GscController@disconnect',  ['role' => 'admin']],
     ['GET',    '/api/audit',                    $C . 'AuditController@list',     ['role' => 'admin']],
 
     // SEO analysis (outbound fetch of the analysed URL)

@@ -160,6 +160,31 @@
             [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id), deleteButton('delete-site', s.id)])));
     }
 
+    /** Search Console panel. state = {configured, redirect_uri, connections:[...]}; properties = {id: [{site_url}]} for connections being set up. */
+    function renderGsc(container, state, properties) {
+        const nodes = [];
+        if (!state.configured) {
+            nodes.push(el('div', { class: 'alert' }, 'Not configured yet. Create an OAuth client (type "Web application") in the Google Cloud console, add ', el('code', { text: state.redirect_uri || 'https://YOUR-HOST/api/gsc/callback' }),
+                ' as an authorized redirect URI, then store the client with ', el('code', { text: 'sudo sw-set-secrets google' }), '. The redirect happens in your browser, so the server does not need to be reachable from the internet.'));
+        }
+        for (const c of state.connections) {
+            const props = properties && properties[c.id];
+            const row = [el('strong', { text: c.property_url || 'No property chosen' }), ' ', el('span', { class: 'badge', text: c.last_status }), el('br'),
+                el('small', { class: 'text-muted', text: 'last sync: ' + (c.last_sync_at || 'never') + (c.rows_synced ? ' | ' + c.rows_synced + ' rows' : '') })];
+            if (c.last_error) row.push(el('div', { class: 'alert alert-error', text: c.last_error }));
+            const actions = [smallButton(c.property_url ? 'Change property' : 'Choose property', 'gsc-properties', c.id)];
+            if (c.property_url) actions.push(smallButton('Sync now', 'gsc-sync', c.id));
+            actions.push(smallButton('Disconnect', 'gsc-disconnect', c.id, 'btn-danger'));
+            nodes.push(listItem(row, actions));
+            if (props) {
+                const sel = el('select', { attrs: { id: 'gsc-prop-' + c.id, 'aria-label': 'Search Console property' } }, ...props.map(p => el('option', { text: p.site_url + ' (' + p.permission + ')', attrs: { value: p.site_url } })));
+                nodes.push(el('div', { class: 'form-inline' }, sel, smallButton('Use this property', 'gsc-set-property', c.id, 'btn-primary')));
+            }
+        }
+        if (state.configured) nodes.push(el('p', {}, smallButton(state.connections.length ? 'Connect another Google account' : 'Connect Google Search Console', 'gsc-connect', 0, 'btn-primary')));
+        setContent(container, el('h4', { text: 'Google Search Console' }), ...nodes);
+    }
+
     function renderAudit(container, rows, append) {
         const items = rows.map(r => listItem([
             el('strong', { text: r.action }), ' ', el('span', { class: 'text-muted', text: (r.username || '-') + ' · ' + r.ip }), el('br'),
@@ -231,7 +256,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, hoursFromForm, editLocation };
+    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -366,7 +391,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, analytics: loadAnalytics, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false) };
+        const loaders = { dashboard: loadDashboard, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false) };
         if (loaders[view]) loaders[view]();
     }
 
@@ -404,6 +429,12 @@
     const load404 = () => { syncExportLinks(); return loadInto('404-logs', '/404-monitor/logs?per_page=100' + siteQuery('&'), render404Logs, '404 log'); };
     const loadRedirections = () => { syncExportLinks(); return loadInto('redirections-list', '/redirections' + siteQuery('?'), renderRedirections, 'redirect rules'); };
     const loadLocations = () => loadInto('locations-list', '/local-seo/locations', (box, locs) => { locationsById = {}; locs.forEach(l => { locationsById[l.id] = l; }); renderLocations(box, locs); }, 'locations');
+    const gscProps = {};
+    async function loadGsc() {
+        const box = document.getElementById('gsc-box');
+        if (cfg.user && cfg.user.role !== 'admin') { setContent(box, muted('Ask an administrator to connect Google Search Console.')); return; }
+        try { renderGsc(box, await apiRequest('GET', '/gsc'), gscProps); } catch (e) { showError(box, 'Could not load Search Console: ' + e.message); }
+    }
     const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
     const loadSitemaps = () => loadInto('sitemap-list', '/sitemap', (box, rows) => setContent(box,
         rows.length ? el('p', { class: 'text-muted', text: rows.length + ' URL(s) stored. ' }, el('a', { text: 'Download XML', attrs: { href: BASE + '/api/sitemap/generate-xml', target: '_blank', rel: 'noopener' } })) : muted('No sitemap URLs stored yet.')), 'sitemap');
@@ -612,6 +643,11 @@
         'site-sync': async t => { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/sync', {}); showToast('Sync started'); await new Promise(r => setTimeout(r, 2500)); loadSites(); return d; },
         'site-rotate': async t => { if (confirm('Create a new secret? Syncing stops until the plugin has it.')) { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/rotate-secret', {}); const box = document.getElementById('site-secret'); setContent(box, el('div', { class: 'alert alert-error', text: 'New secret (shown once): put it into the plugin.' }), el('pre', { class: 'break-all', text: d.secret })); box.classList.remove('hidden'); loadSites(); } },
         'delete-site': async t => { if (confirm('Remove this site from Sitewright? Its rules and 404 entries are kept.')) { await apiRequest('DELETE', '/sites/' + encodeURIComponent(t.dataset.id)); showToast('Site removed'); loadSites(); loadSiteOptions(); } },
+        'gsc-connect': async () => { const d = await apiRequest('POST', '/gsc/connect', {}); window.location.assign(d.url); },
+        'gsc-properties': async t => { gscProps[t.dataset.id] = await apiRequest('GET', '/gsc/' + encodeURIComponent(t.dataset.id) + '/properties'); loadGsc(); },
+        'gsc-set-property': async t => { const v = document.getElementById('gsc-prop-' + t.dataset.id).value; await apiRequest('POST', '/gsc/' + encodeURIComponent(t.dataset.id) + '/property', { site_url: v }); delete gscProps[t.dataset.id]; showToast('Property saved'); loadGsc(); },
+        'gsc-sync': async t => { await apiRequest('POST', '/gsc/' + encodeURIComponent(t.dataset.id) + '/sync', {}); showToast('Sync started; refresh in a minute'); },
+        'gsc-disconnect': async t => { if (confirm('Disconnect Google Search Console? Imported keyword data is kept.')) { await apiRequest('DELETE', '/gsc/' + encodeURIComponent(t.dataset.id)); showToast('Disconnected'); loadGsc(); } },
         'delete-user': async t => { if (confirm('Delete this user permanently?')) { await apiRequest('DELETE', '/users/' + encodeURIComponent(t.dataset.id)); showToast('User deleted'); loadUsers(); } },
         'user-toggle': async t => { const disabling = t.textContent === 'Disable'; if (!disabling || confirm('Disable this account? Their sessions end immediately.')) { await apiRequest('PATCH', '/users/' + encodeURIComponent(t.dataset.id), { disabled: disabling }); showToast(disabling ? 'Disabled' : 'Enabled'); loadUsers(); } },
         'user-reset-mfa': async t => { if (confirm('Remove two-step verification from this account?')) { await apiRequest('POST', '/users/' + encodeURIComponent(t.dataset.id) + '/reset-mfa', {}); showToast('Two-step verification removed'); loadUsers(); } },
@@ -633,6 +669,8 @@
         try { await withPending(null, () => clickActions[t.dataset.action](t)); } catch (err) { showToast(err.message, 'error'); }
     });
 
+    const gscResult = new URLSearchParams(window.location.search).get('gsc');
+    if (gscResult) { showToast(gscResult === 'connected' ? 'Google Search Console connected. Choose a property next.' : 'Could not connect Google Search Console. Try again.', gscResult === 'connected' ? 'success' : 'error'); history.replaceState({}, '', window.location.pathname); }
     loadSiteOptions();
     window.addEventListener('popstate', () => switchView(viewFromLocation(), false));
     switchView(viewFromLocation(), false);

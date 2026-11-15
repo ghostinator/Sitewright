@@ -82,3 +82,6 @@ final class JobRetryException extends \RuntimeException
 
 /** SMTP delivery problem; the message is safe to show to the operator (no credentials). */
 final class MailException extends \RuntimeException {}
+
+/** Google OAuth / Search Console problem; the message is safe to show to the administrator (never contains tokens). */
+final class GscException extends \RuntimeException {}

@@ -47,6 +47,12 @@ final class Request
     }
 
     /** Integer query parameter, clamped to [$min,$max]; non-numeric input falls back to $default. */
+    /** @return array<string,mixed> the whole query string (OAuth callbacks read several parameters) */
+    public static function allQuery(): array
+    {
+        return (array)(self::$fake['query'] ?? $_GET);
+    }
+
     public static function queryInt(string $key, int $default, int $min, int $max): int
     {
         $v = self::query($key);
