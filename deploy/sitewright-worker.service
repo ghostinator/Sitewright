@@ -1,0 +1,26 @@
+# /etc/systemd/system/sitewright-worker.service
+# Runs queued jobs (crawls, image batches, mail, alerts). Same user as PHP-FPM so the same egress firewall rules apply.
+[Unit]
+Description=Sitewright background worker
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/sitewright
+EnvironmentFile=-/etc/sitewright/worker.env
+ExecStart=/usr/bin/php /srv/sitewright/bin/worker.php --max-jobs=500
+Restart=always
+RestartSec=3
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/sitewright/storage
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

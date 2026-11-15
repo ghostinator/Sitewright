@@ -190,3 +190,29 @@ function call(string $class, string $method, array $request = [], array $params 
 }
 
 const PNG_1X1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+
+/** Names of all migration files (without .sql), in order. */
+function migrationNames(): array
+{
+    return array_map(static fn (string $f): string => basename($f, '.sql'), (array)glob(dirname(__DIR__) . '/database/migrations/*.sql'));
+}
+
+/**
+ * Submit a background job the way the HTTP layer does, run the worker until the queue is empty, and return the outcome in the same
+ * shape call() returns for a synchronous controller: ['status' => int, 'json' => ['success','message','data']].
+ */
+function callJob(string $endpoint, array $request): array
+{
+    $submit = call(Sitewright\Core\JobController::class, $endpoint, ['method' => 'POST', 'body' => $request['body'] ?? []]);
+    if ($submit['status'] !== 202) { return $submit; }
+    $id = (int)$submit['json']['data']['job_id'];
+    while (Sitewright\Core\Jobs::runNext()) { /* drain */ }
+    $db = Sitewright\Core\Database::getInstance();
+    $row = $db->fetchOne('SELECT status, result, error, error_status FROM `' . $db->t('jobs') . '` WHERE id = :id', ['id' => $id]);
+    if ($row['status'] === 'done') {
+        $res = json_decode((string)$row['result'], true);
+        return ['status' => 200, 'json' => ['success' => true, 'message' => $res['message'], 'data' => $res['data']], 'body' => (string)$row['result']];
+    }
+    return ['status' => (int)$row['error_status'], 'json' => ['success' => false, 'message' => $row['error']], 'body' => (string)$row['error']];
+}

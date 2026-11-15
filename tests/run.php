@@ -14,6 +14,7 @@ require __DIR__ . '/lib.php';
 
 putenv('SW_BASE_URL'); putenv('SW_ALLOWED_HOSTS'); // deterministic config
 Sitewright\Core\Config::useFile('/nonexistent/config.php');
+Sitewright\Core\Config::set('log.file', '/dev/null'); // keep test output readable (tests that check logging set their own file)
 
 $filter = $argv[1] ?? null;
 foreach (glob(__DIR__ . '/cases/*.php') ?: [] as $file) {

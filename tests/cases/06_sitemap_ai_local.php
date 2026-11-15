@@ -19,7 +19,7 @@ $site = [
 test('Sitemap crawl: only same-site 200 HTML pages, skips mailto/tel/js/data, strips fragments, honours robots.txt (FUNC-011)', function () use ($site, $db) {
     fakeWeb($site);
     Config::set('limits.crawl_delay_ms', 0);
-    $r = call(Sm::class, 'crawlAndGenerate', ['method' => 'POST', 'body' => ['base_url' => 'https://s.example/']]);
+    $r = callJob('crawl', ['method' => 'POST', 'body' => ['base_url' => 'https://s.example/']]);
     eq($r['status'], 200);
     $urls = array_column($db->fetchAll('SELECT url FROM sw_sitemaps ORDER BY url'), 'url');
     eq($urls, ['https://s.example/', 'https://s.example/a', 'https://s.example/a?x=1&y=2', 'https://s.example/b']);
@@ -27,7 +27,7 @@ test('Sitemap crawl: only same-site 200 HTML pages, skips mailto/tel/js/data, st
 });
 test('Sitemap crawl: re-crawl does not create duplicates (DB-001)', function () use ($site, $db) {
     fakeWeb($site);
-    $r = call(Sm::class, 'crawlAndGenerate', ['method' => 'POST', 'body' => ['base_url' => 'https://s.example/']]);
+    $r = callJob('crawl', ['method' => 'POST', 'body' => ['base_url' => 'https://s.example/']]);
     eq($r['json']['data']['added'], 0); eq((int)$db->fetchOne('SELECT COUNT(*) c FROM sw_sitemaps')['c'], 4);
 });
 test('Sitemap crawl: max_pages=1000000 is clamped to the server cap (DOS-001, SSRF-003)', function () {
@@ -37,7 +37,7 @@ test('Sitemap crawl: max_pages=1000000 is clamped to the server cap (DOS-001, SS
     $pages['https://big.example/'] = html($links);
     fakeWeb($pages);
     Config::set('limits.max_pages', 25);
-    $r = call(Sm::class, 'crawlAndGenerate', ['method' => 'POST', 'body' => ['base_url' => 'https://big.example/', 'max_pages' => 1000000]]);
+    $r = callJob('crawl', ['method' => 'POST', 'body' => ['base_url' => 'https://big.example/', 'max_pages' => 1000000]]);
     eq($r['json']['data']['max_pages'], 25); eq($r['json']['data']['total_found'], 25);
     eq($r['json']['data']['stopped_early'], true);
     Config::set('limits.max_pages', 500);
@@ -52,7 +52,7 @@ test('Sitemap crawl: time budget is enforced', function () {
 test('Sitemap crawl: internal / non-http base URLs rejected before any request (SSRF-003)', function () {
     fakeWeb([], ['localhost' => ['127.0.0.1', '::1']]);
     foreach (['http://127.0.0.1/', 'http://localhost/', 'file:///etc/passwd', 'http://192.168.1.1/', 'ftp://x/', 'http://[::1]/', 'not a url'] as $u) {
-        $s = call(Sm::class, 'crawlAndGenerate', ['method' => 'POST', 'body' => ['base_url' => $u]])['status'];
+        $s = callJob('crawl', ['method' => 'POST', 'body' => ['base_url' => $u]])['status'];
         ok(in_array($s, [400, 502], true), "$u => $s");
     }
     eq(count($GLOBALS['__calls']), 0);

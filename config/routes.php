@@ -54,7 +54,7 @@ return [
     // Image SEO
     ['GET',  '/api/image-seo/images',       $M . 'ImageSeo\\ImageSeoController@getImages'],
     ['POST', '/api/image-seo/analyze',      $M . 'ImageSeo\\ImageSeoController@analyzeImage', ['limit' => 'fetch']],
-    ['POST', '/api/image-seo/bulk-analyze', $M . 'ImageSeo\\ImageSeoController@bulkAnalyze',  ['limit' => 'fetch']],
+    ['POST', '/api/image-seo/bulk-analyze', $C . 'JobController@bulkImages',  ['limit' => 'fetch']],
     ['GET',  '/api/image-seo/suggest-alt',  $M . 'ImageSeo\\ImageSeoController@suggestAltText'],
     ['PUT',  '/api/image-seo/{id}',         $M . 'ImageSeo\\ImageSeoController@updateImage'],
     ['GET',  '/api/image-seo/{id}/tips',    $M . 'ImageSeo\\ImageSeoController@getOptimizationTips'],
@@ -71,6 +71,7 @@ return [
     ['GET',    '/api/sitemap',              $M . 'Sitemap\\SitemapController@getAll'],
     ['POST',   '/api/sitemap',              $M . 'Sitemap\\SitemapController@add'],
     ['GET',    '/api/sitemap/generate-xml', $M . 'Sitemap\\SitemapController@generateXML'],
-    ['POST',   '/api/sitemap/crawl',        $M . 'Sitemap\\SitemapController@crawlAndGenerate', ['limit' => 'fetch']],
+    ['POST',   '/api/sitemap/crawl',        $C . 'JobController@crawl', ['limit' => 'fetch']],
+    ['GET',    '/api/jobs/{id}',            $C . 'JobController@status'],
     ['DELETE', '/api/sitemap/{id}',         $M . 'Sitemap\\SitemapController@delete'],
 ];

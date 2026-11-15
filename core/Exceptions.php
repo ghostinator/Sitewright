@@ -61,3 +61,24 @@ final class TooManyRedirectsException extends FetchException
     public string $reason = 'too_many_redirects';
     public int $httpStatus = 502;
 }
+
+/** A background job ended unsuccessfully. getMessage() is safe to show to the operator who started it. */
+final class JobFailedException extends \RuntimeException
+{
+    public function __construct(string $message, public readonly int $httpStatus = 500)
+    {
+        parent::__construct($message);
+    }
+}
+
+/** Throw from a job handler to try again later (counts as an attempt). */
+final class JobRetryException extends \RuntimeException
+{
+    public function __construct(string $reason, public readonly int $delaySeconds = 60)
+    {
+        parent::__construct($reason);
+    }
+}
+
+/** SMTP delivery problem; the message is safe to show to the operator (no credentials). */
+final class MailException extends \RuntimeException {}

@@ -86,6 +86,8 @@ final class Auth
         if (!$valid) {
             // An unknown name is recorded as such: people sometimes type their password into the username box.
             Audit::log('login_failed', $row ? (int)$row['id'] : null, $row ? $row['username'] : '(unknown)');
+            $n = (int)Config::get('alerts.login_failures');
+            Alerts::watch('login_failures', $n, 600, 'login_failures', "$n failed sign-in attempts within 10 minutes (latest from " . Request::ip() . ').');
             return null;
         }
         if (password_needs_rehash($hash, PASSWORD_DEFAULT)) {
@@ -179,6 +181,12 @@ final class Auth
         session_destroy();
         self::$user = null;
         self::$userChecked = true;
+    }
+
+    /** Replaced by real roles in the accounts feature; until then nobody gets the cross-user view. */
+    public static function isAdmin(): bool
+    {
+        return false;
     }
 
     public static function csrfToken(): string

@@ -44,7 +44,7 @@ $opts = fn (array $o = []) => $o + ['create_db' => true, 'config_path' => "$tmp/
 test('install: creates schema + admin, writes 0600 config + lock, password is hashed', function () use ($opts, $tmp, $c) {
     Database::connect($c, false)->exec('DROP DATABASE IF EXISTS sw_inst');
     $r = Installer::run($opts());
-    eq(count($r["applied"]), 4);
+    eq(count($r["applied"]), count(migrationNames()));
     eq(substr(sprintf('%o', fileperms("$tmp/config.php")), -4), '0600');
     ok(file_exists("$tmp/install.lock"));
     $pdo = Database::connect(['name' => 'sw_inst'] + $c);
@@ -69,7 +69,7 @@ test('install: invalid input fails before touching the database', function () us
 test('install: re-running migrations on an installed DB is idempotent (FUNC-014)', function () use ($opts, $tmp, $c) {
     Installer::run($opts(['admin' => ['username' => 'second_admin', 'email' => 's@example.test', 'password' => 'another long passphrase']]));
     $pdo = Database::connect(['name' => 'sw_inst'] + $c);
-    eq(array_keys((new Sitewright\Core\Migrator($pdo, 'sw_'))->status()), ['001_initial', '002_integrity_auth', '003_drop_unused', '004_mfa_audit']);
+    eq(array_keys((new Sitewright\Core\Migrator($pdo, 'sw_'))->status()), migrationNames());
     eq((new Sitewright\Core\Migrator($pdo, 'sw_'))->run(), []);
 });
 test('install: custom prefix is applied via placeholder (not blind str_replace)', function () use ($opts, $tmp, $c) {

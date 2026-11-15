@@ -27,6 +27,12 @@ final class Config
             'retention_days_404' => 90,
             'hsts'             => false,
             'trusted_proxies'  => [],
+            'log' => ['file' => '', 'level' => 'info', 'requests' => true],
+            'mail' => [
+                'host' => '', 'port' => 587, 'encryption' => 'starttls', 'username' => '', 'password' => '',
+                'from' => '', 'from_name' => 'Sitewright', 'verify_tls' => true, 'timeout' => 10,
+            ],
+            'alerts' => ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 10],
             'retention_days_audit' => 365,
             'db' => [
                 'host' => '127.0.0.1', 'port' => 3306, 'name' => 'sitewright_webapp',
@@ -44,6 +50,7 @@ final class Config
                 'body_bytes' => 1048576, 'max_pages' => 500, 'bulk_images' => 50, 'import_rows' => 5000,
                 'login_attempts' => 5, 'login_ip_attempts' => 30, 'login_window' => 900,
                 'expensive_per_min' => 10, 'crawl_seconds' => 120, 'crawl_delay_ms' => 200,
+                'jobs_per_user' => 5, 'job_stale_seconds' => 600, 'job_retention_days' => 14,
             ],
             'fetch' => [
                 'allow_hosts' => [], 'block_hosts' => [], 'allow_ports' => [80, 443],
@@ -134,6 +141,12 @@ final class Config
         if (($v = $env('SW_CONTACT')) !== null) { $cfg['contact'] = $v; }
         if (($v = $env('SW_ENABLE_GEOCODING')) !== null) { $cfg['enable_geocoding'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         if (($v = $env('SW_DEBUG')) !== null) { $cfg['debug'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
+        foreach (['file' => 'SW_LOG_FILE', 'level' => 'SW_LOG_LEVEL'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['log'][$k] = $v; } }
+        foreach (['host' => 'SW_MAIL_HOST', 'encryption' => 'SW_MAIL_ENCRYPTION', 'username' => 'SW_MAIL_USERNAME', 'password' => 'SW_MAIL_PASSWORD', 'from' => 'SW_MAIL_FROM', 'from_name' => 'SW_MAIL_FROM_NAME'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['mail'][$k] = $v; } }
+        if (($v = $env('SW_MAIL_PORT')) !== null) { $cfg['mail']['port'] = (int)$v; }
+        if (($v = $env('SW_MAIL_VERIFY_TLS')) !== null) { $cfg['mail']['verify_tls'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
+        if (($v = $env('SW_ALERT_EMAIL_TO')) !== null) { $cfg['alerts']['email_to'] = $list($v); }
+        foreach (['teams_webhook' => 'SW_ALERT_TEAMS_WEBHOOK', 'telegram_token' => 'SW_ALERT_TELEGRAM_TOKEN', 'telegram_chat_id' => 'SW_ALERT_TELEGRAM_CHAT_ID'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['alerts'][$k] = $v; } }
         if (($v = $env('SW_TRUSTED_PROXIES')) !== null) { $cfg['trusted_proxies'] = $list($v); }
         if (($v = $env('SW_HSTS')) !== null) { $cfg['hsts'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         // Outbound controls are deliberately separate from SW_ALLOWED_HOSTS (inbound Host validation).
@@ -145,6 +158,12 @@ final class Config
         $cfg['enable_geocoding'] = (bool)$cfg['enable_geocoding'];
         $cfg['db']['port']       = (int)$cfg['db']['port'];
 
+        $cfg['mail']['port'] = (int)$cfg['mail']['port'];
+        $cfg['mail']['verify_tls'] = (bool)$cfg['mail']['verify_tls'];
+        if (!in_array($cfg['mail']['encryption'], ['starttls', 'tls', 'none'], true)) {
+            throw new ConfigException('mail.encryption must be starttls, tls or none');
+        }
+        $cfg['alerts']['email_to'] = array_values(array_map('strval', (array)$cfg['alerts']['email_to']));
         // Trusted proxies decide whose X-Forwarded-For is believed, so a bad entry must stop the app, never be skipped.
         $cfg['trusted_proxies'] = array_values(array_map('strval', (array)$cfg['trusted_proxies']));
         foreach ($cfg['trusted_proxies'] as $cidr) {

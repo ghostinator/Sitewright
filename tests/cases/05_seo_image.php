@@ -79,7 +79,7 @@ test('Image bulk: URL resolution, internal targets skipped, dedupe, cap, unknown
         'https://cdn.example/c.png' => $ok, 'https://site.example:8443/abs.png' => $ok, 'https://site.example:8443/blog/post/lazy.png' => $ok,
     ], [], ['allow_ports' => [80, 443, 8443]]);
     Config::set('limits.bulk_images', 50);
-    $r = call(Img::class, 'bulkAnalyze', ['method' => 'POST', 'body' => ['url' => 'https://site.example:8443/blog/post/']]);
+    $r = callJob('bulkImages', ['method' => 'POST', 'body' => ['url' => 'https://site.example:8443/blog/post/']]);
     eq($r['status'], 200);
     $srcs = array_column($r['json']['data']['images'], 'src');
     sort($srcs);
@@ -90,7 +90,7 @@ test('Image bulk: URL resolution, internal targets skipped, dedupe, cap, unknown
     eq((int)$db->fetchOne("SELECT optimized o FROM sw_image_seo WHERE image_url = 'https://site.example:8443/blog/post/img/a.png'")['o'], 1);
     // cap
     Config::set('limits.bulk_images', 2);
-    $r = call(Img::class, 'bulkAnalyze', ['method' => 'POST', 'body' => ['url' => 'https://site.example:8443/blog/post/']]);
+    $r = callJob('bulkImages', ['method' => 'POST', 'body' => ['url' => 'https://site.example:8443/blog/post/']]);
     eq(count($r['json']['data']['images']), 2); eq($r['json']['data']['truncated'], true);
     Config::set('limits.bulk_images', 50);
 });

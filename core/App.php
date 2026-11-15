@@ -114,17 +114,22 @@ final class App
     public static function run(): void
     {
         self::boot();
+        $t0 = microtime(true);
+        $method = Request::method();
         try {
-            $method = Request::method();
             self::handle($method === 'HEAD' ? 'GET' : $method, self::relativePath());
         } catch (ResponseException $r) {
             if (!headers_sent()) {
                 foreach (self::apiHeaders() as $k => $v) { header("$k: $v"); }
             }
             Response::emit($r);
+            self::logRequest($method, $r->status, $t0);
+            if ($r->status >= 500) { Alerts::notify('server_error', "HTTP {$r->status} on {$method} " . self::relativePath() . ' (request ' . self::requestId() . ')', 'error', (string)$r->status); }
         } catch (\Throwable $e) {
             self::logThrowable($e);
             self::emitGeneric500();
+            self::logRequest($method, 500, $t0);
+            Alerts::notify('server_error', 'Unhandled ' . get_class($e) . ' on ' . $method . ' ' . self::relativePath() . ' (request ' . self::requestId() . ')', 'error', 'unhandled');
         }
     }
 
@@ -195,9 +200,20 @@ final class App
         }
     }
 
+    /** One structured line per request: method, path WITHOUT query string, status, duration, user id, client IP. */
+    private static function logRequest(string $method, int $status, float $t0): void
+    {
+        if (!Config::get('log.requests')) { return; }
+        Logger::info('request', [
+            'method' => $method, 'path' => self::relativePath(), 'status' => $status, 'ms' => (int)((microtime(true) - $t0) * 1000),
+            'uid' => $_SESSION['uid'] ?? null, 'ip' => Request::ip(),
+        ]);
+    }
+
     private static function logThrowable(\Throwable $e): void
     {
         error_log(sprintf('Unhandled %s [%s]: %s in %s:%d', get_class($e), self::requestId(), $e->getMessage(), $e->getFile(), $e->getLine()));
+        Logger::error('unhandled_exception', ['exception' => get_class($e), 'file' => basename($e->getFile()), 'line' => $e->getLine()]);
     }
 
     private static function emitGeneric500(): void

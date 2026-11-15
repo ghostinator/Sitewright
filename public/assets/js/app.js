@@ -299,6 +299,22 @@
         } catch (e) { box.className = 'alert hidden'; }
     }
 
+    // ------------------------------------------------------------------ background jobs
+
+    /** Submit a job (202 + job_id), then poll its status until it finishes. Resolves with the job's result data. */
+    async function runJob(path, body, box, label) {
+        const { job_id: id } = await apiRequest('POST', path, body);
+        const started = Date.now();
+        for (;;) {
+            await new Promise(r => setTimeout(r, Math.min(4000, 800 + (Date.now() - started) / 10)));
+            const job = await apiRequest('GET', '/jobs/' + encodeURIComponent(id));
+            if (job.status === 'done') return job.result.data;
+            if (job.status === 'failed') throw new ApiError(job.error || 'The job failed', job.error_status || 500);
+            if (Date.now() - started > 15 * 60 * 1000) throw new ApiError('Still running; check back later (job #' + id + ')', 504);
+            setContent(box, muted(label + (job.status === 'queued' ? ' (waiting for a worker…)' : ' (working…)')));
+        }
+    }
+
     // ------------------------------------------------------------------ forms
 
     let lastGenerated = '';
@@ -317,13 +333,13 @@
         'image-bulk-form': async form => {
             const box = document.getElementById('image-results');
             setContent(box, muted('Analyzing images… this can take a minute.'));
-            try { renderImageResults(box, await apiRequest('POST', '/image-seo/bulk-analyze', { url: form.querySelector('#image-url').value })); } catch (e) { showError(box, e.message); }
+            try { renderImageResults(box, await runJob('/image-seo/bulk-analyze', { url: form.querySelector('#image-url').value }, box, 'Analyzing images')); } catch (e) { showError(box, e.message); }
         },
         'sitemap-crawl-form': async form => {
             const box = document.getElementById('sitemap-results');
             setContent(box, muted('Crawling… this can take a couple of minutes.'));
             try {
-                renderSitemapResult(box, await apiRequest('POST', '/sitemap/crawl', { base_url: form.querySelector('#sitemap-url').value, max_pages: 100 }), BASE + '/api/sitemap/generate-xml');
+                renderSitemapResult(box, await runJob('/sitemap/crawl', { base_url: form.querySelector('#sitemap-url').value, max_pages: 100 }, box, 'Crawling'), BASE + '/api/sitemap/generate-xml');
                 loadSitemaps();
             } catch (e) { showError(box, e.message); }
         },

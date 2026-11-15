@@ -124,3 +124,28 @@ test('login: server error text is shown as text, never parsed as HTML', async ()
   assert.equal(doc.getElementById('login-error').textContent, '<img src=x onerror=alert(1)>');
   assert.equal(calls.length, 1);
 });
+
+// ---- background job polling -----------------------------------------------------------------------------------------------
+test('crawl form: submits a job, polls its status, then renders the result (and a failed job shows its error as text)', async () => {
+  for (const [final, expect] of [[{ status: 200, json: { success: true, data: { status: 'done', result: { data: { total_found: 3, added: 3, fetched: 3, stopped_early: false, max_pages: 100 } } } } }, '3'],
+                                  [{ status: 200, json: { success: true, data: { status: 'failed', error: '<img src=x onerror=alert(1)>', error_status: 502 } } }, '<img src=x onerror=alert(1)>']]) {
+    const calls = []; const polls = [{ status: 200, json: { success: true, data: { status: 'running' } } }, final];
+    const html = '<!doctype html><body><script type="application/json" id="app-config">{"basePath":"","csrfToken":"tok"}</script>'
+      + '<aside></aside><main><h1 id="page-title"></h1><section class="view" id="view-sitemaps"></section><form id="sitemap-crawl-form"><input id="sitemap-url" value="https://example.com"><button type="submit">Go</button></form><div id="sitemap-results"></div><div id="sitemap-list"></div></main></body>';
+    const { VirtualConsole } = require('jsdom');
+    const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', virtualConsole: new VirtualConsole(), pretendToBeVisual: true });
+    dom.window.fetch = async (url, opts) => {
+      const key = opts.method + ' ' + url; if (/sitemap\/crawl|jobs\//.test(url)) calls.push(key);
+      const r = key === 'POST /api/sitemap/crawl' ? { status: 202, json: { success: true, data: { job_id: 7 } } }
+        : /jobs\/7/.test(url) ? (polls.length > 1 ? polls.shift() : polls[0]) : { status: 200, json: { success: true, data: [] } };
+      return { ok: r.status < 400, status: r.status, json: async () => r.json };
+    };
+    dom.window.eval(SRC);
+    dom.window.document.getElementById('sitemap-crawl-form').dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true }));
+    await new Promise(r => setTimeout(r, 3500));
+    assert.equal(calls[0], 'POST /api/sitemap/crawl'); assert.equal(calls[1], 'GET /api/jobs/7');
+    const box = dom.window.document.getElementById('sitemap-results');
+    assert.ok(box.textContent.includes(expect), 'result/error shown: ' + box.textContent.slice(0, 80));
+    assert.equal(box.querySelectorAll('img').length, 0);
+  }
+});

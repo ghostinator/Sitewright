@@ -1,0 +1,10 @@
+# /etc/systemd/system/sitewright-health.service  (triggered by the timer below)
+[Unit]
+Description=Sitewright health check (alerts on state change)
+
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/srv/sitewright
+EnvironmentFile=-/etc/sitewright/worker.env
+ExecStart=/usr/bin/php /srv/sitewright/bin/healthcheck.php
