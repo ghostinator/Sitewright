@@ -110,7 +110,7 @@ final class Config
     {
         $cfg = self::defaults();
 
-        $file = self::$file ?? self::root() . '/config/config.php';
+        $file = self::$file ?? ((($e = getenv('RMW_CONFIG_FILE')) !== false && $e !== '') ? $e : self::root() . '/config/config.php');
         if (is_file($file)) {
             $loaded = (static function (string $f) { return require $f; })($file);
             if (is_array($loaded)) {

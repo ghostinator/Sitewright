@@ -13,6 +13,10 @@ declare(strict_types=1);
  * Use a DB account that may CREATE/ALTER tables for this step; run the web app with a SELECT/INSERT/UPDATE/DELETE-only account.
  */
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+if (version_compare(PHP_VERSION, '8.1.0', '<')) { fwrite(STDERR, 'PHP 8.1 or newer is required (found ' . PHP_VERSION . ").\n"); exit(1); }
+foreach (['pdo_mysql', 'curl', 'mbstring', 'dom', 'json'] as $ext) {
+    if (!extension_loaded($ext)) { fwrite(STDERR, "Missing required PHP extension: $ext\n"); exit(1); }
+}
 require dirname(__DIR__) . '/core/autoload.php';
 
 use RankMathWebapp\Core\Installer;

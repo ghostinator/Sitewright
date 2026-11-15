@@ -56,6 +56,7 @@ Quick local try-out without Apache: `RMW_DB_NAME=… RMW_DB_USER=… RMW_DB_PASS
 | `RMW_CONTACT` | URL/e-mail added to the User-Agent of outbound requests |
 | `RMW_FETCH_ALLOW_HOSTS` / `RMW_FETCH_BLOCK_HOSTS` | **Outbound** host allow/block lists (separate from `RMW_ALLOWED_HOSTS`; the IP safety checks always apply) |
 | `RMW_FETCH_DEV_ALLOW_CIDRS` | **Development only**: exempt ranges from the private-address block (e.g. to analyse a local test site) |
+| `RMW_CONFIG_FILE` | Path of the config file if it lives outside the repo (default `config/config.php`) |
 | `RMW_HSTS`, `RMW_DEBUG` | HSTS header when served over HTTPS; verbose errors (never in production) |
 
 Run `php bin/check-env.php` to verify the environment (CLI only).
@@ -80,7 +81,7 @@ See [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) (Apache and nginx, sub-
 ## Development & tests
 
 ```bash
-tests/docker/run.sh 8.1          # php -l + 287 PHP tests on PHP 8.1 against a disposable MariaDB (Docker)
+tests/docker/run.sh 8.1          # php -l + 292 PHP tests on PHP 8.1 against a disposable MariaDB (Docker)
 tests/docker/run.sh 8.3
 (cd tests/js && npm install && npm test)   # jsdom XSS/renderer tests
 tests/docker/smoke.sh up         # Apache root (:8081) + sub-path (:8082/seo) + fixture site, for browser smoke tests
