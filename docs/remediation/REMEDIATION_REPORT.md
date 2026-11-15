@@ -236,7 +236,7 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 
 ## 8. REMAINING RISKS / LIMITATIONS
 
-* Single role: every account is a full administrator; no MFA, password reset, audit log or account management UI (create more users with SQL/CLI).
+* Single role: every account is a full administrator; no password reset or account-management UI (manage accounts with `bin/user.php`). **Update:** TOTP MFA and an audit log now exist (section 11).
 * The SSRF guard validates DNS answers from the host's resolver and pins them for the connection; a compromised resolver, or private ranges reachable through public IPs (e.g. SSRF into a public host that proxies inward), are out of scope. Add egress firewall rules.
 * Analysis, crawl and image jobs run synchronously inside web requests (bounded: 15 s/request, 2 min crawl, 50 images); rate limits are per minute and DB-backed, not CPU/memory quotas.
 * `Options -Indexes` in `.htaccess` requires `AllowOverride Options`; otherwise Apache returns 500 — use the vhost directive instead.
@@ -274,3 +274,24 @@ See `docs/STAGING_VM.md`. A Proxmox VM (Debian 13, nginx, PHP 8.4-FPM, MariaDB 1
 | Live Gemini | **Found and fixed a real bug**: `gemini-3.6-flash` spends output tokens on hidden thinking (768 of the 800-token cap), so answers were cut off (`finishReason=MAX_TOKENS`, 155 chars) and sometimes showed the model's notes. Fix: `thinkingBudget: 0`, `maxOutputTokens: 2048`, skip `thought` parts, treat `MAX_TOKENS` as a failure (template fallback, flagged). Two regression tests added (296 PHP tests). Endpoint, `x-goog-api-key` header and model name confirmed working. |
 | Live Nominatim | One call with geocoding enabled temporarily: "1600 Pennsylvania Avenue NW, Washington" returned 38.8976, -77.0366. Geocoding switched off again afterwards. |
 | Not done | JS tests on the VM (they pass on the Mac), permanent browser test suite |
+
+## 11. PRODUCTION-READINESS WORK (added after section 10)
+
+Source list: the "what would it take" answer given after the first report; status per item is in `docs/PRODUCTION_READINESS.md`.
+
+| Area | What changed | Evidence |
+|---|---|---|
+| Licence / privacy | MIT (copyright 2026 Brandon Cook) with a README note that the upstream fork source shipped no licence; privacy notice table in `docs/NETWORK_AND_PRIVACY.md` | n/a (documents) |
+| Trusted proxies | `SW_TRUSTED_PROXIES`: `X-Forwarded-For` honoured only from listed proxies, read right to left, garbage falls back to the proxy address; `/0` ranges and malformed entries stop the app at boot; `Host` handling unchanged (proxy must preserve it) | `tests/cases/10_trusted_proxies.php` (7 tests incl. spoofing, two-proxy chain, IPv6, fail-closed) and an end-to-end audit-IP test |
+| MFA | RFC 6238 TOTP (no dependency); two-step login where the pending state grants nothing, new session id at both steps, 5-minute window, per-account and per-IP throttle, replay and older-step refusal, 8 single-use hashed recovery codes; enrolment via `bin/user.php mfa-enable` (confirms a code first); MFA changes end that user's sessions; login UI second step built from DOM nodes | RFC 6238 Appendix B vectors, base32 vectors, HTTP tests, jsdom tests (`11_mfa_audit.php`, `tests/js`) |
+| Audit log | `audit_log` table (migration 004); logins, failures, MFA, logout, deletes, imports, CLI account changes; never passwords/keys/prompts; unknown usernames stored as `(unknown)`; `bin/audit.php`, `bin/purge-audit.php`, retention setting | tests incl. a leak check over every secret used in the run |
+| Backup | `bin/db-backup.sh` (backup/restore, 0600 files, restore needs explicit confirmation) and a drop-and-restore drill | `tests/docker/backup-drill.sh` passes on MariaDB 10.11 and MySQL 8.4 |
+| Databases | Full suite also run on MySQL 8.4 (`DB_IMAGE=mysql:8.4 tests/docker/run.sh`) | 321/321 |
+| CI | `.github/workflows/ci.yml` | **Written, not executed**: not pushed, so GitHub has never run it. YAML parses; lint, tests, JS tests and gitleaks were run locally |
+| Bugs found on the way | `str_split('')` on PHP 8.1 made `base32Encode('')` return `AA` (caught by the RFC 4648 vectors) | fixed, tested on 8.1 and 8.3 |
+
+**Test totals now:** 321 PHP tests on PHP 8.1 and 8.3 with MariaDB 10.11, and on 8.3 with MySQL 8.4; 14 JS tests. Migration 004 has not been run on MariaDB 11.8 / PHP 8.4 on the staging VM (access was removed at the end of the previous step).
+
+**Verdict (section 9) unchanged: SAFE FOR STAGING.** MFA, proxy handling and the audit log retire items from section 8 but do not by themselves make this production-ready; see `docs/PRODUCTION_READINESS.md` for what remains (pen test, CI executed, logging/monitoring, password reset, roles, async jobs, product decisions).
+
+**Deferred on purpose:** async jobs (queue + worker + UI), roles, password reset (needs email) and structured logging/alerting: each is a project of its own.

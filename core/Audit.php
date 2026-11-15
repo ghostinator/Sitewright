@@ -13,7 +13,7 @@ final class Audit
     {
         try {
             $clean = static fn (string $s, int $max): string => mb_substr(trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $s) ?? ''), 0, $max);
-            if ($userId === null && $username === '') {
+            if ($userId === null && $username === '' && PHP_SAPI !== 'cli') {  // CLI has no session; callers pass the actor
                 $u = Auth::user();
                 if ($u) { $userId = $u['id']; $username = $u['username']; }
             }

@@ -92,6 +92,8 @@ tests/docker/smoke.sh up         # Apache root (:8081) + sub-path (:8082/seo) + 
 
 Layout: `public/` (only web-exposed directory) · `core/` framework · `modules/` controllers · `config/` · `database/migrations/` · `bin/` CLI tools · `tests/` · `docs/`.
 
+See [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) for what is done and what remains before production use.
+
 ## License
 
 [MIT](LICENSE), copyright 2026 Brandon Cook, covering this fork's changes. The upstream project this was forked from (by Hiranmay Roy) shipped no licence file, so its original code carries no explicit grant; the upstream's licence status is unknown and worth confirming with its author before wide redistribution. The name "Sitewright" has not been checked for trademark conflicts.

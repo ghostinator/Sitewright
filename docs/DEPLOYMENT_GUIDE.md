@@ -85,10 +85,12 @@ server {
 * `display_errors=Off` in PHP (the app also forces it off unless `SW_DEBUG`); `expose_php=Off`.
 * `config/config.php` mode `0600`, owned by the PHP user; keep backups encrypted.
 * Block outbound access from the PHP host to internal networks and cloud metadata endpoints at the firewall as a second layer behind the application's SSRF guard.
-* Schedule `php bin/purge-404.php` daily if you use the 404 log.
-* Backups: `mysqldump --defaults-extra-file=/root/.my.cnf sitewright | gzip > backup.sql.gz` (keep credentials in the option file, not on the command line).
+* **MFA (TOTP)**: turn it on for every administrator: `php bin/user.php mfa-enable <username>` prints the secret and an `otpauth://` URI (paste into any authenticator app), asks for one valid code to prove it works, then prints 8 single-use recovery codes (store them offline). Enabling or disabling MFA ends that user's sessions. Sign-in then takes two steps; wrong codes are throttled per account and per IP, and a code cannot be reused. Lost device: use a recovery code, or an operator runs `php bin/user.php mfa-disable <username>` and re-enables.
+* **Audit log**: sign-ins, failures, MFA steps, logouts, imports, deletions and CLI account changes go to the `audit_log` table (never passwords, keys or prompt text; unknown usernames are stored as `(unknown)`). Read with `php bin/audit.php 100`; schedule `php bin/purge-audit.php` daily (`retention_days_audit`, default 365). Optionally give the runtime DB account only INSERT and SELECT on that table (it also needs DELETE for the purge job, so run the purge as the migration account if you do).
+* Schedule `php bin/purge-404.php` and `php bin/purge-audit.php` daily.
+* **Backups**: `SW_DB_NAME=... SW_DB_USER=... SW_DB_PASS=... bin/db-backup.sh backup /var/backups/sitewright` (consistent `mysqldump --single-transaction`, gzip, mode 0600, keeps the newest 14). Restore into an empty database with `SW_RESTORE_CONFIRM=yes bin/db-backup.sh restore <file>`. The dump holds password hashes and TOTP secrets: encrypt it and keep it off the web server. Rehearse a restore with `tests/docker/backup-drill.sh [db-image]` (drops everything and checks the counts), and do the same against your real backups quarterly.
 * Do not run the web server or PHP as root; no recursive `chmod 755/777` — files need only read access for the PHP user, `storage/` write access for the installer.
-* Rotate any API key that was ever committed. Scan history with gitleaks/trufflehog.
+* Rotate any API key that was ever committed (and that you own). The CI workflow scans the working tree with gitleaks; scan history yourself when you adopt the repository.
 
 ## 6. Upgrades
 
