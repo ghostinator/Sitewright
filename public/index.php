@@ -49,6 +49,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <title>RankMath SEO Webapp - <?= $h($user ? $views[$view] : 'Sign in') ?></title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="<?= $h($base) ?>/assets/css/style.css">
     <script type="application/json" id="app-config"><?= $configJson ?></script>
 </head>

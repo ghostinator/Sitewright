@@ -1,0 +1,139 @@
+- generic [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - complementary [ref=f1e3]:
+      - generic [ref=f1e4]:
+        - heading "🚀 RankMath" [level=2] [ref=f1e5]
+        - paragraph [ref=f1e6]: SEO Toolkit
+      - navigation [ref=f1e7]:
+        - link "📊 Dashboard" [ref=f1e8] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f1e9]: 📊
+          - text: Dashboard
+        - link "🔍 SEO Analysis" [ref=f1e10] [cursor=pointer]:
+          - /url: /seo-analysis
+          - generic [ref=f1e11]: 🔍
+          - text: SEO Analysis
+        - link "⚔️ Competitor Analysis" [ref=f1e12] [cursor=pointer]:
+          - /url: /competitor
+          - generic [ref=f1e13]: ⚔️
+          - text: Competitor Analysis
+        - link "📈 Analytics" [ref=f1e14] [cursor=pointer]:
+          - /url: /analytics
+          - generic [ref=f1e15]: 📈
+          - text: Analytics
+        - link "🤖 Content AI" [ref=f1e16] [cursor=pointer]:
+          - /url: /content-ai
+          - generic [ref=f1e17]: 🤖
+          - text: Content AI
+        - link "📍 Local SEO" [ref=f1e18] [cursor=pointer]:
+          - /url: /local-seo
+          - generic [ref=f1e19]: 📍
+          - text: Local SEO
+        - link "🖼️ Image SEO" [ref=f1e20] [cursor=pointer]:
+          - /url: /image-seo
+          - generic [ref=f1e21]: 🖼️
+          - text: Image SEO
+        - link "🗺️ Sitemaps" [ref=f1e22] [cursor=pointer]:
+          - /url: /sitemaps
+          - generic [ref=f1e23]: 🗺️
+          - text: Sitemaps
+        - link "⚠️ 404 Log" [ref=f1e24] [cursor=pointer]:
+          - /url: /404-monitor
+          - generic [ref=f1e25]: ⚠️
+          - text: 404 Log
+        - link "↪️ Redirect Rules" [ref=f1e26] [cursor=pointer]:
+          - /url: /redirections
+          - generic [ref=f1e27]: ↪️
+          - text: Redirect Rules
+    - main [ref=f1e28]:
+      - generic [ref=f1e29]:
+        - heading "SEO Analysis" [level=1] [ref=f1e30]
+        - generic [ref=f1e31]:
+          - generic [ref=f1e32]: admin
+          - button "Sign out" [ref=f1e33] [cursor=pointer]
+      - generic [ref=f1e36]:
+        - heading "Website SEO Analysis" [level=3] [ref=f1e37]
+        - paragraph [ref=f1e38]: Fetches the page once from this server and runs heuristic on-page checks. Not a substitute for Lighthouse or Search Console.
+        - generic [ref=f1e39]:
+          - generic [ref=f1e40]:
+            - generic [ref=f1e41]: Website URL
+            - textbox "Website URL" [active] [ref=f1e42]:
+              - /placeholder: https://example.com
+              - text: http://rmw-fixture/xss.html
+          - button "Analyze Website" [ref=f1e43] [cursor=pointer]
+        - generic [ref=f1e46]:
+          - heading "SEO Score" [level=3] [ref=f1e47]
+          - generic [ref=f1e48]: 45/100
+          - paragraph [ref=f1e49]: "Analyzed: http://rmw-fixture/xss.html (HTTP 200, 0 redirect(s))"
+          - generic [ref=f1e50]:
+            - heading "Title" [level=4] [ref=f1e51]
+            - generic [ref=f1e52]:
+              - generic [ref=f1e53]: "\"';alert(2);//"
+              - generic [ref=f1e54]: 14 chars
+            - paragraph [ref=f1e55]: ⚠️ Title should be 30-60 characters
+          - generic [ref=f1e56]:
+            - heading "Meta Description" [level=4] [ref=f1e57]
+            - generic [ref=f1e58]:
+              - generic [ref=f1e59]: <svg onload=alert(3)>
+              - generic [ref=f1e60]: 21 chars
+            - paragraph [ref=f1e61]: ⚠️ Description should be 120-160 characters
+          - generic [ref=f1e62]:
+            - heading "Headings" [level=4] [ref=f1e63]
+            - generic [ref=f1e64]:
+              - generic [ref=f1e65]: H1 tags
+              - generic [ref=f1e66]: "1"
+            - generic [ref=f1e67]:
+              - generic [ref=f1e68]: H1
+              - generic [ref=f1e69]: <script>alert(4)</script>
+            - paragraph [ref=f1e70]: ✅ Exactly one H1 tag
+          - generic [ref=f1e71]:
+            - heading "Images" [level=4] [ref=f1e72]
+            - generic [ref=f1e73]:
+              - generic [ref=f1e74]: Total images
+              - generic [ref=f1e75]: "2"
+            - generic [ref=f1e76]:
+              - generic [ref=f1e77]: With alt text
+              - generic [ref=f1e78]: 1 (50%)
+            - paragraph [ref=f1e79]: ⚠️ Add alt text to all images
+          - generic [ref=f1e80]:
+            - heading "Links" [level=4] [ref=f1e81]
+            - generic [ref=f1e82]:
+              - generic [ref=f1e83]: Internal
+              - generic [ref=f1e84]: "0"
+            - generic [ref=f1e85]:
+              - generic [ref=f1e86]: External
+              - generic [ref=f1e87]: "0"
+            - generic [ref=f1e88]:
+              - generic [ref=f1e89]: nofollow
+              - generic [ref=f1e90]: "0"
+          - generic [ref=f1e91]:
+            - heading "Fetch time" [level=4] [ref=f1e92]
+            - generic [ref=f1e93]:
+              - generic [ref=f1e94]: HTML document fetched in
+              - generic [ref=f1e95]: 0.003s
+            - paragraph [ref=f1e96]: Server-side fetch time of the HTML document only; not a Core Web Vitals measurement.
+          - generic [ref=f1e97]:
+            - heading "Basics" [level=4] [ref=f1e98]
+            - generic [ref=f1e99]:
+              - generic [ref=f1e100]: HTTPS (final URL)
+              - generic [ref=f1e101]: ❌ No
+            - generic [ref=f1e102]:
+              - generic [ref=f1e103]: Viewport meta tag present
+              - generic [ref=f1e104]: ❌ No
+            - generic [ref=f1e105]:
+              - generic [ref=f1e106]: Structured data (JSON-LD)
+              - generic [ref=f1e107]: ❌ No
+            - generic [ref=f1e108]:
+              - generic [ref=f1e109]: Word count
+              - generic [ref=f1e110]: "4"
+            - generic [ref=f1e111]:
+              - generic [ref=f1e112]: Canonical
+              - generic [ref=f1e113]: none
+            - generic [ref=f1e114]:
+              - generic [ref=f1e115]: Language
+              - generic [ref=f1e116]: not set
+            - generic [ref=f1e117]:
+              - generic [ref=f1e118]: noindex
+              - generic [ref=f1e119]: ❌ No
+          - paragraph [ref=f1e120]: Heuristic checks based on one server-side fetch.
+  - status [ref=f1e44]: Analysis complete

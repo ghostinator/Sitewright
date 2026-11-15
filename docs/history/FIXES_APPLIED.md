@@ -1,3 +1,6 @@
+> **HISTORICAL AND INACCURATE.** This document was written for an earlier version of the project and contains claims that
+> the 2026 audit found to be false (see `docs/audit/AUDIT_REPORT.md`). Kept only for history. Do not follow it.
+
 # RankMath SEO Webapp - Fixes Applied ✅
 
 ## What Was Fixed

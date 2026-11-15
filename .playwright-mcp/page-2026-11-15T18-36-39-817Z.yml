@@ -1,0 +1,11 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - heading "Sign in" [level=2] [ref=e4]
+    - alert [ref=e12]: Invalid username or password
+    - generic [ref=e5]:
+      - generic [ref=e6]: Username
+      - textbox "Username" [ref=e7]: admin
+    - generic [ref=e8]:
+      - generic [ref=e9]: Password
+      - textbox "Password" [ref=e10]: wrong-password-here
+    - button "Sign in" [ref=e11] [cursor=pointer]

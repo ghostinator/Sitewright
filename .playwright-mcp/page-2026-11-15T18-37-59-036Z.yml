@@ -1,0 +1,68 @@
+- generic [active] [ref=f3e1]:
+  - generic [ref=f3e2]:
+    - complementary [ref=f3e3]:
+      - generic [ref=f3e4]:
+        - heading "🚀 RankMath" [level=2] [ref=f3e5]
+        - paragraph [ref=f3e6]: SEO Toolkit
+      - navigation [ref=f3e7]:
+        - link "📊 Dashboard" [ref=f3e8] [cursor=pointer]:
+          - /url: /seo/
+          - generic [ref=f3e9]: 📊
+          - text: Dashboard
+        - link "🔍 SEO Analysis" [ref=f3e10] [cursor=pointer]:
+          - /url: /seo/seo-analysis
+          - generic [ref=f3e11]: 🔍
+          - text: SEO Analysis
+        - link "⚔️ Competitor Analysis" [ref=f3e12] [cursor=pointer]:
+          - /url: /seo/competitor
+          - generic [ref=f3e13]: ⚔️
+          - text: Competitor Analysis
+        - link "📈 Analytics" [ref=f3e14] [cursor=pointer]:
+          - /url: /seo/analytics
+          - generic [ref=f3e15]: 📈
+          - text: Analytics
+        - link "🤖 Content AI" [ref=f3e16] [cursor=pointer]:
+          - /url: /seo/content-ai
+          - generic [ref=f3e17]: 🤖
+          - text: Content AI
+        - link "📍 Local SEO" [ref=f3e18] [cursor=pointer]:
+          - /url: /seo/local-seo
+          - generic [ref=f3e19]: 📍
+          - text: Local SEO
+        - link "🖼️ Image SEO" [ref=f3e20] [cursor=pointer]:
+          - /url: /seo/image-seo
+          - generic [ref=f3e21]: 🖼️
+          - text: Image SEO
+        - link "🗺️ Sitemaps" [ref=f3e22] [cursor=pointer]:
+          - /url: /seo/sitemaps
+          - generic [ref=f3e23]: 🗺️
+          - text: Sitemaps
+        - link "⚠️ 404 Log" [ref=f3e24] [cursor=pointer]:
+          - /url: /seo/404-monitor
+          - generic [ref=f3e25]: ⚠️
+          - text: 404 Log
+        - link "↪️ Redirect Rules" [ref=f3e26] [cursor=pointer]:
+          - /url: /seo/redirections
+          - generic [ref=f3e27]: ↪️
+          - text: Redirect Rules
+    - main [ref=f3e28]:
+      - generic [ref=f3e29]:
+        - heading "404 Log" [level=1] [ref=f3e30]
+        - generic [ref=f3e31]:
+          - generic [ref=f3e32]: admin
+          - button "Sign out" [ref=f3e33] [cursor=pointer]
+      - generic [ref=f3e36]:
+        - heading "404 Log" [level=3] [ref=f3e37]
+        - paragraph [ref=f3e38]: This app does not detect 404s on your site. Add entries here or import them from your server logs.
+        - button "Refresh" [ref=f3e39] [cursor=pointer]
+        - link "Export CSV" [ref=f3e40] [cursor=pointer]:
+          - /url: /seo/api/404-monitor/export
+        - button "Clear All" [ref=f3e41] [cursor=pointer]
+        - generic [ref=f3e42]:
+          - generic [ref=f3e43]:
+            - generic [ref=f3e44]: Add entry (path)
+            - textbox "Add entry (path)" [ref=f3e45]:
+              - /placeholder: /missing-page
+          - button "Add" [ref=f3e46] [cursor=pointer]
+        - paragraph [ref=f3e48]: No entries in the 404 log.
+  - status [ref=f3e49]

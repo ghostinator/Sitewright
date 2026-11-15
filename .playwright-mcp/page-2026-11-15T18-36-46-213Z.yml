@@ -1,0 +1,63 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - complementary [ref=f1e3]:
+      - generic [ref=f1e4]:
+        - heading "🚀 RankMath" [level=2] [ref=f1e5]
+        - paragraph [ref=f1e6]: SEO Toolkit
+      - navigation [ref=f1e7]:
+        - link "📊 Dashboard" [ref=f1e8] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f1e9]: 📊
+          - text: Dashboard
+        - link "🔍 SEO Analysis" [ref=f1e10] [cursor=pointer]:
+          - /url: /seo-analysis
+          - generic [ref=f1e11]: 🔍
+          - text: SEO Analysis
+        - link "⚔️ Competitor Analysis" [ref=f1e12] [cursor=pointer]:
+          - /url: /competitor
+          - generic [ref=f1e13]: ⚔️
+          - text: Competitor Analysis
+        - link "📈 Analytics" [ref=f1e14] [cursor=pointer]:
+          - /url: /analytics
+          - generic [ref=f1e15]: 📈
+          - text: Analytics
+        - link "🤖 Content AI" [ref=f1e16] [cursor=pointer]:
+          - /url: /content-ai
+          - generic [ref=f1e17]: 🤖
+          - text: Content AI
+        - link "📍 Local SEO" [ref=f1e18] [cursor=pointer]:
+          - /url: /local-seo
+          - generic [ref=f1e19]: 📍
+          - text: Local SEO
+        - link "🖼️ Image SEO" [ref=f1e20] [cursor=pointer]:
+          - /url: /image-seo
+          - generic [ref=f1e21]: 🖼️
+          - text: Image SEO
+        - link "🗺️ Sitemaps" [ref=f1e22] [cursor=pointer]:
+          - /url: /sitemaps
+          - generic [ref=f1e23]: 🗺️
+          - text: Sitemaps
+        - link "⚠️ 404 Log" [ref=f1e24] [cursor=pointer]:
+          - /url: /404-monitor
+          - generic [ref=f1e25]: ⚠️
+          - text: 404 Log
+        - link "↪️ Redirect Rules" [ref=f1e26] [cursor=pointer]:
+          - /url: /redirections
+          - generic [ref=f1e27]: ↪️
+          - text: Redirect Rules
+    - main [ref=f1e28]:
+      - generic [ref=f1e29]:
+        - heading "SEO Analysis" [level=1] [ref=f1e30]
+        - generic [ref=f1e31]:
+          - generic [ref=f1e32]: admin
+          - button "Sign out" [ref=f1e33] [cursor=pointer]
+      - generic [ref=f1e36]:
+        - heading "Website SEO Analysis" [level=3] [ref=f1e37]
+        - paragraph [ref=f1e38]: Fetches the page once from this server and runs heuristic on-page checks. Not a substitute for Lighthouse or Search Console.
+        - generic [ref=f1e39]:
+          - generic [ref=f1e40]:
+            - generic [ref=f1e41]: Website URL
+            - textbox "Website URL" [ref=f1e42]:
+              - /placeholder: https://example.com
+          - button "Analyze Website" [ref=f1e43] [cursor=pointer]
+  - status [ref=f1e44]
