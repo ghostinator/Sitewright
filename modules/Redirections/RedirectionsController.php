@@ -84,8 +84,8 @@ class RedirectionsController
 
         if ($format === 'csv') {
             $out = fopen('php://temp', 'w+');
-            fputcsv($out, ['source_url', 'target_url', 'redirect_type']);
-            foreach ($rules as $r) { fputcsv($out, [Validator::csvCell($r['source_url']), Validator::csvCell($r['target_url']), $r['redirect_type']]); }
+            fputcsv($out, ['source_url', 'target_url', 'redirect_type'], ',', '"', '');
+            foreach ($rules as $r) { fputcsv($out, [Validator::csvCell($r['source_url']), Validator::csvCell($r['target_url']), $r['redirect_type']], ',', '"', ''); }
             rewind($out);
             Response::raw((string)stream_get_contents($out), 'text/csv; charset=utf-8', ['Content-Disposition' => 'attachment; filename="redirections.csv"']);
         }
@@ -115,11 +115,11 @@ class RedirectionsController
         if ((int)$file['size'] > 1048576) { Response::error('File too large (max 1 MB)', 413); }
         $max = (int)Config::get('limits.import_rows');
         $fh = fopen((string)$file['tmp_name'], 'rb');
-        fgetcsv($fh); // header row
+        fgetcsv($fh, 0, ',', '"', ''); // header row
         $projectId = Validator::projectId(['project_id' => $_POST['project_id'] ?? 0]);
 
         $rows = []; $errors = []; $n = 0;
-        while (($row = fgetcsv($fh)) !== false) {
+        while (($row = fgetcsv($fh, 0, ',', '"', '')) !== false) {
             $n++;
             if ($n > $max) { Response::error("Too many rows (max $max)", 413); }
             if (count($row) < 2 || trim((string)$row[0]) === '') { continue; }

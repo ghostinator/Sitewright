@@ -95,9 +95,9 @@ class MonitorController
             $projectId > 0 ? ['p' => $projectId] : []
         );
         $out = fopen('php://temp', 'w+');
-        fputcsv($out, ['ID', 'URI', 'Referer', 'Hits', 'Last Accessed', 'Created At']);
+        fputcsv($out, ['ID', 'URI', 'Referer', 'Hits', 'Last Accessed', 'Created At'], ',', '"', '');
         foreach ($rows as $r) {
-            fputcsv($out, [$r['id'], Validator::csvCell($r['uri']), Validator::csvCell($r['referer']), $r['hits'], $r['last_accessed'], $r['created_at']]);
+            fputcsv($out, [$r['id'], Validator::csvCell($r['uri']), Validator::csvCell($r['referer']), $r['hits'], $r['last_accessed'], $r['created_at']], ',', '"', '');
         }
         rewind($out);
         Response::raw((string)stream_get_contents($out), 'text/csv; charset=utf-8', [
