@@ -31,6 +31,11 @@ return [
     'enable_geocoding' => false, // SW_ENABLE_GEOCODING
 
     'retention_days_404' => 90,  // 404 log entries older than this are purged (0 = keep forever)
+    // SW_TRUSTED_PROXIES: comma-separated IPs/CIDRs of YOUR reverse proxies. Only requests arriving from these have X-Forwarded-For
+    // honoured (rate limits, login throttle and the audit log then see the real client). Empty = proxy headers ignored.
+    // 0.0.0.0/0 and ::/0 are refused. The proxy must also preserve the Host header.
+    'trusted_proxies' => [],
+    'retention_days_audit' => 365, // audit_log rows older than this are removed by bin/purge-audit.php
     'hsts' => false,             // SW_HSTS: send Strict-Transport-Security when served over HTTPS
 
     'fetch' => [

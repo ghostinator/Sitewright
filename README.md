@@ -57,6 +57,7 @@ Quick local try-out without Apache: `SW_DB_NAME=… SW_DB_USER=… SW_DB_PASS=�
 | `SW_FETCH_ALLOW_HOSTS` / `SW_FETCH_BLOCK_HOSTS` | **Outbound** host allow/block lists (separate from `SW_ALLOWED_HOSTS`; the IP safety checks always apply) |
 | `SW_FETCH_DEV_ALLOW_CIDRS` | **Development only**: exempt ranges from the private-address block (e.g. to analyse a local test site) |
 | `SW_CONFIG_FILE` | Path of the config file if it lives outside the repo (default `config/config.php`) |
+| `SW_TRUSTED_PROXIES` | Comma-separated IPs/CIDRs of your reverse proxies; only then is `X-Forwarded-For` believed (never `/0`) |
 | `SW_HSTS`, `SW_DEBUG` | HSTS header when served over HTTPS; verbose errors (never in production) |
 
 Run `php bin/check-env.php` to verify the environment (CLI only).

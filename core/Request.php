@@ -62,10 +62,42 @@ final class Request
         return isset($files[$name]) && is_array($files[$name]) ? $files[$name] : null;
     }
 
+    /**
+     * Client address. REMOTE_ADDR unless it is a configured trusted proxy; then X-Forwarded-For is read right to left and the
+     * first address that is not itself a trusted proxy wins (a client can only add entries on the left, never on the right).
+     */
     public static function ip(): string
     {
-        // Proxy headers are intentionally ignored: they are client-controlled unless a trusted proxy is configured.
-        return (string)(self::$fake['ip'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+        $remote = (string)(self::$fake['ip'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+        $trusted = (array)Config::get('trusted_proxies', []);
+        if ($trusted === [] || !self::inList($remote, $trusted)) {
+            return $remote;
+        }
+        $xff = self::header('X-Forwarded-For');
+        if ($xff === null || $xff === '') {
+            return $remote;
+        }
+        $hops = array_map('trim', explode(',', $xff));
+        for ($i = count($hops) - 1; $i >= 0; $i--) {
+            if (@inet_pton($hops[$i]) === false) {
+                return $remote;               // garbage in the chain: fall back to the proxy address, never to client-supplied text
+            }
+            if (!self::inList($hops[$i], $trusted) || $i === 0) {
+                return $hops[$i];
+            }
+        }
+        return $remote;
+    }
+
+    private static function inList(string $ip, array $cidrs): bool
+    {
+        $bin = @inet_pton($ip);
+        if ($bin === false) { return false; }
+        if (strlen($bin) === 16 && str_starts_with($bin, "\0\0\0\0\0\0\0\0\0\0\xff\xff")) { $bin = substr($bin, 12); } // ::ffff:a.b.c.d
+        foreach ($cidrs as $c) {
+            if (SafeHttpClient::inCidr($bin, (string)$c)) { return true; }
+        }
+        return false;
     }
 
     /** Parsed JSON object body ([] when empty). Rejects oversized or malformed bodies with 413/400. */

@@ -26,6 +26,8 @@ final class Config
             'enable_geocoding' => false,
             'retention_days_404' => 90,
             'hsts'             => false,
+            'trusted_proxies'  => [],
+            'retention_days_audit' => 365,
             'db' => [
                 'host' => '127.0.0.1', 'port' => 3306, 'name' => 'sitewright_webapp',
                 'user' => '', 'pass' => '', 'prefix' => 'sw_',
@@ -132,6 +134,7 @@ final class Config
         if (($v = $env('SW_CONTACT')) !== null) { $cfg['contact'] = $v; }
         if (($v = $env('SW_ENABLE_GEOCODING')) !== null) { $cfg['enable_geocoding'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         if (($v = $env('SW_DEBUG')) !== null) { $cfg['debug'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
+        if (($v = $env('SW_TRUSTED_PROXIES')) !== null) { $cfg['trusted_proxies'] = $list($v); }
         if (($v = $env('SW_HSTS')) !== null) { $cfg['hsts'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         // Outbound controls are deliberately separate from SW_ALLOWED_HOSTS (inbound Host validation).
         if (($v = $env('SW_FETCH_ALLOW_HOSTS')) !== null) { $cfg['fetch']['allow_hosts'] = $list($v); }
@@ -142,12 +145,33 @@ final class Config
         $cfg['enable_geocoding'] = (bool)$cfg['enable_geocoding'];
         $cfg['db']['port']       = (int)$cfg['db']['port'];
 
+        // Trusted proxies decide whose X-Forwarded-For is believed, so a bad entry must stop the app, never be skipped.
+        $cfg['trusted_proxies'] = array_values(array_map('strval', (array)$cfg['trusted_proxies']));
+        foreach ($cfg['trusted_proxies'] as $cidr) {
+            self::assertTrustedProxy($cidr);
+        }
+
         // Identifiers end up inside SQL text, so they are validated once, here.
         if (!preg_match('/^[A-Za-z0-9_]{0,16}$/D', (string)$cfg['db']['prefix'])
             || !preg_match('/^[A-Za-z0-9_]{1,64}$/D', (string)$cfg['db']['name'])) {
             throw new ConfigException('Invalid database name or prefix in configuration');
         }
         return $cfg;
+    }
+
+    /** An address or CIDR; the "trust everything" ranges (/0) are refused because they let any client forge its IP. */
+    private static function assertTrustedProxy(string $cidr): void
+    {
+        $net = $cidr; $bits = null;
+        if (str_contains($cidr, '/')) { [$net, $bits] = explode('/', $cidr, 2); }
+        $bin = @inet_pton($net);
+        $max = $bin === false ? 0 : strlen($bin) * 8;
+        if ($bin === false || ($bits !== null && (!ctype_digit($bits) || (int)$bits > $max))) {
+            throw new ConfigException("Invalid trusted_proxies entry: $cidr");
+        }
+        if ($bits !== null && (int)$bits === 0) {
+            throw new ConfigException("trusted_proxies entry $cidr would trust every client; list your proxy addresses instead");
+        }
     }
 
     /** Hostnames accepted in the inbound Host header (lower-case, no port). */

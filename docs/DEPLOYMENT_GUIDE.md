@@ -80,7 +80,7 @@ server {
 
 ## 5. Hardening checklist
 
-* Behind a reverse proxy: preserve the `Host` header and note that throttling uses the connecting IP (trusted-proxy headers are not implemented).
+* Behind a reverse proxy or load balancer: preserve the `Host` header, and set `SW_TRUSTED_PROXIES` to the proxy addresses (e.g. `10.0.0.0/24`). The app then takes the client address from `X-Forwarded-For`, reading right to left and skipping trusted hops, so login throttling, rate limits and the audit log see real clients. Without it every user shares the proxy's IP (the 30-per-15-minute IP login limit becomes a global lockout). `X-Forwarded-Host`/`-Proto` are deliberately not used: HTTPS is decided by `SW_BASE_URL`, and the same-origin check needs the proxy to pass `Host` through unchanged.
 * HTTPS only; set `SW_BASE_URL` (https) and `SW_ALLOWED_HOSTS`; enable `SW_HSTS=true`.
 * `display_errors=Off` in PHP (the app also forces it off unless `SW_DEBUG`); `expose_php=Off`.
 * `config/config.php` mode `0600`, owned by the PHP user; keep backups encrypted.
