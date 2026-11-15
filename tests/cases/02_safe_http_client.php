@@ -176,3 +176,10 @@ test('curl transport: loopback refused by default (no dev CIDR)', function () us
 });
 if (is_resource($proc)) { proc_terminate($proc); proc_close($proc); }
 array_map('unlink', glob($serverDir . '/*') ?: []); @rmdir($serverDir);
+
+test('system resolver bounds DNS time via RES_OPTIONS and resolves localhost (found by live test: dead nameservers blocked a worker ~2 min)', function () {
+    putenv('RES_OPTIONS');
+    $ips = SafeHttpClient::systemResolve('localhost');
+    ok(str_contains((string)getenv('RES_OPTIONS'), 'timeout:2') && str_contains((string)getenv('RES_OPTIONS'), 'attempts:1'), 'RES_OPTIONS=' . getenv('RES_OPTIONS'));
+    ok(in_array('127.0.0.1', $ips, true) || in_array('::1', $ips, true), 'localhost => ' . json_encode($ips));
+});

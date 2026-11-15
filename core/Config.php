@@ -46,7 +46,7 @@ final class Config
             'fetch' => [
                 'allow_hosts' => [], 'block_hosts' => [], 'allow_ports' => [80, 443],
                 'dev_allow_cidrs' => [],
-                'connect_timeout' => 5, 'timeout' => 15,
+                'connect_timeout' => 5, 'timeout' => 15, 'dns_timeout' => 2,
                 'max_html_bytes' => 5242880, 'max_image_bytes' => 10485760, 'max_redirects' => 5,
             ],
         ];

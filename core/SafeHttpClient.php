@@ -279,19 +279,42 @@ final class SafeHttpClient
 
     // ------------------------------------------------------------------ defaults
 
-    /** @return string[] */
+    /**
+     * Resolve with a hard upper bound on time. gethostbyname*() can block a PHP worker for minutes when a zone's nameservers
+     * never answer (measured: 105 s) because it goes through NSS plugins that ignore RES_OPTIONS, so it is NOT used.
+     * Instead: dns_get_record() with RES_OPTIONS timeout/attempts (glibc; trailing dot avoids search-domain expansion)
+     * plus a direct read of /etc/hosts (so "localhost"-style names still fail closed). The connection is pinned to the
+     * addresses returned here, so other NSS sources (mDNS, LLMNR) can never influence where we connect.
+     * @return string[]
+     */
     public static function systemResolve(string $host): array
     {
-        $ips = [];
-        $records = @dns_get_record($host, DNS_A | DNS_AAAA);
+        $timeout = max(1, (int)Config::get('fetch.dns_timeout', 2));
+        if (!str_contains((string)getenv('RES_OPTIONS'), 'timeout:')) {
+            putenv("RES_OPTIONS=timeout:$timeout attempts:1");
+        }
+        $ips = self::hostsFileLookup($host);
+        $records = @dns_get_record(rtrim($host, '.') . '.', DNS_A | DNS_AAAA);
         foreach (is_array($records) ? $records : [] as $r) {
             if (!empty($r['ip'])) { $ips[] = $r['ip']; }
             if (!empty($r['ipv6'])) { $ips[] = $r['ipv6']; }
         }
-        // Also consult the system resolver (hosts file, search domains). Union => any private answer blocks the URL.
-        $v4 = @gethostbynamel($host);
-        foreach (is_array($v4) ? $v4 : [] as $ip) { $ips[] = $ip; }
         return array_values(array_unique($ips));
+    }
+
+    /** @return string[] addresses /etc/hosts maps to $host */
+    private static function hostsFileLookup(string $host): array
+    {
+        $out = [];
+        $lines = is_readable('/etc/hosts') ? (@file('/etc/hosts', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: []) : [];
+        $host = strtolower(rtrim($host, '.'));
+        foreach ($lines as $line) {
+            $parts = preg_split('/\s+/', trim(preg_replace('/#.*$/', '', $line) ?? ''), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            if (count($parts) >= 2 && filter_var($parts[0], FILTER_VALIDATE_IP) && in_array($host, array_map('strtolower', array_slice($parts, 1)), true)) {
+                $out[] = $parts[0];
+            }
+        }
+        return $out;
     }
 
     private function userAgent(): string
