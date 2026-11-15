@@ -188,7 +188,7 @@
         try { res = await fetch(BASE + '/api' + path, opts); } catch (e) { throw new ApiError('Network error - is the server reachable?', 0); }
         let payload = null;
         try { payload = await res.json(); } catch (e) { /* non-JSON error page */ }
-        if (res.status === 401 && path !== '/auth/login') { window.location.reload(); throw new ApiError('Session expired', 401); }
+        if (res.status === 401 && path !== '/auth/login' && path !== '/auth/mfa') { window.location.reload(); throw new ApiError('Session expired', 401); }
         if (!res.ok || !payload || payload.success !== true) throw new ApiError((payload && payload.message) || ('Request failed (HTTP ' + res.status + ')'), res.status);
         return payload.data;
     }
@@ -213,16 +213,33 @@
 
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
+        let awaitingCode = false;
+        const field = n => loginForm.elements[n];
         loginForm.addEventListener('submit', async e => {
             e.preventDefault();
             const err = document.getElementById('login-error');
             err.classList.add('hidden');
             await withPending(loginForm, async () => {
                 try {
-                    await apiRequest('POST', '/auth/login', { username: loginForm.username.value, password: loginForm.password.value });
+                    if (!awaitingCode) {
+                        const r = await apiRequest('POST', '/auth/login', { username: field('username').value, password: field('password').value });
+                        if (r && r.mfa_required) {
+                            // Second step: hide the credentials, ask for the code.
+                            awaitingCode = true;
+                            field('username').closest('.form-group').classList.add('hidden');
+                            field('password').closest('.form-group').classList.add('hidden');
+                            field('password').value = '';
+                            document.getElementById('login-mfa').classList.remove('hidden');
+                            field('code').focus();
+                            return;
+                        }
+                    } else {
+                        await apiRequest('POST', '/auth/mfa', { code: field('code').value });
+                    }
                     window.location.reload();
                 } catch (ex) {
                     err.textContent = ex.message; err.classList.remove('hidden');
+                    if (awaitingCode && ex.status === 401 && /sign in again/i.test(ex.message)) { window.location.reload(); }
                 }
             });
         });

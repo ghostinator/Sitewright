@@ -23,6 +23,20 @@ final class AuthController
         if ($user === null) {
             Response::error('Invalid username or password', 401);
         }
+        if (isset($user['mfa_required'])) {
+            Response::success('Verification code required', ['mfa_required' => true]);
+        }
+        Response::success('Logged in', ['user' => $user, 'csrf_token' => Auth::csrfToken()]);
+    }
+
+    public function mfa(array $params): never
+    {
+        $in = Request::json();
+        $code = Validator::str($in, 'code', 32, true);
+        $user = Auth::completeMfa($code);
+        if ($user === null) {
+            Response::error('Invalid verification code', 401);
+        }
         Response::success('Logged in', ['user' => $user, 'csrf_token' => Auth::csrfToken()]);
     }
 

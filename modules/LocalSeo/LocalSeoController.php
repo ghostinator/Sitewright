@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Sitewright\Modules\LocalSeo;
 
-use Sitewright\Core\{Config, Database, FetchException, RateLimiter, Request, Response, SafeHttpClient, Validator};
+use Sitewright\Core\{Audit, Config, Database, FetchException, RateLimiter, Request, Response, SafeHttpClient, Validator};
 
 /**
  * Business locations + LocalBusiness JSON-LD. Geocoding via OpenStreetMap Nominatim is OPT-IN
@@ -60,7 +60,9 @@ class LocalSeoController
 
     public function deleteLocation(array $params): never
     {
-        $n = $this->db->delete('local_locations', ['id' => Validator::id($params['id'] ?? null)]);
+        $id = Validator::id($params['id'] ?? null);
+        $n = $this->db->delete('local_locations', ['id' => $id]);
+        if ($n) { Audit::log('location_deleted', null, '', "id $id"); }
         $n ? Response::success('Location deleted') : Response::notFound('Location not found');
     }
 

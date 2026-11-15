@@ -149,7 +149,7 @@ final class TestHttp
     {
         $this->bootstrap();
         $r = $this->req('POST', '/api/auth/login', ['username' => $user, 'password' => $pass], ['Content-Type' => 'application/json', 'X-CSRF-Token' => (string)$this->csrf]);
-        if ($r['status'] === 200) { $this->csrf = $r['json']['data']['csrf_token']; }
+        if ($r['status'] === 200 && isset($r['json']['data']['csrf_token'])) { $this->csrf = $r['json']['data']['csrf_token']; }  // absent while an MFA code is pending
         return $r;
     }
 }

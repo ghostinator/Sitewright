@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Sitewright\Modules\Sitemap;
 
-use Sitewright\Core\{Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
+use Sitewright\Core\{Audit, Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
 
 /** Plain XML URL sitemaps (the "general" type). Crawling is bounded, polite and goes through SafeHttpClient. */
 class SitemapController
@@ -45,7 +45,9 @@ class SitemapController
 
     public function delete(array $params): never
     {
-        $n = $this->db->delete('sitemaps', ['id' => Validator::id($params['id'] ?? null)]);
+        $id = Validator::id($params['id'] ?? null);
+        $n = $this->db->delete('sitemaps', ['id' => $id]);
+        if ($n) { Audit::log('sitemap_entry_deleted', null, '', "id $id"); }
         $n ? Response::success('Sitemap entry deleted') : Response::notFound('Sitemap entry not found');
     }
 

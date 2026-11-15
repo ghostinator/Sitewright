@@ -10,6 +10,9 @@ namespace Sitewright\Core;
  */
 final class Auth
 {
+    /** Seconds the "password OK, code pending" state lasts. */
+    private const MFA_WINDOW = 300;
+
     private static ?array $user = null;
     private static bool $userChecked = false;
 
@@ -51,11 +54,11 @@ final class Auth
                 || $now - (int)($_SESSION['last'] ?? 0) > (int)Config::get('session.idle_timeout');
         $db = Database::getInstance();
         $row = $expired ? null : $db->fetchOne(
-            'SELECT id, username, display_name, password FROM `' . $db->t('users') . '` WHERE id = :id',
+            'SELECT id, username, display_name, password, totp_secret FROM `' . $db->t('users') . '` WHERE id = :id',
             ['id' => (int)$_SESSION['uid']]
         );
         // The password fingerprint ends sessions when the password changes or the account is removed.
-        if (!$row || !hash_equals((string)($_SESSION['pwf'] ?? ''), self::fingerprint($row['password']))) {
+        if (!$row || !hash_equals((string)($_SESSION['pwf'] ?? ''), self::fingerprint($row))) {
             self::clearAuth();
             return null;
         }
@@ -64,7 +67,8 @@ final class Auth
     }
 
     /**
-     * Verify credentials (throttled). Returns the user on success, null on bad credentials.
+     * Verify credentials (throttled). Returns the user on success, ['mfa_required' => true] when a one-time code must follow
+     * (the session is then only "pending": Auth::user() stays null), or null on bad credentials.
      * @throws ResponseException 429 when throttled
      */
     public static function login(string $username, string $password): ?array
@@ -75,11 +79,13 @@ final class Auth
         RateLimiter::enforce($userKey, (int)Config::get('limits.login_attempts'), $win, 'Too many login attempts');
 
         $db = Database::getInstance();
-        $row = $db->fetchOne('SELECT id, username, display_name, password FROM `' . $db->t('users') . '` WHERE username = :u', ['u' => $username]);
+        $row = $db->fetchOne('SELECT id, username, display_name, password, totp_secret FROM `' . $db->t('users') . '` WHERE username = :u', ['u' => $username]);
         // Always run one password_verify so response time does not reveal whether the account exists.
         $hash = $row['password'] ?? self::dummyHash();
         $valid = password_verify($password, $hash) && $row !== null;
         if (!$valid) {
+            // An unknown name is recorded as such: people sometimes type their password into the username box.
+            Audit::log('login_failed', $row ? (int)$row['id'] : null, $row ? $row['username'] : '(unknown)');
             return null;
         }
         if (password_needs_rehash($hash, PASSWORD_DEFAULT)) {
@@ -87,19 +93,84 @@ final class Auth
         }
         RateLimiter::clear($userKey);
 
+        if ($row['totp_secret'] !== null && $row['totp_secret'] !== '') {
+            self::startSession();
+            session_regenerate_id(true);
+            unset($_SESSION['uid'], $_SESSION['created'], $_SESSION['last'], $_SESSION['pwf']);   // password alone grants nothing
+            $_SESSION['mfa_uid'] = (int)$row['id'];
+            $_SESSION['mfa_until'] = time() + self::MFA_WINDOW;
+            $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+            Audit::log('login_password_ok', (int)$row['id'], $row['username'], 'second factor required');
+            return ['mfa_required' => true];
+        }
+        return self::establish($row, 'login_ok');
+    }
+
+    /**
+     * Second step: a 6-digit code from the authenticator app, or a single-use recovery code.
+     * @return array|null user on success, null for a wrong code
+     * @throws ResponseException 401 when no sign-in is pending or it expired, 429 when throttled
+     */
+    public static function completeMfa(string $input): ?array
+    {
+        self::startSession();
+        $uid = (int)($_SESSION['mfa_uid'] ?? 0);
+        if ($uid === 0 || time() > (int)($_SESSION['mfa_until'] ?? 0)) {
+            unset($_SESSION['mfa_uid'], $_SESSION['mfa_until']);
+            Response::error('Sign in again', 401);
+        }
+        // Per ACCOUNT (an attacker can discard their session and start over) and per IP.
+        $win = (int)Config::get('limits.login_window');
+        RateLimiter::enforce('mfa:ip:' . Request::ip(), (int)Config::get('limits.login_ip_attempts'), $win, 'Too many verification attempts');
+        RateLimiter::enforce('mfa:user:' . $uid, (int)Config::get('limits.login_attempts'), $win, 'Too many verification attempts');
+
+        $db = Database::getInstance();
+        $row = $db->fetchOne('SELECT id, username, display_name, password, totp_secret, totp_last_step FROM `' . $db->t('users') . '` WHERE id = :id', ['id' => $uid]);
+        if (!$row || ($row['totp_secret'] ?? '') === '') {
+            unset($_SESSION['mfa_uid'], $_SESSION['mfa_until']);
+            Response::error('Sign in again', 401);
+        }
+
+        $ok = false; $how = 'mfa_ok';
+        $digits = str_replace(' ', '', $input);
+        if (preg_match('/^\d{6}$/D', $digits)) {
+            $step = Totp::verify((string)$row['totp_secret'], $digits, time(), (int)$row['totp_last_step']);
+            // The conditional UPDATE makes "use each step once" safe even for two simultaneous requests.
+            $ok = $step !== null && $db->update('users', ['totp_last_step' => $step], ['id' => $uid, 'totp_last_step' => (int)$row['totp_last_step']]) === 1;
+        } elseif (preg_match('/^[a-z2-9]{10}$/D', Totp::normalizeRecovery($input))) {
+            $ok = $db->query(
+                'UPDATE `' . $db->t('recovery_codes') . '` SET used_at = NOW() WHERE user_id = :u AND code_hash = :h AND used_at IS NULL',
+                ['u' => $uid, 'h' => Totp::recoveryHash($input)]
+            )->rowCount() === 1;
+            $how = 'recovery_code_used';
+        }
+        if (!$ok) {
+            Audit::log('mfa_failed', $uid, $row['username']);
+            return null;
+        }
+        RateLimiter::clear('mfa:user:' . $uid);
+        return self::establish($row, $how);
+    }
+
+    /** Create the authenticated session (fresh id, fresh CSRF token). */
+    private static function establish(array $row, string $auditAction): array
+    {
         self::startSession();
         session_regenerate_id(true);
+        unset($_SESSION['mfa_uid'], $_SESSION['mfa_until']);
         $_SESSION['uid'] = (int)$row['id'];
         $_SESSION['created'] = $_SESSION['last'] = time();
-        $_SESSION['pwf'] = self::fingerprint($row['password']);
+        $_SESSION['pwf'] = self::fingerprint($row);
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
         self::$userChecked = true;
+        Audit::log($auditAction, (int)$row['id'], $row['username']);
         return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name']];
     }
 
     public static function logout(): void
     {
         self::startSession();
+        if (!empty($_SESSION['uid'])) { Audit::log('logout'); }
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
@@ -131,14 +202,15 @@ final class Auth
 
     private static function clearAuth(): void
     {
-        unset($_SESSION['uid'], $_SESSION['created'], $_SESSION['last'], $_SESSION['pwf']);
+        unset($_SESSION['uid'], $_SESSION['created'], $_SESSION['last'], $_SESSION['pwf'], $_SESSION['mfa_uid'], $_SESSION['mfa_until']);
         session_regenerate_id(true);
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
     }
 
-    private static function fingerprint(string $passwordHash): string
+    /** Changes when the password or the MFA secret changes, which ends every session of that account. */
+    private static function fingerprint(array $row): string
     {
-        return substr(hash('sha256', $passwordHash), 0, 32);
+        return substr(hash('sha256', $row['password'] . '|' . ($row['totp_secret'] ?? '')), 0, 32);
     }
 
     private static function dummyHash(): string

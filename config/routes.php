@@ -12,6 +12,7 @@ return [
     // Authentication
     ['GET',  '/api/health',        $C . 'AuthController@health', ['public' => true]],
     ['POST', '/api/auth/login',    $C . 'AuthController@login',  ['public' => true, 'session' => true]],
+    ['POST', '/api/auth/mfa',      $C . 'AuthController@mfa',    ['public' => true, 'session' => true]],
     ['POST', '/api/auth/logout',   $C . 'AuthController@logout'],
     ['GET',  '/api/auth/me',       $C . 'AuthController@me'],
 

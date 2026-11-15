@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Sitewright\Modules\Analytics;
 
-use Sitewright\Core\{Config, Database, Request, Response, Validator};
+use Sitewright\Core\{Audit, Config, Database, Request, Response, Validator};
 
 /**
  * Keyword metrics that YOU add (API) or import as JSON. There is no Google Search Console / OAuth
@@ -85,6 +85,7 @@ class AnalyticsController
             $rows[] = ['project_id' => $projectId] + self::keywordRow($item);
         }
         $this->upsert($rows);
+        Audit::log('keywords_imported', null, '', count($rows) . ' rows');
         Response::success('Imported ' . count($rows) . ' keyword rows', ['count' => count($rows)]);
     }
 

@@ -7,12 +7,12 @@ test('migrations apply on an empty database and are idempotent', function () {
     $db = freshDb();
     $m = new Migrator($db->getConnection(), 'sw_');
     eq($m->run(), [], 'second run applies nothing');
-    eq(array_values($m->status()), [true, true, true]);
+    eq(array_values($m->status()), [true, true, true, true]);
 });
 test('schema: unused tables dropped, auth/rate-limit tables present', function () {
     $db = freshDb();
     $tables = array_column($db->fetchAll('SHOW TABLES'), 'Tables_in_sw_test');
-    foreach (['sw_users', 'sw_rate_limits', 'sw_schema_migrations', 'sw_404_monitor', 'sw_redirections', 'sw_sitemaps'] as $t) { ok(in_array($t, $tables, true), "missing $t"); }
+    foreach (['sw_users', 'sw_rate_limits', 'sw_schema_migrations', 'sw_404_monitor', 'sw_redirections', 'sw_sitemaps', 'sw_audit_log', 'sw_recovery_codes'] as $t) { ok(in_array($t, $tables, true), "missing $t"); }
     foreach (['sw_projects', 'sw_schema', 'sw_settings', 'sw_analytics_pages'] as $t) { ok(!in_array($t, $tables, true), "$t should be dropped"); }
 });
 test('unique keys enforce one row per natural key (DB-001)', function () {
@@ -32,7 +32,7 @@ test('legacy v1.0 database is adopted: 001 marked applied, 002+ run, data kept a
     $pdo->exec("INSERT INTO sw_redirections (project_id, source_url, target_url) VALUES (NULL,'/dup','/a'),(NULL,'/dup','/b'),(NULL,'/ok','/c')");
     $pdo->exec("INSERT INTO sw_sitemaps (type, url) VALUES ('news','http://x/a'),('general','http://x/a')");
     $applied = (new Migrator($pdo, 'sw_'))->run();
-    eq($applied, ['002_integrity_auth', '003_drop_unused']);
+    eq($applied, ['002_integrity_auth', '003_drop_unused', '004_mfa_audit']);
     eq((int)$pdo->query('SELECT COUNT(*) FROM sw_redirections')->fetchColumn(), 2);
     eq((int)$pdo->query('SELECT COUNT(*) FROM sw_sitemaps')->fetchColumn(), 1);
 });

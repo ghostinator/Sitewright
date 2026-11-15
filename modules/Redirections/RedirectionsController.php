@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Sitewright\Modules\Redirections;
 
-use Sitewright\Core\{Config, Database, DatabaseException, Request, Response, Validator};
+use Sitewright\Core\{Audit, Config, Database, DatabaseException, Request, Response, Validator};
 
 /**
  * Redirect RULE MANAGER. Rules are stored and can be exported for Apache, nginx or as CSV.
@@ -60,7 +60,9 @@ class RedirectionsController
 
     public function delete(array $params): never
     {
-        $n = $this->db->delete('redirections', ['id' => Validator::id($params['id'] ?? null)]);
+        $id = Validator::id($params['id'] ?? null);
+        $n = $this->db->delete('redirections', ['id' => $id]);
+        if ($n) { Audit::log('redirect_deleted', null, '', "id $id"); }
         $n ? Response::success('Redirection deleted') : Response::notFound('Redirection not found');
     }
 
@@ -142,6 +144,7 @@ class RedirectionsController
             }
             return $c;
         });
+        Audit::log('redirects_imported', null, '', "$imported rows");
         Response::success("Imported $imported redirections", ['imported' => $imported, 'errors' => $errors]);
     }
 

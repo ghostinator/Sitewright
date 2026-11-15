@@ -78,3 +78,49 @@ test('no HTML-string sinks exist anywhere in app.js', () => {
     assert.ok(!sink.test(SRC), `forbidden sink ${sink}`);
   }
 });
+
+// ---- two-step login (MFA) -------------------------------------------------------------------------------------------------
+function loginPage(responses) {
+  const calls = [];
+  const html = '<!doctype html><body><script type="application/json" id="app-config">{"basePath":"","csrfToken":"tok"}</script>'
+    + '<form id="login-form"><div id="login-error" class="hidden"></div>'
+    + '<div class="form-group"><input name="username" value="admin"></div><div class="form-group"><input name="password" type="password" value="pw"></div>'
+    + '<div id="login-mfa" class="form-group hidden"><input id="login-code" name="code"></div><button type="submit">Sign in</button></form></body>';
+  const { VirtualConsole } = require('jsdom');
+  const vc = new VirtualConsole();   // jsdom does not implement location.reload(); the error is expected
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', virtualConsole: vc });
+  dom.window.fetch = async (url, opts) => {
+    calls.push({ url, body: JSON.parse(opts.body), csrf: opts.headers['X-CSRF-Token'] });
+    const r = responses.shift();
+    return { ok: r.status < 400, status: r.status, json: async () => r.json };
+  };
+  dom.window.eval(SRC);
+  return { dom, calls, doc: dom.window.document };
+}
+const submit = async (dom, doc) => { doc.getElementById('login-form').dispatchEvent(new dom.window.Event('submit', { cancelable: true })); await new Promise(r => setTimeout(r, 20)); };
+
+test('login: server asks for a code => credentials hidden, code field shown, password cleared; code goes to /api/auth/mfa', async () => {
+  const { dom, calls, doc } = loginPage([
+    { status: 200, json: { success: true, message: 'Verification code required', data: { mfa_required: true } } },
+    { status: 401, json: { success: false, message: 'Invalid verification code' } },
+  ]);
+  await submit(dom, doc);
+  assert.equal(calls[0].url, '/api/auth/login'); assert.deepEqual(calls[0].body, { username: 'admin', password: 'pw' });
+  assert.ok(doc.getElementById('login-mfa').className.indexOf('hidden') === -1, 'code field visible');
+  assert.ok(doc.querySelector('[name=username]').closest('.form-group').classList.contains('hidden'));
+  assert.ok(doc.querySelector('[name=password]').closest('.form-group').classList.contains('hidden'));
+  assert.equal(doc.querySelector('[name=password]').value, '', 'password not kept in the DOM');
+  doc.querySelector('[name=code]').value = '123456';
+  await submit(dom, doc);
+  assert.equal(calls[1].url, '/api/auth/mfa'); assert.deepEqual(calls[1].body, { code: '123456' }); assert.equal(calls[1].csrf, 'tok');
+  assert.equal(doc.getElementById('login-error').textContent, 'Invalid verification code');
+  assert.ok(!doc.getElementById('login-error').classList.contains('hidden'));
+});
+
+test('login: server error text is shown as text, never parsed as HTML', async () => {
+  const { dom, calls, doc } = loginPage([{ status: 401, json: { success: false, message: '<img src=x onerror=alert(1)>' } }]);
+  await submit(dom, doc);
+  assert.equal(doc.querySelectorAll('#login-error img').length, 0);
+  assert.equal(doc.getElementById('login-error').textContent, '<img src=x onerror=alert(1)>');
+  assert.equal(calls.length, 1);
+});

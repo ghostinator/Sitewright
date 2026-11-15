@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Sitewright\Modules\Monitor;
 
-use Sitewright\Core\{Config, Database, Request, Response, Validator};
+use Sitewright\Core\{Audit, Config, Database, Request, Response, Validator};
 
 /**
  * 404 log. This application does NOT detect 404s on your site by itself: entries are added manually
@@ -67,7 +67,9 @@ class MonitorController
 
     public function deleteLog(array $params): never
     {
-        $n = $this->db->delete('404_monitor', ['id' => Validator::id($params['id'] ?? null)]);
+        $id = Validator::id($params['id'] ?? null);
+        $n = $this->db->delete('404_monitor', ['id' => $id]);
+        if ($n) { Audit::log('404_entry_deleted', null, '', "id $id"); }
         $n ? Response::success('404 log deleted') : Response::notFound('Log entry not found');
     }
 
@@ -83,6 +85,7 @@ class MonitorController
         $n = $projectId > 0
             ? $this->db->query("DELETE FROM `$t` WHERE project_id = :p", ['p' => $projectId])->rowCount()
             : $this->db->query("DELETE FROM `$t`")->rowCount();
+        Audit::log('404_log_cleared', null, '', "$n rows" . ($projectId > 0 ? ", project $projectId" : ''));
         Response::success('404 logs cleared', ['deleted' => $n]);
     }
 

@@ -61,6 +61,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
             <div id="login-error" class="alert alert-error hidden" role="alert"></div>
             <div class="form-group"><label for="login-username">Username</label><input id="login-username" name="username" type="text" autocomplete="username" required maxlength="60"></div>
             <div class="form-group"><label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required></div>
+            <div id="login-mfa" class="form-group hidden"><label for="login-code">Verification code</label><input id="login-code" name="code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="32" placeholder="6-digit code or recovery code"><small>Open your authenticator app, or enter an unused recovery code.</small></div>
             <button type="submit" class="btn btn-primary">Sign in</button>
         </form>
     </main>
