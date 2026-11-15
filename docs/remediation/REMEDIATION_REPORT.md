@@ -160,7 +160,7 @@ Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, t
 | PRIV-001 | MEDIUM | Undocumented Nominatim geocoding | FIXED | LocalSeoController, docs/NETWORK_AND_PRIVACY.md | 06: off by default (0 requests), when on identifying UA + 1/s + address reuse | When enabled, addresses go to OpenStreetMap. |
 | PRIV-002 | LOW | Gemini key in URL / body logging | FIXED | ContentAiController::gemini | 06: key only in x-goog-api-key header; error log contains only status/code (asserted) | - |
 | PRIV-003 | LOW | 404 data retention / disclosure | FIXED | MonitorController::purgeExpired, bin/purge-404.php, docs/NETWORK_AND_PRIVACY.md | 07: purge test (200-day-old row removed) | Retention default 90 days; operators must configure for their jurisdiction. |
-| FUNC-002 | MEDIUM | PHP 8 syntax vs documented 7.4 | FIXED | README, bin/install.php, bin/check-env.php | all tests + php -l run on 8.1 and 8.3; installer refuses older PHP/missing extensions | PHP 8.0 untested (8.1 is the documented minimum). |
+| FUNC-002 | MEDIUM | PHP 8 syntax vs documented 7.4 | FIXED | README, bin/install.php, bin/check-env.php | all tests + php -l run on 8.1 and 8.3; installer refuses older PHP/missing extensions | PHP 8.0 untested (8.1 is the documented minimum). Also verified on PHP 8.4 / MariaDB 11.8 (staging VM) after fixing the 8.4 `fputcsv` escape deprecation. |
 | FUNC-003 | MEDIUM | searchNearby broken (placeholder reuse) | FIXED | LocalSeoController::searchNearby | 06: results sorted, NULL coords excluded, validation 400s | - |
 | FUNC-004 | MEDIUM | Redirections never enforced | MITIGATED | RedirectionsController (export apache/nginx/csv, validation), UI relabelled | 07: validation (injection chars, open-redirect style targets), exports verified | Relabelled as a rule manager rather than enforced: this app is not in front of the managed site. |
 | FUNC-005 | MEDIUM | 404 Monitor does not monitor | MITIGATED | MonitorController (atomic upsert, project scoping), UI relabelled "404 Log" | 07: dedupe/hit counting; E2E add/delete | No capture/ingest endpoint was built; entries are manual/imported. |
@@ -256,3 +256,18 @@ Evidence: all three Critical and all High code findings are fixed and covered by
 ## Sources
 
 * Gemini model status: [Google AI Studio models page](https://aistudio.google.com/docs/models) and [deprecations page](https://aistudio.google.com/docs/deprecations) (fetched 2026-11-15; the ai.google.dev URLs redirect there).
+
+## 10. STAGING VM VERIFICATION (added after the first report)
+
+See `docs/STAGING_VM.md`. A Proxmox VM (Debian 13, nginx, PHP 8.4-FPM, MariaDB 11.8, nested virt) was built and the application installed with the CLI installer using separate migration and runtime DB accounts.
+
+| Check | Result |
+|---|---|
+| PHP suite on the VM (PHP 8.4, MariaDB 11.8, real nginx host) | **294 pass / 0 fail** |
+| Install on MariaDB 11.8 (3 migrations, generated hash columns, unique keys) | OK |
+| Live SSRF/real-network run through the deployed app (HTTPS, logged in) | 17 of 21 checks passed; real example.com analysed; 20 blocked destinations refused (loopback, LAN router, Proxmox UI, metadata IP, numeric/hex/octal hosts, IPv6, `localtest.me`); expired/self-signed/wrong-host TLS refused; redirect chain >5 stopped; 8 MB body aborted; DNS rebinding service: 10 blocked, 4 unresolved, 0 fetched from loopback; image analysis and a real crawl work |
+| Application guard vs. firewall | Egress firewall reject counters stayed at **0** across all blocked tests, so the application blocked before any connection attempt |
+| The 4 live "failures" | `127.0.0.1.sslip.io`-style names: no resolver reachable from this network answers for sslip.io/nip.io (checked against 3 resolvers), so they are inconclusive, not app failures |
+| Not provable live | public host → internal redirect and slow-response timeout: public test services (httpbin/httpbingo) refuse private redirect targets or cap delays; both are covered by the suite using a real curl transport against a local server |
+| **Bug found by live testing, fixed** | A hostname whose nameservers never answer pinned a PHP worker for ~2 minutes (`dns_get_record` 20 s + `gethostbynamel` 105 s). `SafeHttpClient::systemResolve` now uses `dns_get_record` with `RES_OPTIONS timeout:2 attempts:1` plus a direct `/etc/hosts` read; measured 2.0 s for dead-DNS names (was ~125 s). Residual: musl-based resolvers (Alpine) ignore `RES_OPTIONS` |
+| Not done | Browser E2E against the VM (self-signed certificate; waiting for Tailscale-issued certificate), live Gemini/Nominatim calls (no key / not enabled), JS tests on the VM |
