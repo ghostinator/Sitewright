@@ -70,7 +70,7 @@ final class Installer
         $applied = (new Migrator($pdo, $db['prefix']))->run();
 
         $users = '`' . $db['prefix'] . 'users`';
-        $st = $pdo->prepare("INSERT INTO $users (username, email, password, display_name) VALUES (?, ?, ?, ?)");
+        $st = $pdo->prepare("INSERT INTO $users (username, email, password, display_name, role) VALUES (?, ?, ?, ?, 'admin')");
         $st->execute([$admin['username'], $admin['email'], password_hash($admin['password'], PASSWORD_DEFAULT), $admin['username']]);
 
         $fh = fopen($configPath, 'x');

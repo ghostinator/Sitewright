@@ -54,16 +54,16 @@ final class Auth
                 || $now - (int)($_SESSION['last'] ?? 0) > (int)Config::get('session.idle_timeout');
         $db = Database::getInstance();
         $row = $expired ? null : $db->fetchOne(
-            'SELECT id, username, display_name, password, totp_secret FROM `' . $db->t('users') . '` WHERE id = :id',
+            'SELECT id, username, display_name, password, totp_secret, role, disabled FROM `' . $db->t('users') . '` WHERE id = :id',
             ['id' => (int)$_SESSION['uid']]
         );
         // The password fingerprint ends sessions when the password changes or the account is removed.
-        if (!$row || !hash_equals((string)($_SESSION['pwf'] ?? ''), self::fingerprint($row))) {
+        if (!$row || (int)$row['disabled'] === 1 || !hash_equals((string)($_SESSION['pwf'] ?? ''), self::fingerprint($row))) {
             self::clearAuth();
             return null;
         }
         $_SESSION['last'] = $now;
-        return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name']];
+        return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name'], 'role' => $row['role']];
     }
 
     /**
@@ -79,10 +79,14 @@ final class Auth
         RateLimiter::enforce($userKey, (int)Config::get('limits.login_attempts'), $win, 'Too many login attempts');
 
         $db = Database::getInstance();
-        $row = $db->fetchOne('SELECT id, username, display_name, password, totp_secret FROM `' . $db->t('users') . '` WHERE username = :u', ['u' => $username]);
+        $row = $db->fetchOne('SELECT id, username, display_name, password, totp_secret, role, disabled FROM `' . $db->t('users') . '` WHERE username = :u', ['u' => $username]);
         // Always run one password_verify so response time does not reveal whether the account exists.
         $hash = $row['password'] ?? self::dummyHash();
         $valid = password_verify($password, $hash) && $row !== null;
+        if ($valid && (int)$row['disabled'] === 1) {
+            Audit::log('login_disabled_account', (int)$row['id'], $row['username']);
+            $valid = false;
+        }
         if (!$valid) {
             // An unknown name is recorded as such: people sometimes type their password into the username box.
             Audit::log('login_failed', $row ? (int)$row['id'] : null, $row ? $row['username'] : '(unknown)');
@@ -127,8 +131,8 @@ final class Auth
         RateLimiter::enforce('mfa:user:' . $uid, (int)Config::get('limits.login_attempts'), $win, 'Too many verification attempts');
 
         $db = Database::getInstance();
-        $row = $db->fetchOne('SELECT id, username, display_name, password, totp_secret, totp_last_step FROM `' . $db->t('users') . '` WHERE id = :id', ['id' => $uid]);
-        if (!$row || ($row['totp_secret'] ?? '') === '') {
+        $row = $db->fetchOne('SELECT id, username, display_name, password, totp_secret, totp_last_step, role, disabled FROM `' . $db->t('users') . '` WHERE id = :id', ['id' => $uid]);
+        if (!$row || (int)$row['disabled'] === 1 || ($row['totp_secret'] ?? '') === '') {
             unset($_SESSION['mfa_uid'], $_SESSION['mfa_until']);
             Response::error('Sign in again', 401);
         }
@@ -166,7 +170,7 @@ final class Auth
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
         self::$userChecked = true;
         Audit::log($auditAction, (int)$row['id'], $row['username']);
-        return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name']];
+        return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name'], 'role' => $row['role']];
     }
 
     public static function logout(): void
@@ -183,10 +187,30 @@ final class Auth
         self::$userChecked = true;
     }
 
-    /** Replaced by real roles in the accounts feature; until then nobody gets the cross-user view. */
+    /** True when the signed-in user has at least this role (viewer < editor < admin). */
+    public static function can(string $min): bool
+    {
+        $u = self::user();
+        return $u !== null && (Accounts::ROLES[$u['role']] ?? 0) >= (Accounts::ROLES[$min] ?? 99);
+    }
+
     public static function isAdmin(): bool
     {
-        return false;
+        return self::can('admin');
+    }
+
+    /**
+     * After the signed-in user's own password/MFA change: the new fingerprint would end this very session, so adopt it here (and issue a
+     * fresh session id); every OTHER session of the account ends because its stored fingerprint no longer matches.
+     */
+    public static function adoptCredentialChange(): void
+    {
+        $db = Database::getInstance();
+        $row = $db->fetchOne('SELECT password, totp_secret FROM `' . $db->t('users') . '` WHERE id = :id', ['id' => (int)($_SESSION['uid'] ?? 0)]);
+        if ($row) {
+            session_regenerate_id(true);
+            $_SESSION['pwf'] = self::fingerprint($row);
+        }
     }
 
     public static function csrfToken(): string

@@ -50,6 +50,8 @@ for (const p of PAYLOADS) {
       logs: () => SW.render404Logs(box, { logs: [{ id: 1, uri: p, hits: p, last_accessed: p, is_sample: 0 }] }),
       redirects: () => SW.renderRedirections(box, [{ id: p, source_url: p, target_url: p, redirect_type: p, is_sample: 1 }]),
       locations: () => SW.renderLocations(box, [{ id: 1, name: p, address: p, city: p, state: p, postal_code: p, country: p, latitude: p, longitude: p }]),
+      users: () => SW.renderUsers(box, [{ id: 1, username: p, email: p, role: 'viewer', disabled: true, mfa: true, created_at: p }, { id: 2, username: 'me', email: 'me@example.test', role: 'admin', disabled: false, mfa: false, created_at: 'x' }], 2),
+      audit: () => SW.renderAudit(box, [{ id: 1, created_at: p, username: p, action: p, ip: p, detail: p }]),
       sitemap: () => SW.renderSitemapResult(box, { fetched: p, total_found: p, added: p, stopped_early: true, max_pages: p }, '/api/sitemap/generate-xml'),
     };
     for (const [name, run] of Object.entries(cases)) {
@@ -148,4 +150,15 @@ test('crawl form: submits a job, polls its status, then renders the result (and 
     assert.ok(box.textContent.includes(expect), 'result/error shown: ' + box.textContent.slice(0, 80));
     assert.equal(box.querySelectorAll('img').length, 0);
   }
+});
+
+test('users list: own row has no delete/disable and a locked role selector; others get actions with ids only in data-*', () => {
+  const { SW, box } = load();
+  SW.renderUsers(box, [{ id: 1, username: 'a', email: 'a@x', role: 'editor', disabled: false, mfa: true, created_at: 'd' }, { id: 2, username: 'me', email: 'm@x', role: 'admin', disabled: false, mfa: true, created_at: 'd' }], 2);
+  const rows = box.querySelectorAll('.list-item');
+  const acts = r => [...r.querySelectorAll('button')].map(b => b.dataset.action);
+  assert.deepEqual(acts(rows[0]), ['user-toggle', 'user-reset-mfa', 'user-send-reset', 'delete-user']);
+  assert.deepEqual(acts(rows[1]), []);
+  assert.equal(rows[1].querySelector('select').disabled, true); assert.equal(rows[0].querySelector('select').value, 'editor');
+  for (const b of box.querySelectorAll('button')) assert.equal(b.getAttribute('onclick'), null);
 });

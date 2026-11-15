@@ -13,8 +13,23 @@ return [
     ['GET',  '/api/health',        $C . 'AuthController@health', ['public' => true]],
     ['POST', '/api/auth/login',    $C . 'AuthController@login',  ['public' => true, 'session' => true]],
     ['POST', '/api/auth/mfa',      $C . 'AuthController@mfa',    ['public' => true, 'session' => true]],
-    ['POST', '/api/auth/logout',   $C . 'AuthController@logout'],
+    ['POST', '/api/auth/forgot',   $C . 'AuthController@forgot', ['public' => true, 'session' => true]],
+    ['POST', '/api/auth/reset',    $C . 'AuthController@reset',  ['public' => true, 'session' => true]],
+    // Own account: any signed-in role (including viewer)
+    ['POST', '/api/auth/logout',   $C . 'AuthController@logout',         ['role' => 'viewer']],
     ['GET',  '/api/auth/me',       $C . 'AuthController@me'],
+    ['POST', '/api/auth/password', $C . 'AuthController@changePassword', ['role' => 'viewer']],
+    ['POST', '/api/auth/mfa/setup',   $C . 'AuthController@mfaSetup',     ['role' => 'viewer']],
+    ['POST', '/api/auth/mfa/enable',  $C . 'AuthController@mfaEnable',   ['role' => 'viewer']],
+    ['POST', '/api/auth/mfa/disable', $C . 'AuthController@mfaDisable',  ['role' => 'viewer']],
+    // Administration (admin role)
+    ['GET',    '/api/users',                    $C . 'UserController@list',      ['role' => 'admin']],
+    ['POST',   '/api/users',                    $C . 'UserController@create',    ['role' => 'admin']],
+    ['PATCH',  '/api/users/{id}',               $C . 'UserController@update',    ['role' => 'admin']],
+    ['DELETE', '/api/users/{id}',               $C . 'UserController@delete',    ['role' => 'admin']],
+    ['POST',   '/api/users/{id}/reset-mfa',     $C . 'UserController@resetMfa',  ['role' => 'admin']],
+    ['POST',   '/api/users/{id}/send-reset',    $C . 'UserController@sendReset', ['role' => 'admin']],
+    ['GET',    '/api/audit',                    $C . 'AuditController@list',     ['role' => 'admin']],
 
     // SEO analysis (outbound fetch of the analysed URL)
     ['POST', '/api/seo-analysis/analyze', $M . 'SeoAnalysis\\SeoAnalysisController@analyze', ['limit' => 'fetch']],
@@ -27,9 +42,9 @@ return [
     ['POST', '/api/analytics/import-keywords', $M . 'Analytics\\AnalyticsController@importKeywords'],
 
     // 404 log (manual / imported entries; this app does not capture 404s by itself)
-    ['GET',    '/api/404-monitor/logs',   $M . 'Monitor\\MonitorController@getLogs'],
+    ['GET',    '/api/404-monitor/logs',   $M . 'Monitor\\MonitorController@getLogs',   ['role' => 'editor']],   // contains visitor IPs and user agents
     ['POST',   '/api/404-monitor/log',    $M . 'Monitor\\MonitorController@log404'],
-    ['GET',    '/api/404-monitor/export', $M . 'Monitor\\MonitorController@exportCSV'],
+    ['GET',    '/api/404-monitor/export', $M . 'Monitor\\MonitorController@exportCSV', ['role' => 'editor']],
     ['POST',   '/api/404-monitor/clear',  $M . 'Monitor\\MonitorController@clearLogs'],
     ['DELETE', '/api/404-monitor/{id}',   $M . 'Monitor\\MonitorController@deleteLog'],
 

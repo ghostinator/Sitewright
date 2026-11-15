@@ -154,6 +154,11 @@ final class App
             if ($user === null) {
                 Response::unauthorized();
             }
+            // Least privilege by default: reading needs "viewer", changing anything needs "editor"; routes can demand more ("role" option).
+            if (!Auth::can((string)($opts['role'] ?? ($safe ? 'viewer' : 'editor')))) {
+                Audit::log('permission_denied', null, '', "$method $path");
+                Response::error('You do not have permission to do that', 403);
+            }
         } elseif (!empty($opts['session'])) {
             Auth::startSession();
         }

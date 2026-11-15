@@ -161,7 +161,7 @@ test('alerts: watch() alerts once when the threshold is reached inside the windo
 });
 
 // ---- HTTP + CLI ------------------------------------------------------------------------------------------------------------
-seedAdmin('alice', 'alice passphrase long'); seedAdmin('bob', 'bob passphrase long here');
+seedAdmin('alice', 'alice passphrase long', 'editor'); seedAdmin('bob', 'bob passphrase long here', 'editor'); seedAdmin('root', 'root passphrase long here', 'admin');
 $srv = startServer(); $base = $srv['base'];
 test('jobs over HTTP: 202 + job id; only the owner can read it; 6th concurrent job is 429', function () use ($base, $wipe) {
     $wipe();
@@ -172,6 +172,8 @@ test('jobs over HTTP: 202 + job id; only the owner can read it; 6th concurrent j
     $s = $a->api('GET', '/api/jobs/' . $ids[0]); eq($s['status'], 200); eq($s['json']['data']['status'], 'queued'); eq($s['json']['data']['type'], 'crawl');
     $b = new TestHttp($base); $b->login('bob', 'bob passphrase long here');
     eq($b->api('GET', '/api/jobs/' . $ids[0])['status'], 404, 'another user cannot see it');
+    $adm = new TestHttp($base); $adm->login('root', 'root passphrase long here');
+    eq($adm->api('GET', '/api/jobs/' . $ids[0])['status'], 200, 'an administrator can');
     eq($a->api('POST', '/api/sitemap/crawl', ['base_url' => 'ftp://x'])['status'], 400);
 });
 test('bin/worker.php --once drains the queue and records a heartbeat; bin/healthcheck.php sees a dead worker and recovers', function () use ($wipe, $db) {

@@ -131,6 +131,34 @@
             el('small', { class: 'text-muted', text: 'Type: ' + r.redirect_type })], [deleteButton('delete-redirection', r.id)])));
     }
 
+    const smallButton = (label, action, id, cls) => el('button', { class: 'btn btn-sm ' + (cls || 'btn-secondary'), text: label, attrs: { type: 'button' }, data: { action, id } });
+
+    function renderUsers(container, users, meId) {
+        if (!users.length) return setContent(container, muted('No users.'));
+        setContent(container, ...users.map(u => {
+            const me = u.id === meId;
+            const roleSel = el('select', { attrs: { 'aria-label': 'Role of ' + u.username }, data: { change: 'user-role', id: u.id } },
+                ...['viewer', 'editor', 'admin'].map(r => { const o = el('option', { text: r, attrs: { value: r } }); if (r === u.role) o.selected = true; return o; }));
+            if (me) roleSel.disabled = true;
+            return listItem([
+                el('strong', { text: u.username }), me ? ' (you) ' : ' ', el('span', { class: 'badge', text: u.role }),
+                u.disabled ? el('span', { class: 'badge', text: 'disabled' }) : null, u.mfa ? el('span', { class: 'badge', text: '2-step on' }) : null,
+                el('br'), el('small', { class: 'text-muted', text: u.email + ' | created ' + u.created_at })],
+                [roleSel, me ? null : smallButton(u.disabled ? 'Enable' : 'Disable', 'user-toggle', u.id),
+                 u.mfa && !me ? smallButton('Reset 2-step', 'user-reset-mfa', u.id) : null,
+                 me ? null : smallButton('Send reset link', 'user-send-reset', u.id),
+                 me ? null : deleteButton('delete-user', u.id)]);
+        }));
+    }
+
+    function renderAudit(container, rows, append) {
+        const items = rows.map(r => listItem([
+            el('strong', { text: r.action }), ' ', el('span', { class: 'text-muted', text: (r.username || '-') + ' · ' + r.ip }), el('br'),
+            el('small', { class: 'text-muted break-all', text: r.created_at + (r.detail ? ' · ' + r.detail : '') })], []));
+        if (append) { container.append(...items); return; }
+        setContent(container, ...(items.length ? items : [muted('No entries.')]));
+    }
+
     function renderLocations(container, locs) {
         if (!locs.length) return setContent(container, muted('No locations added yet.'));
         setContent(container, ...locs.map(l => listItem([
@@ -162,7 +190,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard };
+    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -188,7 +216,7 @@
         try { res = await fetch(BASE + '/api' + path, opts); } catch (e) { throw new ApiError('Network error - is the server reachable?', 0); }
         let payload = null;
         try { payload = await res.json(); } catch (e) { /* non-JSON error page */ }
-        if (res.status === 401 && path !== '/auth/login' && path !== '/auth/mfa') { window.location.reload(); throw new ApiError('Session expired', 401); }
+        if (res.status === 401 && path !== '/auth/login' && path !== '/auth/mfa' && path !== '/auth/reset' && path !== '/auth/forgot') { window.location.reload(); throw new ApiError('Session expired', 401); }
         if (!res.ok || !payload || payload.success !== true) throw new ApiError((payload && payload.message) || ('Request failed (HTTP ' + res.status + ')'), res.status);
         return payload.data;
     }
@@ -211,10 +239,41 @@
 
     // ------------------------------------------------------------------ login
 
+    const resetForm = document.getElementById('reset-form');
+    if (resetForm) {
+        const token = new URLSearchParams(window.location.search).get('token') || '';
+        resetForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            const err = document.getElementById('reset-error'); err.classList.add('hidden');
+            await withPending(resetForm, async () => {
+                try {
+                    await apiRequest('POST', '/auth/reset', { token, password: resetForm.elements.password.value });
+                    resetForm.elements.password.value = '';
+                    const done = document.getElementById('reset-done'); done.textContent = 'Password changed. You can sign in now.'; done.classList.remove('hidden');
+                } catch (ex) { err.textContent = ex.message; err.classList.remove('hidden'); }
+            });
+        });
+        return;
+    }
+
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
         let awaitingCode = false;
         const field = n => loginForm.elements[n];
+        const forgotForm = document.getElementById('forgot-form');
+        if (forgotForm) {
+            document.getElementById('forgot-toggle').addEventListener('click', () => { loginForm.classList.add('hidden'); forgotForm.classList.remove('hidden'); });
+            document.getElementById('forgot-back').addEventListener('click', () => { forgotForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
+            forgotForm.addEventListener('submit', async e => {
+                e.preventDefault();
+                const msg = document.getElementById('forgot-msg');
+                await withPending(forgotForm, async () => {
+                    try { await apiRequest('POST', '/auth/forgot', { email: forgotForm.elements.email.value }); msg.textContent = 'If that address belongs to an account, a reset link has been sent.'; }
+                    catch (ex) { msg.textContent = ex.message; }
+                    msg.classList.remove('hidden');
+                });
+            });
+        }
         loginForm.addEventListener('submit', async e => {
             e.preventDefault();
             const err = document.getElementById('login-error');
@@ -249,7 +308,8 @@
     // ------------------------------------------------------------------ navigation
 
     const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', analytics: 'Analytics', 'content-ai': 'Content AI',
-        'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules' };
+        'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules',
+        account: 'My Account', users: 'Users', audit: 'Audit Log' };
     const viewUrl = v => BASE + (v === 'dashboard' ? '/' : '/' + v);
 
     function viewFromLocation() {
@@ -264,7 +324,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, analytics: loadAnalytics, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps };
+        const loaders = { dashboard: loadDashboard, analytics: loadAnalytics, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, users: loadUsers, audit: () => loadAudit(false) };
         if (loaders[view]) loaders[view]();
     }
 
@@ -297,6 +357,37 @@
             box.className = 'alert ' + (s.ai_configured ? 'alert-info' : 'alert-warn');
             box.textContent = s.ai_configured ? 'AI: Google Gemini (' + s.model + ') is configured. Prompts you enter are sent to Google.' : 'No AI is configured: output is simple fixed templates, not AI-generated.';
         } catch (e) { box.className = 'alert hidden'; }
+    }
+
+    // ------------------------------------------------------------------ accounts
+
+    async function loadUsers() {
+        const me = await apiRequest('GET', '/auth/me');
+        loadInto('users-list', '/users', (box, users) => renderUsers(box, users, me.user.id), 'users');
+    }
+
+    let auditBefore = null;
+    async function loadAudit(more) {
+        const box = document.getElementById('audit-list');
+        const filter = document.getElementById('audit-action').value.trim();
+        const q = '/audit?limit=100' + (filter ? '&action=' + encodeURIComponent(filter) : '') + (more && auditBefore ? '&before_id=' + auditBefore : '');
+        try {
+            const d = await apiRequest('GET', q);
+            renderAudit(box, d.rows, more);
+            auditBefore = d.next_before_id;
+            document.getElementById('audit-more').classList.toggle('hidden', !d.next_before_id);
+        } catch (e) { showError(box, 'Could not load the audit log: ' + e.message); }
+    }
+
+    async function loadAccount() {
+        try {
+            const me = await apiRequest('GET', '/auth/me');
+            document.getElementById('mfa-state').textContent = me.mfa_enabled ? 'Two-step verification is ON for your account.' : 'Two-step verification is OFF. Turn it on to protect your account.';
+            document.getElementById('mfa-setup-form').classList.toggle('hidden', me.mfa_enabled);
+            document.getElementById('mfa-disable-form').classList.toggle('hidden', !me.mfa_enabled);
+            document.getElementById('mfa-secret').classList.add('hidden');
+            if (me.csrf_token) csrf = me.csrf_token;
+        } catch (e) { document.getElementById('mfa-state').textContent = 'Could not load: ' + e.message; }
     }
 
     // ------------------------------------------------------------------ background jobs
@@ -354,6 +445,48 @@
                 form.reset(); form.classList.add('hidden'); showToast('Rule saved'); loadRedirections();
             } catch (e) { showToast(e.message, 'error'); }
         },
+        'user-create-form': async form => {
+            const body = { username: form.querySelector('#nu-username').value.trim(), email: form.querySelector('#nu-email').value.trim(), role: form.querySelector('#nu-role').value };
+            const pw = form.querySelector('#nu-password').value; if (pw) body.password = pw;
+            try { const r = await apiRequest('POST', '/users', body); form.reset(); form.classList.add('hidden'); showToast(pw ? 'User created' : 'Invitation sent'); loadUsers(); return r; } catch (e) { showToast(e.message, 'error'); }
+        },
+        'password-form': async form => {
+            try {
+                const d = await apiRequest('POST', '/auth/password', { current_password: form.querySelector('#pw-current').value, new_password: form.querySelector('#pw-new').value });
+                if (d && d.csrf_token) csrf = d.csrf_token;
+                form.reset(); showToast('Password changed');
+            } catch (e) { showToast(e.message, 'error'); }
+        },
+        'mfa-setup-form': async form => {
+            try {
+                const d = await apiRequest('POST', '/auth/mfa/setup', { password: form.querySelector('#mfa-setup-pw').value });
+                form.reset(); form.classList.add('hidden');
+                document.getElementById('mfa-secret-text').textContent = d.secret;
+                document.getElementById('mfa-uri').textContent = d.uri;
+                document.getElementById('mfa-secret').classList.remove('hidden');
+            } catch (e) { showToast(e.message, 'error'); }
+        },
+        'mfa-enable-form': async form => {
+            try {
+                const d = await apiRequest('POST', '/auth/mfa/enable', { code: form.querySelector('#mfa-code').value });
+                if (d.csrf_token) csrf = d.csrf_token;
+                form.reset(); document.getElementById('mfa-secret').classList.add('hidden');
+                const box = document.getElementById('mfa-codes');
+                setContent(box, el('div', { class: 'alert alert-error', text: 'Save these recovery codes now. Each works once and they are not shown again.' }),
+                    el('pre', { text: d.recovery_codes.join('\n') }));
+                box.classList.remove('hidden');
+                document.getElementById('mfa-state').textContent = 'Two-step verification is ON for your account.';
+                document.getElementById('mfa-disable-form').classList.remove('hidden');
+            } catch (e) { showToast(e.message, 'error'); }
+        },
+        'mfa-disable-form': async form => {
+            if (!confirm('Turn off two-step verification?')) return;
+            try {
+                const d = await apiRequest('POST', '/auth/mfa/disable', { password: form.querySelector('#mfa-disable-pw').value });
+                if (d.csrf_token) csrf = d.csrf_token;
+                form.reset(); document.getElementById('mfa-codes').classList.add('hidden'); showToast('Two-step verification is off'); loadAccount();
+            } catch (e) { showToast(e.message, 'error'); }
+        },
         'log404-form': async form => {
             try { await apiRequest('POST', '/404-monitor/log', { uri: form.querySelector('#log404-uri').value }); form.reset(); showToast('Entry added'); load404(); } catch (e) { showToast(e.message, 'error'); }
         },
@@ -376,6 +509,12 @@
         withPending(e.target, () => h(e.target));
     });
 
+    document.addEventListener('change', async e => {
+        const t = e.target.closest('[data-change="user-role"]');
+        if (!t) return;
+        try { await apiRequest('PATCH', '/users/' + encodeURIComponent(t.dataset.id), { role: t.value }); showToast('Role updated'); } catch (err) { showToast(err.message, 'error'); loadUsers(); }
+    });
+
     // ------------------------------------------------------------------ delegated clicks
 
     const clickActions = {
@@ -384,6 +523,12 @@
         'refresh-404': () => load404(),
         'delete-redirection': async t => { if (confirm('Delete this rule?')) { await apiRequest('DELETE', '/redirections/' + encodeURIComponent(t.dataset.id)); showToast('Rule deleted'); loadRedirections(); } },
         'delete-location': async t => { if (confirm('Delete this location?')) { await apiRequest('DELETE', '/local-seo/locations/' + encodeURIComponent(t.dataset.id)); showToast('Location deleted'); loadLocations(); } },
+        'delete-user': async t => { if (confirm('Delete this user permanently?')) { await apiRequest('DELETE', '/users/' + encodeURIComponent(t.dataset.id)); showToast('User deleted'); loadUsers(); } },
+        'user-toggle': async t => { const disabling = t.textContent === 'Disable'; if (!disabling || confirm('Disable this account? Their sessions end immediately.')) { await apiRequest('PATCH', '/users/' + encodeURIComponent(t.dataset.id), { disabled: disabling }); showToast(disabling ? 'Disabled' : 'Enabled'); loadUsers(); } },
+        'user-reset-mfa': async t => { if (confirm('Remove two-step verification from this account?')) { await apiRequest('POST', '/users/' + encodeURIComponent(t.dataset.id) + '/reset-mfa', {}); showToast('Two-step verification removed'); loadUsers(); } },
+        'user-send-reset': async t => { await apiRequest('POST', '/users/' + encodeURIComponent(t.dataset.id) + '/send-reset', {}); showToast('Reset e-mail queued'); },
+        'audit-refresh': () => loadAudit(false),
+        'audit-more': () => loadAudit(true),
         'toggle-form': t => document.getElementById(t.dataset.target).classList.toggle('hidden'),
         'copy': async () => { try { await navigator.clipboard.writeText(lastGenerated); showToast('Copied to clipboard'); } catch (e) { showToast('Copy failed', 'error'); } },
         'logout': async () => { try { await apiRequest('POST', '/auth/logout', {}); } finally { window.location.reload(); } },

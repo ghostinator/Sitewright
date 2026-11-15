@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Manage administrator accounts (CLI only).
  *   php bin/user.php list
- *   php bin/user.php create <username> <email>
+ *   php bin/user.php create <username> <email> [--role=admin|editor|viewer]   (default admin: this is the operator's tool)
  *   php bin/user.php passwd <username>
  *   php bin/user.php mfa-enable <username> [--no-confirm]   TOTP: prints the secret, an otpauth:// URI and 8 recovery codes;
  *                                                            enabled only after you type a valid code (unless --no-confirm)
@@ -15,7 +15,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require dirname(__DIR__) . '/core/autoload.php';
 
-use Sitewright\Core\{Audit, Database, Installer, Totp};
+use Sitewright\Core\{Accounts, Audit, Database, Installer, Totp};
 
 $args = array_values(array_filter(array_slice($argv, 1), static fn ($a) => !str_starts_with($a, '--')));
 $opt = getopt('', ['password-file::']);
@@ -31,12 +31,15 @@ $password = static function () use ($opt): string {
 try {
     $db = Database::getInstance();
     if ($cmd === 'list') {
-        foreach ($db->fetchAll('SELECT id, username, email, created_at, totp_secret IS NOT NULL AS mfa FROM `' . $db->t('users') . '` ORDER BY id') as $u) {
-            echo "{$u['id']}\t{$u['username']}\t{$u['email']}\t{$u['created_at']}\t" . ($u['mfa'] ? 'mfa' : 'no-mfa') . "\n";
+        foreach ($db->fetchAll('SELECT id, username, email, created_at, role, disabled, totp_secret IS NOT NULL AS mfa FROM `' . $db->t('users') . '` ORDER BY id') as $u) {
+            echo "{$u['id']}\t{$u['username']}\t{$u['email']}\t{$u['created_at']}\t" . ($u['mfa'] ? 'mfa' : 'no-mfa') . "\t{$u['role']}" . ($u['disabled'] ? "\tdisabled" : '') . "\n";
         }
     } elseif ($cmd === 'create' && isset($args[1], $args[2])) {
         $a = Installer::validateAdmin(['username' => $args[1], 'email' => $args[2], 'password' => $password()]);
-        $db->insert('users', ['username' => $a['username'], 'email' => $a['email'], 'password' => password_hash($a['password'], PASSWORD_DEFAULT), 'display_name' => $a['username']]);
+        $role = 'admin';
+        foreach ($argv as $x) { if (str_starts_with($x, '--role=')) { $role = substr($x, 7); } }
+        if (!Accounts::validRole($role)) { throw new \InvalidArgumentException('Role must be admin, editor or viewer'); }
+        $db->insert('users', ['username' => $a['username'], 'email' => $a['email'], 'password' => password_hash($a['password'], PASSWORD_DEFAULT), 'display_name' => $a['username'], 'role' => $role]);
         Audit::log('user_created', null, '(cli)', $a['username']);
         echo "Created {$a['username']}\n";
     } elseif ($cmd === 'passwd' && isset($args[1])) {

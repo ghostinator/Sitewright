@@ -16,8 +16,8 @@ Updated with every commit of the production-readiness phase. Verdict stays **SAF
 | 0 | Remove CI; local `tests/all.sh`; fix Apache `.htaccess` 500 under `AllowOverride FileInfo` | **Done** (27 Apache checks on root/Alias/FileInfo-only). Symlinked sub-path still fails (documented; use Alias) |
 | 1 | JSON-lines logging with request IDs; logging recommendations (`docs/ALERTS_AND_LOGGING.md`) | **Done** (logger masks secrets; tests) |
 | 2 | SMTP mailer for Postal + alert channels (email, Teams, Telegram) + hidden-input secrets helper `deploy/sw-set-secrets` | **Done in code**: mailer tested against a fake SMTP server incl. real STARTTLS; Teams/Telegram against a scripted transport. **Not yet proven against your real Postal / Teams / Telegram** (needs your credentials) |
-| 3 | Password reset, self-service password change and MFA setup | planned |
-| 4 | Roles (admin/editor/viewer), user management UI, audit viewer | planned |
+| 3 | Password reset (Postal e-mail), self-service password change and MFA setup | **Done** (`tests/cases/13_accounts.php`; reset tested end to end through the job queue, e-mail delivery itself tested in 12) |
+| 4 | Roles (admin/editor/viewer), user management UI, audit viewer | **Done** (role matrix over every route, last-admin guard, disabled accounts, jsdom tests) |
 | 5 | Background jobs (crawl, bulk images, mail, alerts) with worker, stale-job recovery, per-user quota; health check; systemd units | **Done** (`tests/cases/12_jobs_mail_alerts.php`, 342 PHP + 15 JS). Not yet deployed to the VM |
 | 6 | Site integration: WordPress plugin (pull model), 404 collection, redirect enforcement | planned |
 | 7 | Location edit UI with opening hours | planned |

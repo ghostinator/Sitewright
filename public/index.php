@@ -18,11 +18,13 @@ foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 $views = [
     'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'analytics' => 'Analytics',
     'content-ai' => 'Content AI', 'local-seo' => 'Local SEO', 'image-seo' => 'Image SEO', 'sitemaps' => 'Sitemaps',
-    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules',
+    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'users' => 'Users', 'audit' => 'Audit Log',
 ];
+$adminViews = ['users', 'audit'];
 $slug = trim(App::relativePath(), '/');
 $view = $slug === '' ? 'dashboard' : $slug;
-if (!isset($views[$view])) {
+$resetPage = $slug === 'reset';   // public: the page the password-reset e-mail links to
+if (!$resetPage && !isset($views[$view])) {
     http_response_code(404);
     header('Content-Type: text/plain; charset=utf-8');
     exit('Not found');
@@ -38,23 +40,40 @@ try {
     exit('Service temporarily unavailable');
 }
 
+if ($user && in_array($view, $adminViews, true) && $user['role'] !== 'admin') {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit('Forbidden');
+}
+if ($user && $resetPage) { header('Location: ' . App::basePath() . '/'); exit; }
 $base = App::basePath();
-$config = ['basePath' => $base, 'csrfToken' => $csrf, 'view' => $view, 'user' => $user ? ['username' => $user['username']] : null];
+$config = ['basePath' => $base, 'csrfToken' => $csrf, 'view' => $resetPage ? 'reset' : $view, 'user' => $user ? ['username' => $user['username'], 'role' => $user['role']] : null];
 $configJson = json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
-$icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔️', 'analytics' => '📈', 'content-ai' => '🤖', 'local-seo' => '📍', 'image-seo' => '🖼️', 'sitemaps' => '🗺️', '404-monitor' => '⚠️', 'redirections' => '↪️'];
+$icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔️', 'analytics' => '📈', 'content-ai' => '🤖', 'local-seo' => '📍', 'image-seo' => '🖼️', 'sitemaps' => '🗺️', '404-monitor' => '⚠️', 'redirections' => '↪️', 'account' => '👤', 'users' => '👥', 'audit' => '📜'];
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>Sitewright - <?= $h($user ? $views[$view] : 'Sign in') ?></title>
+    <title>Sitewright - <?= $h($user ? $views[$view] : ($resetPage ? 'Reset password' : 'Sign in')) ?></title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="<?= $h($base) ?>/assets/css/style.css">
     <script type="application/json" id="app-config"><?= $configJson ?></script>
 </head>
 <body>
-<?php if (!$user): ?>
+<?php if (!$user && $resetPage): ?>
+    <main class="login-wrap">
+        <form id="reset-form" class="card login-card" autocomplete="off">
+            <h2>Choose a new password</h2>
+            <div id="reset-error" class="alert alert-error hidden" role="alert"></div>
+            <div id="reset-done" class="alert hidden" role="status"></div>
+            <div class="form-group"><label for="reset-password">New password (at least 12 characters)</label><input id="reset-password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="1024"></div>
+            <button type="submit" class="btn btn-primary">Set password</button>
+            <p><a href="<?= $h(App::basePath()) ?>/">Back to sign in</a></p>
+        </form>
+    </main>
+<?php elseif (!$user): ?>
     <main class="login-wrap">
         <form id="login-form" class="card login-card" autocomplete="on">
             <h2>Sign in</h2>
@@ -63,6 +82,14 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
             <div class="form-group"><label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required></div>
             <div id="login-mfa" class="form-group hidden"><label for="login-code">Verification code</label><input id="login-code" name="code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="32" placeholder="6-digit code or recovery code"><small>Open your authenticator app, or enter an unused recovery code.</small></div>
             <button type="submit" class="btn btn-primary">Sign in</button>
+            <p><button type="button" class="btn btn-link" id="forgot-toggle">Forgot your password?</button></p>
+        </form>
+        <form id="forgot-form" class="card login-card hidden" autocomplete="on">
+            <h2>Reset your password</h2>
+            <div id="forgot-msg" class="alert hidden" role="status"></div>
+            <div class="form-group"><label for="forgot-email">E-mail address</label><input id="forgot-email" name="email" type="email" autocomplete="email" required maxlength="100"></div>
+            <button type="submit" class="btn btn-primary">Send reset link</button>
+            <p><button type="button" class="btn btn-link" id="forgot-back">Back to sign in</button></p>
         </form>
     </main>
 <?php else: ?>
@@ -70,7 +97,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
         <aside class="sidebar">
             <div class="logo"><h2>🚀 Sitewright</h2><p>SEO Toolkit</p></div>
             <nav class="nav-menu">
-<?php foreach ($views as $slugName => $title): ?>
+<?php foreach ($views as $slugName => $title): if (in_array($slugName, $adminViews, true) && $user['role'] !== 'admin') { continue; } ?>
                 <a href="<?= $h($base . ($slugName === 'dashboard' ? '/' : '/' . $slugName)) ?>" class="nav-item" data-view="<?= $h($slugName) ?>"><span class="icon"><?= $icons[$slugName] ?></span><?= $h($title) ?></a>
 <?php endforeach; ?>
             </nav>
@@ -203,6 +230,64 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
                         <button type="submit" class="btn btn-primary">Save Rule</button>
                     </form>
                     <div id="redirections-list" class="list-area"></div>
+                </div></div>
+
+                <div class="view" id="view-account">
+                    <div class="card">
+                        <h3>Change password</h3>
+                        <form id="password-form" class="form" autocomplete="off">
+                            <div class="form-row">
+                                <div class="form-group"><label for="pw-current">Current password</label><input id="pw-current" type="password" autocomplete="current-password" required></div>
+                                <div class="form-group"><label for="pw-new">New password (12+ characters)</label><input id="pw-new" type="password" autocomplete="new-password" required minlength="12" maxlength="1024"></div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Change password</button>
+                            <p class="text-muted">Your other sessions are signed out.</p>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <h3>Two-step verification (authenticator app)</h3>
+                        <p id="mfa-state" class="text-muted">Checking…</p>
+                        <form id="mfa-setup-form" class="form hidden" autocomplete="off">
+                            <div class="form-group"><label for="mfa-setup-pw">Your password</label><input id="mfa-setup-pw" type="password" autocomplete="current-password" required></div>
+                            <button type="submit" class="btn btn-primary">Set up two-step verification</button>
+                        </form>
+                        <div id="mfa-secret" class="hidden">
+                            <p>Add this key to your authenticator app (choose “enter a setup key”, time-based), then type the 6-digit code it shows.</p>
+                            <p><code id="mfa-secret-text" class="break-all"></code></p>
+                            <p class="text-muted">Or open this link on the device with the app: <span id="mfa-uri" class="break-all"></span></p>
+                            <form id="mfa-enable-form" class="form form-inline" autocomplete="off"><div class="form-group"><label for="mfa-code">6-digit code</label><input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required></div><button type="submit" class="btn btn-primary">Turn on</button></form>
+                        </div>
+                        <div id="mfa-codes" class="hidden"></div>
+                        <form id="mfa-disable-form" class="form form-inline hidden" autocomplete="off">
+                            <div class="form-group"><label for="mfa-disable-pw">Password</label><input id="mfa-disable-pw" type="password" autocomplete="current-password" required></div>
+                            <button type="submit" class="btn btn-danger">Turn off two-step verification</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="view" id="view-users"><div class="card">
+                    <h3>Users</h3>
+                    <p class="text-muted"><strong>Viewer</strong>: read-only. <strong>Editor</strong>: run analyses and change data. <strong>Admin</strong>: also manage users and see the audit log.</p>
+                    <button type="button" class="btn btn-primary" data-action="toggle-form" data-target="user-create-form">Add user</button>
+                    <form id="user-create-form" class="form hidden" autocomplete="off">
+                        <div class="form-row">
+                            <div class="form-group"><label for="nu-username">Username</label><input id="nu-username" required minlength="3" maxlength="60"></div>
+                            <div class="form-group"><label for="nu-email">E-mail</label><input id="nu-email" type="email" required maxlength="100"></div>
+                            <div class="form-group"><label for="nu-role">Role</label><select id="nu-role"><option value="viewer">viewer</option><option value="editor">editor</option><option value="admin">admin</option></select></div>
+                            <div class="form-group"><label for="nu-password">Password (leave empty to invite by e-mail)</label><input id="nu-password" type="password" autocomplete="new-password" maxlength="1024"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create user</button>
+                    </form>
+                    <div id="users-list" class="list-area"></div>
+                </div></div>
+
+                <div class="view" id="view-audit"><div class="card">
+                    <h3>Audit log</h3>
+                    <p class="text-muted">Sign-ins, failures, MFA, deletions, imports and account changes. Passwords and keys are never recorded.</p>
+                    <div class="form-inline"><div class="form-group"><label for="audit-action">Action filter</label><input id="audit-action" placeholder="e.g. login_failed" maxlength="40"></div>
+                    <button type="button" class="btn btn-secondary" data-action="audit-refresh">Refresh</button></div>
+                    <div id="audit-list" class="list-area"></div>
+                    <button type="button" class="btn btn-secondary hidden" id="audit-more" data-action="audit-more">Load older entries</button>
                 </div></div>
             </div>
         </main>

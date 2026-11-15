@@ -154,10 +154,10 @@ final class TestHttp
     }
 }
 
-function seedAdmin(string $user = 'admin', string $pass = 'correct horse battery'): void
+function seedAdmin(string $user = 'admin', string $pass = 'correct horse battery', string $role = 'admin'): void
 {
     $db = Sitewright\Core\Database::getInstance();
-    $db->insert('users', ['username' => $user, 'email' => "$user@example.test", 'password' => password_hash($pass, PASSWORD_DEFAULT), 'display_name' => $user]);
+    $db->insert('users', ['username' => $user, 'email' => "$user@example.test", 'password' => password_hash($pass, PASSWORD_DEFAULT), 'display_name' => $user, 'role' => $role]);
 }
 
 /**

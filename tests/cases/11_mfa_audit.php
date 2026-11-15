@@ -164,7 +164,7 @@ test('bin/user.php mfa-enable / mfa-disable; list shows MFA state; bin/audit.php
     preg_match_all('/^  ([a-z2-9]{5}-[a-z2-9]{5})$/m', $out, $m); eq(count($m[1]), 8, 'eight recovery codes printed');
     ok($db->fetchOne("SELECT totp_secret FROM sw_users WHERE username='plain'")['totp_secret'] !== null);
     eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_recovery_codes WHERE user_id = (SELECT id FROM sw_users WHERE username="plain")')['n'], 8);
-    ok(str_contains($run('user.php list'), "plain\tplain@example.test") && str_contains($run('user.php list'), "\tmfa\n"));
+    ok(str_contains($run('user.php list'), "plain\tplain@example.test") && str_contains($run('user.php list'), "\tmfa\tadmin"));
     ok(str_contains($run('user.php mfa-enable ghost --no-confirm'), 'exit=1'));
     ok(str_contains($run('user.php mfa-enable plain'), 'exit=2'), 'without a terminal and without --no-confirm it refuses (no accidental lock-out)');
     ok(str_contains($run('user.php mfa-disable plain'), 'MFA disabled'));
