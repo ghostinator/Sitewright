@@ -173,7 +173,7 @@
         setContent(container, ...locs.map(l => listItem([
             el('strong', { text: l.name }), sampleBadge(l), el('br'),
             el('small', { class: 'text-muted', text: [l.address, l.city, l.state, l.postal_code, l.country].filter(Boolean).join(', ') + (l.latitude !== null && l.latitude !== undefined ? ' | ' + l.latitude + ', ' + l.longitude : '') })],
-            [deleteButton('delete-location', l.id)])));
+            [smallButton('Edit', 'edit-location', l.id), smallButton('JSON-LD', 'location-schema', l.id), deleteButton('delete-location', l.id)])));
     }
 
     function renderSitemapResult(container, data, xmlHref) {
@@ -197,9 +197,41 @@
         setContent(box, ...(items.length ? items : [muted('No recent activity')]));
     }
 
+    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    let locationsById = {};
+
+    function resetLocationForm(form) {
+        form.reset(); form.elements.loc_id.value = '';
+        document.getElementById('loc-form-title').textContent = 'New location';
+        document.getElementById('loc-cancel').classList.add('hidden');
+    }
+
+    /** Fill the form from a stored location (all values via .value: never HTML). */
+    function editLocation(l) {
+        const form = document.getElementById('location-form');
+        resetLocationForm(form);
+        form.elements.loc_id.value = String(l.id);
+        for (const f of ['name', 'phone', 'address', 'city', 'state', 'postal_code', 'country', 'email', 'website', 'latitude', 'longitude']) { form.elements[f].value = l[f] === null || l[f] === undefined ? '' : String(l[f]); }
+        const hours = l.business_hours || {};
+        for (const d of DAYS) { form.elements['open_' + d].value = hours[d] ? hours[d].open : ''; form.elements['close_' + d].value = hours[d] ? hours[d].close : ''; form.elements['closed_' + d].checked = !hours[d]; }
+        document.getElementById('loc-form-title').textContent = 'Edit ' + l.name;
+        document.getElementById('loc-cancel').classList.remove('hidden');
+        form.classList.remove('hidden'); if (form.scrollIntoView) form.scrollIntoView({ block: 'nearest' });
+    }
+
+    /** {monday:{open,close},...} from the form; days that are empty or ticked "closed" are left out. null when no day has hours. */
+    function hoursFromForm(form) {
+        const out = {};
+        for (const d of DAYS) {
+            const o = form.elements['open_' + d].value, c = form.elements['close_' + d].value;
+            if (!form.elements['closed_' + d].checked && o && c) out[d] = { open: o, close: c };
+        }
+        return Object.keys(out).length ? out : null;
+    }
+
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites };
+    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, hoursFromForm, editLocation };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -353,7 +385,6 @@
         try { renderDashboard(await apiRequest('GET', '/dashboard/stats')); } catch (e) { showToast(e.message, 'error'); }
     }
     const loadAnalytics = () => loadInto('analytics-dashboard', '/analytics/dashboard', renderAnalytics, 'analytics');
-    const loadLocations = () => loadInto('locations-list', '/local-seo/locations', renderLocations, 'locations');
     // The site selector (404 log and redirect rules) scopes data to one connected site; 0 = everything / not tied to a site.
     let siteId = 0;
     async function loadSiteOptions() {
@@ -371,6 +402,7 @@
     }
     const load404 = () => { syncExportLinks(); return loadInto('404-logs', '/404-monitor/logs?per_page=100' + siteQuery('&'), render404Logs, '404 log'); };
     const loadRedirections = () => { syncExportLinks(); return loadInto('redirections-list', '/redirections' + siteQuery('?'), renderRedirections, 'redirect rules'); };
+    const loadLocations = () => loadInto('locations-list', '/local-seo/locations', (box, locs) => { locationsById = {}; locs.forEach(l => { locationsById[l.id] = l; }); renderLocations(box, locs); }, 'locations');
     const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
     const loadSitemaps = () => loadInto('sitemap-list', '/sitemap', (box, rows) => setContent(box,
         rows.length ? el('p', { class: 'text-muted', text: rows.length + ' URL(s) stored. ' }, el('a', { text: 'Download XML', attrs: { href: BASE + '/api/sitemap/generate-xml', target: '_blank', rel: 'noopener' } })) : muted('No sitemap URLs stored yet.')), 'sitemap');
@@ -460,9 +492,18 @@
             } catch (e) { showError(box, e.message); }
         },
         'location-form': async form => {
+            const id = form.elements.loc_id.value;
+            const text = ['name', 'phone', 'address', 'city', 'state', 'postal_code', 'country', 'email', 'website'];
             const body = {};
-            for (const [k, v] of new FormData(form).entries()) if (String(v).trim() !== '') body[k] = String(v).trim();
-            try { await apiRequest('POST', '/local-seo/locations', body); form.reset(); form.classList.add('hidden'); showToast('Location added'); loadLocations(); } catch (e) { showToast(e.message, 'error'); }
+            for (const f of text) { const v = form.elements[f].value.trim(); if (id) body[f] = v === '' ? null : v; else if (v !== '') body[f] = v; }
+            const lat = form.elements.latitude.value.trim(), lng = form.elements.longitude.value.trim();
+            if (id) { body.latitude = lat === '' ? null : lat; body.longitude = lng === '' ? null : lng; } else { if (lat !== '') body.latitude = lat; if (lng !== '') body.longitude = lng; }
+            const hours = hoursFromForm(form);
+            if (id || hours) body.business_hours = hours;
+            try {
+                if (id) await apiRequest('PUT', '/local-seo/locations/' + encodeURIComponent(id), body); else await apiRequest('POST', '/local-seo/locations', body);
+                resetLocationForm(form); form.classList.add('hidden'); showToast(id ? 'Location updated' : 'Location added'); loadLocations();
+            } catch (e) { showToast(e.message, 'error'); }
         },
         'redirection-form': async form => {
             try {
@@ -558,6 +599,14 @@
         'clear-404': async () => { if (confirm(siteId > 0 ? 'Clear all 404 entries of the selected site? This cannot be undone.' : 'Clear ALL 404 log entries of ALL sites? This cannot be undone.')) { await apiRequest('POST', '/404-monitor/clear', { confirm: true, project_id: siteId }); showToast('Log cleared'); load404(); } },
         'refresh-404': () => load404(),
         'delete-redirection': async t => { if (confirm('Delete this rule?')) { await apiRequest('DELETE', '/redirections/' + encodeURIComponent(t.dataset.id)); showToast('Rule deleted'); loadRedirections(); } },
+        'edit-location': t => { const l = locationsById[t.dataset.id]; if (l) editLocation(l); },
+        'loc-cancel': () => { const f = document.getElementById('location-form'); resetLocationForm(f); f.classList.add('hidden'); },
+        'location-schema': async t => {
+            const d = await apiRequest('GET', '/local-seo/locations/' + encodeURIComponent(t.dataset.id) + '/schema');
+            const box = document.getElementById('loc-schema');
+            box.textContent = '<script type="application/ld+json">\n' + JSON.stringify(d.schema || d, null, 2) + '\n<\/script>';
+            box.classList.remove('hidden');
+        },
         'delete-location': async t => { if (confirm('Delete this location?')) { await apiRequest('DELETE', '/local-seo/locations/' + encodeURIComponent(t.dataset.id)); showToast('Location deleted'); loadLocations(); } },
         'site-sync': async t => { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/sync', {}); showToast('Sync started'); await new Promise(r => setTimeout(r, 2500)); loadSites(); return d; },
         'site-rotate': async t => { if (confirm('Create a new secret? Syncing stops until the plugin has it.')) { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/rotate-secret', {}); const box = document.getElementById('site-secret'); setContent(box, el('div', { class: 'alert alert-error', text: 'New secret (shown once): put it into the plugin.' }), el('pre', { class: 'break-all', text: d.secret })); box.classList.remove('hidden'); loadSites(); } },

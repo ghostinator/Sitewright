@@ -163,3 +163,30 @@ test('users list: own row has no delete/disable and a locked role selector; othe
   assert.equal(rows[1].querySelector('select').disabled, true); assert.equal(rows[0].querySelector('select').value, 'editor');
   for (const b of box.querySelectorAll('button')) assert.equal(b.getAttribute('onclick'), null);
 });
+
+// ---- location form: opening hours --------------------------------------------------------------------------------------------
+function locationForm() {
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const fields = ['loc_id', 'name', 'phone', 'address', 'city', 'state', 'postal_code', 'country', 'email', 'website', 'latitude', 'longitude']
+    .map(n => `<input name="${n}">`).join('') + days.map(d => `<input type="time" name="open_${d}"><input type="time" name="close_${d}"><input type="checkbox" name="closed_${d}">`).join('');
+  const dom = new JSDOM(`<!doctype html><body><h4 id="loc-form-title"></h4><button id="loc-cancel" class="hidden"></button><form id="location-form" class="hidden">${fields}</form></body>`, { runScripts: 'outside-only', url: 'http://localhost/' });
+  dom.window.eval(SRC);
+  return { SW: dom.window.SW, form: dom.window.document.getElementById('location-form'), doc: dom.window.document };
+}
+test('hours: only days with both times and not marked closed are sent; none => null', () => {
+  const { SW, form } = locationForm();
+  assert.equal(SW.hoursFromForm(form), null);
+  form.elements.open_monday.value = '09:00'; form.elements.close_monday.value = '17:30';
+  form.elements.open_tuesday.value = '09:00';                                   // half-filled: ignored
+  form.elements.open_wednesday.value = '08:00'; form.elements.close_wednesday.value = '12:00'; form.elements.closed_wednesday.checked = true;
+  assert.equal(JSON.stringify(SW.hoursFromForm(form)), JSON.stringify({ monday: { open: '09:00', close: '17:30' } }));
+});
+test('editing a location fills the form from data without parsing HTML, shows hours and "closed" days', () => {
+  const { SW, form, doc } = locationForm();
+  const p = '<img src=x onerror=alert(1)>';
+  SW.editLocation({ id: 7, name: p, phone: null, address: p, city: 'X', state: null, postal_code: '1', country: 'US', email: null, website: null, latitude: '1.5', longitude: '2.5', business_hours: { friday: { open: '10:00', close: '18:00' } } });
+  assert.equal(form.elements.loc_id.value, '7'); assert.equal(form.elements.name.value, p); assert.equal(form.elements.phone.value, '');
+  assert.equal(form.elements.open_friday.value, '10:00'); assert.equal(form.elements.closed_friday.checked, false); assert.equal(form.elements.closed_monday.checked, true);
+  assert.equal(doc.getElementById('loc-form-title').textContent, 'Edit ' + p); assert.equal(doc.querySelectorAll('img').length, 0);
+  assert.ok(!form.classList.contains('hidden'));
+});

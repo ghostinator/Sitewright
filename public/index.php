@@ -162,9 +162,11 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
 
                 <div class="view" id="view-local-seo"><div class="card">
                     <h3>Local SEO Locations</h3>
-                    <p class="text-muted">Opening hours, editing and JSON-LD output are available through the API (<code>PUT /api/local-seo/locations/{id}</code>, <code>GET .../{id}/schema</code>).</p>
+                    <p class="text-muted">Add or edit locations with opening hours, and copy the LocalBusiness JSON-LD for your site's <code>&lt;head&gt;</code>.</p>
                     <button type="button" class="btn btn-primary" data-action="toggle-form" data-target="location-form">Add New Location</button>
                     <form id="location-form" class="form hidden">
+                        <input type="hidden" id="loc-id" name="loc_id">
+                        <h4 id="loc-form-title">New location</h4>
                         <div class="form-row">
                             <div class="form-group"><label for="loc-name">Name *</label><input id="loc-name" name="name" required maxlength="255"></div>
                             <div class="form-group"><label for="loc-phone">Phone</label><input id="loc-phone" name="phone" maxlength="50"></div>
@@ -184,8 +186,17 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
                             <div class="form-group"><label for="loc-lat">Latitude</label><input id="loc-lat" name="latitude" inputmode="decimal"></div>
                             <div class="form-group"><label for="loc-lng">Longitude</label><input id="loc-lng" name="longitude" inputmode="decimal"></div>
                         </div>
-                        <button type="submit" class="btn btn-primary">Save Location</button>
+                        <fieldset class="hours-grid"><legend>Opening hours (leave a day empty, or tick closed, if it has none)</legend>
+<?php foreach (['monday' => 'Mon', 'tuesday' => 'Tue', 'wednesday' => 'Wed', 'thursday' => 'Thu', 'friday' => 'Fri', 'saturday' => 'Sat', 'sunday' => 'Sun'] as $d => $abbr): ?>
+                            <div class="hours-row"><span class="hours-day"><?= $abbr ?></span>
+                                <input type="time" name="open_<?= $d ?>" aria-label="<?= $abbr ?> opens"> – <input type="time" name="close_<?= $d ?>" aria-label="<?= $abbr ?> closes">
+                                <label><input type="checkbox" name="closed_<?= $d ?>"> closed</label></div>
+<?php endforeach; ?>
+                        </fieldset>
+                        <button type="submit" class="btn btn-primary" id="loc-save">Save Location</button>
+                        <button type="button" class="btn btn-secondary hidden" id="loc-cancel" data-action="loc-cancel">Cancel edit</button>
                     </form>
+                    <pre id="loc-schema" class="hidden break-all"></pre>
                     <div id="locations-list" class="list-area"></div>
                 </div></div>
 
