@@ -226,13 +226,13 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 
 ## 7. USER ACTIONS REQUIRED
 
-1. ~~Rotate the exposed Google key~~ — not needed: it is not the owner's key and is only a placeholder now. (A history rewrite is available on request.)
+1. ~~Rotate the exposed Google key~~ — not needed: it is not the owner's key and is only a placeholder now.
 2. Create a least-privilege DB user and give the installer/migration step a separate DDL-capable account (`docs/DEPLOYMENT_GUIDE.md`).
 3. Run `php bin/install.php …` to create the first admin (nothing is created automatically).
 4. Set the web server document root to `public/`, configure HTTPS, `SW_BASE_URL`, `SW_ALLOWED_HOSTS` (and `SW_HSTS=true`).
 5. Optional: supply a Gemini key and confirm the model name against Google's current list.
-6. Choose a LICENSE (none added). The project was renamed to Sitewright; check that name for trademark availability before publishing.
-7. Tell me if you want the history rewrite, a 404 ingest endpoint, redirect enforcement, or GSC OAuth built.
+6. ~~Choose a LICENSE~~ — MIT added (see README for the upstream caveat). The project was renamed to Sitewright; check that name for trademark availability before publishing.
+7. Tell me if you want a 404 ingest endpoint, redirect enforcement, or GSC OAuth built.
 
 ## 8. REMAINING RISKS / LIMITATIONS
 
@@ -245,7 +245,7 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 * **Reverse proxies**: login throttling and rate limits key on `REMOTE_ADDR`, and the same-origin check compares `Origin` with the `Host` header. Behind a proxy all users share one IP (the 30-per-15-minute IP login limit becomes a global lockout) and a proxy that rewrites `Host` makes every POST fail with 403. The proxy must preserve `Host`; trusted-proxy handling (`X-Forwarded-For`) is **not implemented**.
 * The anonymous `/api/health` endpoint and the login page are publicly reachable by design.
 * Existing databases lose the unused `projects`, `schema`, `settings`, `analytics_pages` tables (migration 003); `project_id` NULLs become 0; non-general sitemap rows become general; duplicate rows are collapsed before unique keys are added — back up first.
-* Licence: no LICENSE file; the name "Sitewright" has not been checked for trademark conflicts.
+* Licence: MIT for this fork's changes; the upstream shipped no licence, so its original code has no explicit grant. The name "Sitewright" has not been checked for trademark conflicts.
 
 ## 9. DEPLOYMENT VERDICT
 

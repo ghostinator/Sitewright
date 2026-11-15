@@ -22,3 +22,15 @@ Nothing else: no update checks, telemetry, or phone-home. XML namespace URLs ins
 * `SW_FETCH_ALLOW_HOSTS`, `SW_FETCH_BLOCK_HOSTS` — narrow where analysis/crawling may go (never bypasses the private-address block).
 * `SW_FETCH_DEV_ALLOW_CIDRS` — **development only**; disables the private-address block for the listed ranges.
 * Egress firewall rules at the host level remain the strongest control; the application guard is defence in depth.
+
+## Privacy notice (what this application stores about people)
+
+| Data | Whose | Where | Retention |
+|---|---|---|---|
+| Username, display name, password hash (bcrypt/argon via `password_hash`), optional TOTP secret and hashed recovery codes | Administrators | `users` table | Until the account is removed |
+| Audit log: time, username, action, client IP | Administrators | `audit_log` table | `retention_days_audit` (default 365), purged by `php bin/purge-audit.php` |
+| 404 log: URI, referer, user agent, IP | Site visitors, **as entered or imported by an administrator** (the app does not capture visitors itself) | `monitor_404` table | `retention_days_404` (default 90) |
+| Session data | Administrators | PHP session files | Idle 30 min / absolute 8 h |
+| Locations (business name, phone, address, email) | Businesses/people the administrator enters | `local_locations` table | Until deleted |
+
+IP addresses and user agents are personal data under GDPR-style regimes. Name a controller, state the purpose (security monitoring, site maintenance), keep the retention values at the minimum you need, and publish this table (or your version of it) as your privacy notice. The application sets no tracking cookies and loads no third-party scripts; its only outbound destinations are listed above.

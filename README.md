@@ -93,4 +93,4 @@ Layout: `public/` (only web-exposed directory) · `core/` framework · `modules/
 
 ## License
 
-No license file is included yet; the repository owner must choose one. The name "Sitewright" has not been checked for trademark conflicts.
+[MIT](LICENSE), copyright 2026 Brandon Cook, covering this fork's changes. The upstream project this was forked from (by Hiranmay Roy) shipped no licence file, so its original code carries no explicit grant; the upstream's licence status is unknown and worth confirming with its author before wide redistribution. The name "Sitewright" has not been checked for trademark conflicts.
