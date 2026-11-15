@@ -159,3 +159,34 @@ function seedAdmin(string $user = 'admin', string $pass = 'correct horse battery
     $db = RankMathWebapp\Core\Database::getInstance();
     $db->insert('users', ['username' => $user, 'email' => "$user@example.test", 'password' => password_hash($pass, PASSWORD_DEFAULT), 'display_name' => $user]);
 }
+
+/**
+ * Install a scripted SafeHttpClient as the application default. $pages: url => [status, headers, body] | Throwable | callable(array $req): array.
+ * Every transport call is appended to $GLOBALS['__calls'].
+ */
+function fakeWeb(array $pages, array $dns = [], array $cfg = []): void
+{
+    $GLOBALS['__calls'] = [];
+    $resolver = static fn (string $h): array => $dns[$h] ?? ['93.184.216.34'];
+    $transport = static function (array $r) use ($pages): array {
+        $GLOBALS['__calls'][] = $r;
+        $p = $pages[$r['url']] ?? [404, [], 'not found'];
+        if ($p instanceof Throwable) { throw $p; }
+        if (is_callable($p)) { $p = $p($r); }
+        return ['status' => $p[0], 'headers' => $p[1], 'body' => $p[2]];
+    };
+    RankMathWebapp\Core\SafeHttpClient::setDefault(new RankMathWebapp\Core\SafeHttpClient($resolver, $transport, array_replace(RankMathWebapp\Core\Config::get('fetch'), $cfg)));
+}
+
+function html(string $body, string $head = ''): array
+{
+    return [200, ['Content-Type' => 'text/html; charset=utf-8'], "<!doctype html><html lang=\"en\"><head><title>T</title>$head</head><body>$body</body></html>"];
+}
+
+function call(string $class, string $method, array $request = [], array $params = []): array
+{
+    RankMathWebapp\Core\Request::fake($request);
+    return resp(fn () => (new $class())->$method($params));
+}
+
+const PNG_1X1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';

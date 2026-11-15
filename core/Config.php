@@ -143,8 +143,8 @@ final class Config
         $cfg['db']['port']       = (int)$cfg['db']['port'];
 
         // Identifiers end up inside SQL text, so they are validated once, here.
-        if (!preg_match('/^[A-Za-z0-9_]{0,16}$/', (string)$cfg['db']['prefix'])
-            || !preg_match('/^[A-Za-z0-9_]{1,64}$/', (string)$cfg['db']['name'])) {
+        if (!preg_match('/^[A-Za-z0-9_]{0,16}$/D', (string)$cfg['db']['prefix'])
+            || !preg_match('/^[A-Za-z0-9_]{1,64}$/D', (string)$cfg['db']['name'])) {
             throw new ConfigException('Invalid database name or prefix in configuration');
         }
         return $cfg;

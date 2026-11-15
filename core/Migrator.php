@@ -14,7 +14,7 @@ final class Migrator
 {
     public function __construct(private PDO $pdo, private string $prefix, private ?string $dir = null)
     {
-        if (!preg_match('/^[A-Za-z0-9_]{0,16}$/', $prefix)) {
+        if (!preg_match('/^[A-Za-z0-9_]{0,16}$/D', $prefix)) {
             throw new ConfigException('Invalid table prefix');
         }
         $this->dir ??= dirname(__DIR__) . '/database/migrations';

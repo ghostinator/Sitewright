@@ -50,7 +50,7 @@ final class Request
     public static function queryInt(string $key, int $default, int $min, int $max): int
     {
         $v = self::query($key);
-        if ($v === null || !is_scalar($v) || !preg_match('/^-?\d{1,12}$/', (string)$v)) {
+        if ($v === null || !is_scalar($v) || !preg_match('/^-?\d{1,12}$/D', (string)$v)) {
             return max($min, min($max, $default));
         }
         return max($min, min($max, (int)$v));

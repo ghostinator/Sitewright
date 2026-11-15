@@ -19,13 +19,13 @@ final class Installer
         $pass = (string)($in['pass'] ?? '');
         $prefix = (string)($in['prefix'] ?? 'rm_');
 
-        $hostOk = preg_match('/^[A-Za-z0-9]([A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?$/', $host) || filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6);
+        $hostOk = preg_match('/^[A-Za-z0-9]([A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?$/D', $host) || filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6);
         if (!$hostOk) { throw new \InvalidArgumentException('Invalid database host'); }
-        if (!preg_match('/^[0-9]{1,5}$/', $port) || (int)$port < 1 || (int)$port > 65535) { throw new \InvalidArgumentException('Invalid database port (1-65535)'); }
-        if (!preg_match('/^[A-Za-z0-9_]{1,64}$/', $name)) { throw new \InvalidArgumentException('Invalid database name (letters, digits, underscore; max 64)'); }
+        if (!preg_match('/^[0-9]{1,5}$/D', $port) || (int)$port < 1 || (int)$port > 65535) { throw new \InvalidArgumentException('Invalid database port (1-65535)'); }
+        if (!preg_match('/^[A-Za-z0-9_]{1,64}$/D', $name)) { throw new \InvalidArgumentException('Invalid database name (letters, digits, underscore; max 64)'); }
         if ($user === '' || strlen($user) > 80 || preg_match('/[\x00-\x1F\x7F]/', $user)) { throw new \InvalidArgumentException('Invalid database user'); }
         if (strlen($pass) > 255 || str_contains($pass, "\0")) { throw new \InvalidArgumentException('Invalid database password'); }
-        if (!preg_match('/^[A-Za-z0-9_]{0,16}$/', $prefix)) { throw new \InvalidArgumentException('Invalid table prefix (letters, digits, underscore; max 16)'); }
+        if (!preg_match('/^[A-Za-z0-9_]{0,16}$/D', $prefix)) { throw new \InvalidArgumentException('Invalid table prefix (letters, digits, underscore; max 16)'); }
         return ['host' => $host, 'port' => (int)$port, 'name' => $name, 'user' => $user, 'pass' => $pass, 'prefix' => $prefix];
     }
 
@@ -33,7 +33,7 @@ final class Installer
     public static function validateAdmin(array $in): array
     {
         $u = (string)($in['username'] ?? ''); $e = (string)($in['email'] ?? ''); $p = (string)($in['password'] ?? '');
-        if (!preg_match('/^[A-Za-z0-9_.\-]{3,60}$/', $u)) { throw new \InvalidArgumentException('Admin username: 3-60 chars of letters, digits, . _ -'); }
+        if (!preg_match('/^[A-Za-z0-9_.\-]{3,60}$/D', $u)) { throw new \InvalidArgumentException('Admin username: 3-60 chars of letters, digits, . _ -'); }
         if (!filter_var($e, FILTER_VALIDATE_EMAIL) || strlen($e) > 100) { throw new \InvalidArgumentException('Invalid admin email'); }
         if (strlen($p) < 12 || strlen($p) > 1024) { throw new \InvalidArgumentException('Admin password must be 12-1024 characters'); }
         return ['username' => $u, 'email' => $e, 'password' => $p];

@@ -76,7 +76,7 @@ final class Database
     public function t(string $table): string
     {
         // Table names may start with a digit (404_monitor); the validated prefix keeps the full name a legal identifier.
-        if (!preg_match('/^[a-z0-9_]+$/', $table)) {
+        if (!preg_match('/^[a-z0-9_]+$/D', $table)) {
             throw new DatabaseException('Invalid SQL identifier');
         }
         return $this->prefix . $table;
@@ -84,7 +84,7 @@ final class Database
 
     public static function assertIdentifier(string $name): void
     {
-        if (!preg_match('/^[a-z_][a-z0-9_]*$/', $name)) {
+        if (!preg_match('/^[a-z_][a-z0-9_]*$/D', $name)) {
             throw new DatabaseException('Invalid SQL identifier');
         }
     }

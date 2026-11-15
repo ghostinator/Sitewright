@@ -142,7 +142,7 @@ class LocalSeoController
         foreach ($h as $day => $t) {
             if (!in_array($day, $days, true) || !is_array($t)) { Validator::fail('business_hours', 'unknown weekday or bad entry'); }
             foreach (['open', 'close'] as $k) {
-                if (!isset($t[$k]) || !is_string($t[$k]) || !preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $t[$k])) { Validator::fail('business_hours', "$day.$k must be HH:MM"); }
+                if (!isset($t[$k]) || !is_string($t[$k]) || !preg_match('/^([01]\d|2[0-3]):[0-5]\d$/D', $t[$k])) { Validator::fail('business_hours', "$day.$k must be HH:MM"); }
             }
             $out[$day] = ['open' => $t['open'], 'close' => $t['close']];
         }

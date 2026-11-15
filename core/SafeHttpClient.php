@@ -165,7 +165,7 @@ final class SafeHttpClient
             if (preg_match('/^(?:0x[0-9a-f]*|[0-9]+)(?:\.(?:0x[0-9a-f]*|[0-9]+))*$/i', $host)) {
                 // All-numeric host: only strict dotted-quad is accepted. Decimal, octal, hex and short forms
                 // (2130706433, 0177.0.0.1, 0x7f.1, 127.1) are interpreted differently by resolvers and curl.
-                if (!preg_match('/^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/', $host)) {
+                if (!preg_match('/^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/D', $host)) {
                     throw new UrlRejectedException('Numeric host formats are not allowed');
                 }
                 $ips = [$host]; $literal = true;
@@ -202,7 +202,7 @@ final class SafeHttpClient
             $host = strtolower($ascii);
         }
         foreach (explode('.', $host) as $label) {
-            if (!preg_match('/^[a-z0-9_]([a-z0-9_\-]{0,61}[a-z0-9_])?$/', $label)) {
+            if (!preg_match('/^[a-z0-9_]([a-z0-9_\-]{0,61}[a-z0-9_])?$/D', $label)) {
                 throw new UrlRejectedException('URL host is not valid');
             }
         }

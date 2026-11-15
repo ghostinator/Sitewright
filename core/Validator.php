@@ -44,7 +44,7 @@ final class Validator
             if ($required) { self::fail($field, 'is required'); }
             return $default;
         }
-        if (is_bool($v) || (!is_int($v) && !(is_string($v) && preg_match('/^-?\d{1,18}$/', $v)))) { self::fail($field, 'must be an integer'); }
+        if (is_bool($v) || (!is_int($v) && !(is_string($v) && preg_match('/^-?\d{1,18}$/D', $v)))) { self::fail($field, 'must be an integer'); }
         $v = (int)$v;
         if ($v < $min || $v > $max) { self::fail($field, "must be between $min and $max"); }
         return $v;
@@ -109,7 +109,7 @@ final class Validator
     public static function phone(array $in, string $field): ?string
     {
         $v = self::str($in, $field, 50);
-        if ($v !== null && !preg_match('/^[0-9+().\-\s]{5,50}$/', $v)) { self::fail($field, 'must be a valid phone number'); }
+        if ($v !== null && !preg_match('/^[0-9+().\-\s]{5,50}$/D', $v)) { self::fail($field, 'must be a valid phone number'); }
         return $v;
     }
 
@@ -121,7 +121,7 @@ final class Validator
 
     public static function id(mixed $v): int
     {
-        if (!is_string($v) && !is_int($v) || !preg_match('/^\d{1,18}$/', (string)$v) || (int)$v < 1) {
+        if (!is_string($v) && !is_int($v) || !preg_match('/^\d{1,18}$/D', (string)$v) || (int)$v < 1) {
             Response::error('Invalid ID', 400);
         }
         return (int)$v;

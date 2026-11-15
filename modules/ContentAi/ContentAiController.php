@@ -146,7 +146,7 @@ class ContentAiController
     private function gemini(string $prompt): array
     {
         $model = (string)Config::get('gemini.model');
-        if (!preg_match('/^[A-Za-z0-9._\-]{1,80}$/', $model)) { return [null, 'bad_model_name']; }
+        if (!preg_match('/^[A-Za-z0-9._\-]{1,80}$/D', $model)) { return [null, 'bad_model_name']; }
         $url = rtrim((string)Config::get('gemini.endpoint'), '/') . '/' . $model . ':generateContent';
         try {
             $res = SafeHttpClient::default()->request('POST', $url, [

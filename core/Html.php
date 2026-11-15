@@ -30,8 +30,12 @@ final class Html
         foreach (iterator_to_array($xp->query('//script|//style|//noscript|//template') ?: []) as $n) {
             $n->parentNode?->removeChild($n);
         }
-        $body = $dom->getElementsByTagName('body')->item(0);
-        return trim(preg_replace('/\s+/u', ' ', (string)($body?->textContent ?? $dom->textContent)) ?? '');
+        // Join text nodes with a space so adjacent block elements ("</h1><p>") never glue words together.
+        $parts = [];
+        foreach ($xp->query('//body//text() | //html[not(body)]//text()') ?: [] as $n) {
+            $parts[] = $n->nodeValue;
+        }
+        return trim(preg_replace('/\s+/u', ' ', implode(' ', $parts)) ?? '');
     }
 
     /** Unicode-aware word count (letters/digits, keeping inner apostrophes and hyphens). */

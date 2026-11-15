@@ -3,7 +3,7 @@
  *
  * Security rules for this file (CSP: script-src 'self', no inline handlers):
  *  - Data from the server (which includes data from third-party sites) is NEVER parsed as HTML.
- *    Every node is built with createElement + textContent; there is no innerHTML/insertAdjacentHTML/document.write.
+ *    Every node is built with createElement + textContent; no HTML-string APIs are used (a test greps for them).
  *  - Actions use data-action / data-id attributes and one delegated listener; no inline onclick.
  *  - All requests go through apiRequest(): CSRF header, same-origin credentials, error handling, 401 -> login.
  */

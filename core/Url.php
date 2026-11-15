@@ -18,7 +18,7 @@ final class Url
             return null;
         }
         $scheme = $m[1];
-        if ($scheme !== null && !preg_match('/^[A-Za-z][A-Za-z0-9+.\-]*$/', $scheme)) {
+        if ($scheme !== null && !preg_match('/^[A-Za-z][A-Za-z0-9+.\-]*$/D', $scheme)) {
             return null;
         }
         return [
@@ -75,7 +75,7 @@ final class Url
         }
         $auth = $p['authority'];
         if (str_contains($auth, '@')) { return null; }
-        if (!preg_match('/^(\[[0-9a-fA-F:.]+\]|[^:\[\]]+)(?::(\d{1,5}))?$/', $auth, $m)) { return null; }
+        if (!preg_match('/^(\[[0-9a-fA-F:.]+\]|[^:\[\]]+)(?::(\d{1,5}))?$/D', $auth, $m)) { return null; }
         $host = strtolower($m[1]);
         $port = isset($m[2]) && $m[2] !== '' ? (int)$m[2] : null;
         if ($port === ($p['scheme'] === 'https' ? 443 : 80)) { $port = null; }
