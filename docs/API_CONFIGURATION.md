@@ -170,7 +170,7 @@ config/api-keys.php
 return [
     // Required: Google Gemini API
     'gemini' => [
-        'api_key' => 'AIzaSyAPKvJr5Vgio2vxTV6GSQS2eB0gxVGJnsk',
+        'api_key' => 'YOUR_GEMINI_API_KEY',
         'model' => 'gemini-2.0-flash-exp',
         'endpoint' => 'https://generativelanguage.googleapis.com/v1beta/models',
     ],
