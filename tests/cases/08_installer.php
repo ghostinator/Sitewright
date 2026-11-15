@@ -88,3 +88,19 @@ test('bin/install.php is CLI-only and rejects a malicious port without writing c
     ok(str_contains((string)$out, 'Invalid database port') && str_contains((string)$out, 'exit=1'), (string)$out);
     eq(file_exists(Installer::configPath()), $before);
 });
+
+test('bin/user.php: create, duplicate refused, passwd changes hash, list works, weak password rejected', function () {
+    $c = testDbConfig();
+    $db = freshDb();
+    $env = sprintf('SW_DB_HOST=%s SW_DB_NAME=%s SW_DB_USER=%s SW_DB_PASS=%s', escapeshellarg($c['host']), 'sw_test', escapeshellarg($c['user']), escapeshellarg($c['pass']));
+    $run = fn (string $pw, string $args) => (string)shell_exec('cd ' . escapeshellarg(dirname(__DIR__, 2)) . " && $env SW_USER_PASSWORD=" . escapeshellarg($pw) . " php bin/user.php $args 2>&1; echo \"exit=\$?\"");
+    ok(str_contains($run('a long passphrase 1', 'create alice alice@example.test'), 'Created alice'));
+    ok(str_contains($run('a long passphrase 1', 'create alice alice@example.test'), 'exit=1'), 'duplicate refused');
+    ok(str_contains($run('short', 'create bob bob@example.test'), 'exit=1'), 'weak password refused');
+    $old = $db->fetchOne("SELECT password FROM sw_users WHERE username = 'alice'")['password'];
+    ok(password_verify('a long passphrase 1', $old));
+    ok(str_contains($run('another long passphrase 2', 'passwd alice'), 'Password updated'));
+    $new = $db->fetchOne("SELECT password FROM sw_users WHERE username = 'alice'")['password'];
+    ok(password_verify('another long passphrase 2', $new) && !password_verify('a long passphrase 1', $new));
+    ok(str_contains($run('x', 'list'), "alice\talice@example.test"));
+});
