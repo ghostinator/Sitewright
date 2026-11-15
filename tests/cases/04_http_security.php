@@ -92,7 +92,7 @@ test('Host header validation (DNS rebinding): foreign Host rejected on API and p
 // ---- SQLI-001 / FUNC-016 ---------------------------------------------------------------------
 foreach ([
     'order_by=id;SELECT SLEEP(4)', 'order_by=(SELECT SLEEP(4))', 'order_by=IF(1=1,SLEEP(4),0)', 'order=ASC,(SELECT SLEEP(4))', 'order=DESC;DROP TABLE sw_users',
-    'per_page=1;SELECT SLEEP(4)', 'per_page=1%20UNION%20SELECT%20password,2,3,4,5,6,7,8,9,10%20FROM%20rm_users', 'page=1;SELECT SLEEP(4)', 'page=-5', 'page=abc', 'per_page=0', 'per_page=100000', 'project_id=1%20OR%201=1',
+    'per_page=1;SELECT SLEEP(4)', 'per_page=1%20UNION%20SELECT%20password,2,3,4,5,6,7,8,9,10%20FROM%20sw_users', 'page=1;SELECT SLEEP(4)', 'page=-5', 'page=abc', 'per_page=0', 'per_page=100000', 'project_id=1%20OR%201=1',
 ] as $qs) {
     test("getLogs injection payload neutralised: $qs", function () use ($user, $qs) {
         $qs = implode('&', array_map(fn ($kv) => explode('=', $kv, 2)[0] . '=' . rawurlencode(rawurldecode(explode('=', $kv, 2)[1] ?? '')), explode('&', $qs)));

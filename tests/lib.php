@@ -83,7 +83,7 @@ function startServer(array $env = []): array
     $port = (int)substr(strrchr((string)stream_socket_get_name($sock, false), ':'), 1);
     fclose($sock);
     $c = testDbConfig();
-    $env = $env + ['SW_DB_HOST' => $c['host'], 'SW_DB_NAME' => $c['name'], 'SW_DB_USER' => $c['user'], 'SW_DB_PASS' => $c['pass'], 'PATH' => (string)getenv('PATH')];
+    $env = $env + ['SW_CONFIG_FILE' => '/nonexistent/sitewright-test-config.php', 'SW_DB_HOST' => $c['host'], 'SW_DB_NAME' => $c['name'], 'SW_DB_USER' => $c['user'], 'SW_DB_PASS' => $c['pass'], 'PATH' => (string)getenv('PATH')];
     $proc = proc_open([PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=1', '-S', "127.0.0.1:$port", '-t', dirname(__DIR__) . '/public', __DIR__ . '/router.php'],
         [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/tmp/sw-server.log', 'a']], $pipes, dirname(__DIR__), $env);
     for ($i = 0; $i < 60; $i++) { if (@fsockopen('127.0.0.1', $port)) { break; } usleep(100000); }

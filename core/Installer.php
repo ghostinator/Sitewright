@@ -56,11 +56,11 @@ final class Installer
     {
         $configPath = $o['config_path'] ?? self::configPath();
         $lockPath = $o['lock_path'] ?? self::lockPath();
+        $db = self::validateDb($o['db']);
+        $admin = self::validateAdmin($o['admin']);
         if (file_exists($configPath) || file_exists($lockPath)) {
             throw new \RuntimeException('Already installed (config or lock file exists). Use bin/migrate.php to upgrade; delete both files only if you really intend to reinstall.');
         }
-        $db = self::validateDb($o['db']);
-        $admin = self::validateAdmin($o['admin']);
 
         if (!empty($o['create_db'])) {
             $pdo = Database::connect($db, false);
