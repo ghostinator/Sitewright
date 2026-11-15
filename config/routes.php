@@ -29,6 +29,13 @@ return [
     ['DELETE', '/api/users/{id}',               $C . 'UserController@delete',    ['role' => 'admin']],
     ['POST',   '/api/users/{id}/reset-mfa',     $C . 'UserController@resetMfa',  ['role' => 'admin']],
     ['POST',   '/api/users/{id}/send-reset',    $C . 'UserController@sendReset', ['role' => 'admin']],
+    ['GET',    '/api/sites/options',            $C . 'SiteController@options',   ['role' => 'editor']],
+    ['GET',    '/api/sites',                    $C . 'SiteController@list',      ['role' => 'admin']],
+    ['POST',   '/api/sites',                    $C . 'SiteController@create',    ['role' => 'admin']],
+    ['GET',    '/api/sites/plugin',             $C . 'SiteController@plugin',    ['role' => 'admin']],
+    ['POST',   '/api/sites/{id}/sync',          $C . 'SiteController@sync',      ['role' => 'admin']],
+    ['POST',   '/api/sites/{id}/rotate-secret', $C . 'SiteController@rotate',    ['role' => 'admin']],
+    ['DELETE', '/api/sites/{id}',               $C . 'SiteController@delete',    ['role' => 'admin']],
     ['GET',    '/api/audit',                    $C . 'AuditController@list',     ['role' => 'admin']],
 
     // SEO analysis (outbound fetch of the analysed URL)

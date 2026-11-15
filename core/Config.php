@@ -27,6 +27,8 @@ final class Config
             'retention_days_404' => 90,
             'hsts'             => false,
             'trusted_proxies'  => [],
+            'app_key'          => '',
+            'sites'            => ['sync_minutes' => 10],
             'log' => ['file' => '', 'level' => 'info', 'requests' => true],
             'mail' => [
                 'host' => '', 'port' => 587, 'encryption' => 'starttls', 'username' => '', 'password' => '',
@@ -147,6 +149,7 @@ final class Config
         if (($v = $env('SW_MAIL_VERIFY_TLS')) !== null) { $cfg['mail']['verify_tls'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         if (($v = $env('SW_ALERT_EMAIL_TO')) !== null) { $cfg['alerts']['email_to'] = $list($v); }
         foreach (['teams_webhook' => 'SW_ALERT_TEAMS_WEBHOOK', 'telegram_token' => 'SW_ALERT_TELEGRAM_TOKEN', 'telegram_chat_id' => 'SW_ALERT_TELEGRAM_CHAT_ID'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['alerts'][$k] = $v; } }
+        if (($v = $env('SW_APP_KEY')) !== null) { $cfg['app_key'] = $v; }
         if (($v = $env('SW_TRUSTED_PROXIES')) !== null) { $cfg['trusted_proxies'] = $list($v); }
         if (($v = $env('SW_HSTS')) !== null) { $cfg['hsts'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         // Outbound controls are deliberately separate from SW_ALLOWED_HOSTS (inbound Host validation).

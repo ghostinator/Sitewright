@@ -21,10 +21,11 @@ if (function_exists('pcntl_async_signals')) {
     foreach ([SIGTERM, SIGINT] as $sig) { pcntl_signal($sig, static function () use (&$stop): void { $stop = true; }); }
 }
 Logger::info('worker_start', ['once' => $once]);
-$done = 0; $lastMaint = 0;
+$done = 0; $lastMaint = 0; $lastSched = 0;
 while (!$stop) {
     try {
         Jobs::heartbeat();
+        if (!$once && time() - $lastSched >= 60) { $lastSched = time(); \Sitewright\Core\SiteSync::scheduleDue(); }
         if (!$once && time() - $lastMaint > 3600) { $lastMaint = time(); Logger::info('maintenance', Jobs::maintenance()); }
         if (Jobs::runNext()) {
             $done++;

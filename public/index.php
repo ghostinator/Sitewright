@@ -18,9 +18,9 @@ foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 $views = [
     'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'analytics' => 'Analytics',
     'content-ai' => 'Content AI', 'local-seo' => 'Local SEO', 'image-seo' => 'Image SEO', 'sitemaps' => 'Sitemaps',
-    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'users' => 'Users', 'audit' => 'Audit Log',
+    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'users' => 'Users', 'audit' => 'Audit Log',
 ];
-$adminViews = ['users', 'audit'];
+$adminViews = ['sites', 'users', 'audit'];
 $slug = trim(App::relativePath(), '/');
 $view = $slug === '' ? 'dashboard' : $slug;
 $resetPage = $slug === 'reset';   // public: the page the password-reset e-mail links to
@@ -49,7 +49,7 @@ if ($user && $resetPage) { header('Location: ' . App::basePath() . '/'); exit; }
 $base = App::basePath();
 $config = ['basePath' => $base, 'csrfToken' => $csrf, 'view' => $resetPage ? 'reset' : $view, 'user' => $user ? ['username' => $user['username'], 'role' => $user['role']] : null];
 $configJson = json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
-$icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔️', 'analytics' => '📈', 'content-ai' => '🤖', 'local-seo' => '📍', 'image-seo' => '🖼️', 'sitemaps' => '🗺️', '404-monitor' => '⚠️', 'redirections' => '↪️', 'account' => '👤', 'users' => '👥', 'audit' => '📜'];
+$icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔️', 'analytics' => '📈', 'content-ai' => '🤖', 'local-seo' => '📍', 'image-seo' => '🖼️', 'sitemaps' => '🗺️', '404-monitor' => '⚠️', 'redirections' => '↪️', 'account' => '👤', 'sites' => '🌐', 'users' => '👥', 'audit' => '📜'];
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -208,7 +208,8 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
                     <h3>404 Log</h3>
                     <p class="text-muted">This app does not detect 404s on your site. Add entries here or import them from your server logs.</p>
                     <button type="button" class="btn btn-secondary" data-action="refresh-404">Refresh</button>
-                    <a class="btn btn-secondary" href="<?= $h($base) ?>/api/404-monitor/export">Export CSV</a>
+                    <label class="inline-label" for="site-select-404">Site</label> <select id="site-select-404" class="site-select" data-site-select="404"><option value="0">All sites</option></select>
+                    <a class="btn btn-secondary" id="export-404" href="<?= $h($base) ?>/api/404-monitor/export">Export CSV</a>
                     <button type="button" class="btn btn-danger" data-action="clear-404">Clear All</button>
                     <form id="log404-form" class="form form-inline"><div class="form-group"><label for="log404-uri">Add entry (path)</label><input id="log404-uri" placeholder="/missing-page" required maxlength="1000"></div><button type="submit" class="btn btn-primary">Add</button></form>
                     <div id="404-logs" class="list-area"></div>
@@ -216,11 +217,12 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
 
                 <div class="view" id="view-redirections"><div class="card">
                     <h3>Redirect Rules</h3>
-                    <p class="text-muted">A rule manager: rules are <strong>not applied by this app</strong>. Export them for your web server.</p>
+                    <p class="text-muted">Rules are enforced on a site that has the Sitewright plugin installed (see <strong>Sites</strong>); for other servers, export them as Apache, nginx or CSV.</p>
+                    <label class="inline-label" for="site-select-rules">Site</label> <select id="site-select-rules" class="site-select" data-site-select="rules"><option value="0">All sites</option></select>
                     <button type="button" class="btn btn-primary" data-action="toggle-form" data-target="redirection-form">Add Rule</button>
-                    <a class="btn btn-secondary" href="<?= $h($base) ?>/api/redirections/export?format=apache">Export Apache</a>
-                    <a class="btn btn-secondary" href="<?= $h($base) ?>/api/redirections/export?format=nginx">Export nginx</a>
-                    <a class="btn btn-secondary" href="<?= $h($base) ?>/api/redirections/export?format=csv">Export CSV</a>
+                    <a class="btn btn-secondary export-rules" data-format="apache" href="<?= $h($base) ?>/api/redirections/export?format=apache">Export Apache</a>
+                    <a class="btn btn-secondary export-rules" data-format="nginx" href="<?= $h($base) ?>/api/redirections/export?format=nginx">Export nginx</a>
+                    <a class="btn btn-secondary export-rules" data-format="csv" href="<?= $h($base) ?>/api/redirections/export?format=csv">Export CSV</a>
                     <form id="redirection-form" class="form hidden">
                         <div class="form-row">
                             <div class="form-group"><label for="redir-source">Source path</label><input id="redir-source" placeholder="/old-page" required maxlength="1000"></div>
@@ -264,6 +266,19 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
                         </form>
                     </div>
                 </div>
+
+                <div class="view" id="view-sites"><div class="card">
+                    <h3>Connected sites</h3>
+                    <p class="text-muted">Sitewright calls your WordPress site; the site never calls Sitewright, so this server can stay private. The <strong>Sitewright Agent</strong> plugin records 404s (path and referrer only: no IPs, no user agents) and enforces the redirect rules you manage here, even if Sitewright is offline.</p>
+                    <ol class="text-muted"><li><a href="<?= $h($base) ?>/api/sites/plugin">Download the plugin</a> and install it (Plugins &rarr; Add New &rarr; Upload, or into <code>wp-content/mu-plugins/</code>).</li><li>Add the site below and copy the secret it shows (once) into <code>wp-config.php</code> as <code>define('SITEWRIGHT_SECRET', '…');</code> or Settings &rarr; Sitewright.</li><li>Press <em>Sync now</em>. Status turns to <em>ok</em>.</li></ol>
+                    <button type="button" class="btn btn-primary" data-action="toggle-form" data-target="site-create-form">Add site</button>
+                    <form id="site-create-form" class="form hidden" autocomplete="off"><div class="form-row">
+                        <div class="form-group"><label for="site-name">Name</label><input id="site-name" required maxlength="100"></div>
+                        <div class="form-group"><label for="site-url">Site address</label><input id="site-url" type="url" placeholder="https://www.example.com" required maxlength="255"></div></div>
+                        <button type="submit" class="btn btn-primary">Add site</button></form>
+                    <div id="site-secret" class="hidden"></div>
+                    <div id="sites-list" class="list-area"></div>
+                </div></div>
 
                 <div class="view" id="view-users"><div class="card">
                     <h3>Users</h3>

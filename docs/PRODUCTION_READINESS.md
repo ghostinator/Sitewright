@@ -19,7 +19,7 @@ Updated with every commit of the production-readiness phase. Verdict stays **SAF
 | 3 | Password reset (Postal e-mail), self-service password change and MFA setup | **Done** (`tests/cases/13_accounts.php`; reset tested end to end through the job queue, e-mail delivery itself tested in 12) |
 | 4 | Roles (admin/editor/viewer), user management UI, audit viewer | **Done** (role matrix over every route, last-admin guard, disabled accounts, jsdom tests) |
 | 5 | Background jobs (crawl, bulk images, mail, alerts) with worker, stale-job recovery, per-user quota; health check; systemd units | **Done** (`tests/cases/12_jobs_mail_alerts.php`, 342 PHP + 15 JS). Not yet deployed to the VM |
-| 6 | Site integration: WordPress plugin (pull model), 404 collection, redirect enforcement | planned |
+| 6 | Site integration: WordPress plugin (Sitewright calls the site; nothing needs to be public), 404 collection, redirect enforcement | **Done and tested against real WordPress 6** (`tests/docker/wordpress-e2e.sh`: 29 checks incl. signatures, replay, nonce, enforcement, hostile rules, SSRF) + `tests/cases/14_sites.php`. UI for sites still to do |
 | 7 | Location edit UI with opening hours | planned |
 | 8 | Permanent browser test suite | planned |
 | 9 | Google Search Console OAuth | planned (mock-tested only until credentials exist) |

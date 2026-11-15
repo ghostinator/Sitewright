@@ -41,6 +41,7 @@ class RedirectionsController
         } catch (DatabaseException $e) {
             Database::isDuplicate($e) ? Response::error('A redirection for this source URL already exists', 409) : throw $e;
         }
+        \Sitewright\Core\SiteSync::markDirty();
         Response::success('Redirection added', ['id' => (int)$id], 201);
     }
 
@@ -55,6 +56,7 @@ class RedirectionsController
         } catch (DatabaseException $e) {
             Database::isDuplicate($e) ? Response::error('A redirection for this source URL already exists', 409) : throw $e;
         }
+        \Sitewright\Core\SiteSync::markDirty();
         Response::success('Redirection updated');
     }
 
@@ -62,7 +64,7 @@ class RedirectionsController
     {
         $id = Validator::id($params['id'] ?? null);
         $n = $this->db->delete('redirections', ['id' => $id]);
-        if ($n) { Audit::log('redirect_deleted', null, '', "id $id"); }
+        if ($n) { Audit::log('redirect_deleted', null, '', "id $id"); \Sitewright\Core\SiteSync::markDirty(); }
         $n ? Response::success('Redirection deleted') : Response::notFound('Redirection not found');
     }
 
@@ -78,11 +80,12 @@ class RedirectionsController
         $row ? Response::success('Redirect rule found', $row) : Response::error('No redirect rule found', 404);
     }
 
-    /** GET /api/redirections/export?format=apache|nginx|csv */
+    /** GET /api/redirections/export?format=apache|nginx|csv[&project_id=N] */
     public function export(array $params): never
     {
         $format = Validator::enum(['f' => Request::query('format')], 'f', ['apache', 'nginx', 'csv'], 'apache');
-        $rules = $this->db->fetchAll('SELECT source_url, target_url, redirect_type FROM `' . $this->db->t('redirections') . "` WHERE status = 'active' ORDER BY id LIMIT 100000");
+        $projectId = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);   // one connected site's rules, or everything
+        $rules = $this->db->fetchAll('SELECT source_url, target_url, redirect_type FROM `' . $this->db->t('redirections') . "` WHERE status = 'active'" . ($projectId > 0 ? ' AND project_id = :p' : '') . ' ORDER BY id LIMIT 100000', $projectId > 0 ? ['p' => $projectId] : []);
 
         if ($format === 'csv') {
             $out = fopen('php://temp', 'w+');
@@ -145,6 +148,7 @@ class RedirectionsController
             return $c;
         });
         Audit::log('redirects_imported', null, '', "$imported rows");
+        \Sitewright\Core\SiteSync::markDirty();
         Response::success("Imported $imported redirections", ['imported' => $imported, 'errors' => $errors]);
     }
 

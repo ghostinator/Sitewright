@@ -151,6 +151,15 @@
         }));
     }
 
+    function renderSites(container, sites) {
+        if (!sites.length) return setContent(container, muted('No sites connected yet.'));
+        setContent(container, ...sites.map(s => listItem([
+            el('strong', { text: s.name }), ' ', el('span', { class: 'badge', text: s.last_status }), el('br'),
+            el('small', { class: 'text-muted break-all', text: s.base_url + ' | last sync: ' + (s.last_sync_at || 'never') + (s.plugin_version ? ' | plugin ' + s.plugin_version : '') }),
+            s.last_error ? el('div', { class: 'alert alert-error', text: s.last_error }) : null],
+            [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id), deleteButton('delete-site', s.id)])));
+    }
+
     function renderAudit(container, rows, append) {
         const items = rows.map(r => listItem([
             el('strong', { text: r.action }), ' ', el('span', { class: 'text-muted', text: (r.username || '-') + ' · ' + r.ip }), el('br'),
@@ -190,7 +199,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit };
+    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -309,7 +318,7 @@
 
     const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', analytics: 'Analytics', 'content-ai': 'Content AI',
         'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules',
-        account: 'My Account', users: 'Users', audit: 'Audit Log' };
+        account: 'My Account', sites: 'Sites', users: 'Users', audit: 'Audit Log' };
     const viewUrl = v => BASE + (v === 'dashboard' ? '/' : '/' + v);
 
     function viewFromLocation() {
@@ -324,7 +333,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, analytics: loadAnalytics, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, users: loadUsers, audit: () => loadAudit(false) };
+        const loaders = { dashboard: loadDashboard, analytics: loadAnalytics, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false) };
         if (loaders[view]) loaders[view]();
     }
 
@@ -345,8 +354,24 @@
     }
     const loadAnalytics = () => loadInto('analytics-dashboard', '/analytics/dashboard', renderAnalytics, 'analytics');
     const loadLocations = () => loadInto('locations-list', '/local-seo/locations', renderLocations, 'locations');
-    const load404 = () => loadInto('404-logs', '/404-monitor/logs?per_page=100', render404Logs, '404 log');
-    const loadRedirections = () => loadInto('redirections-list', '/redirections', renderRedirections, 'redirect rules');
+    // The site selector (404 log and redirect rules) scopes data to one connected site; 0 = everything / not tied to a site.
+    let siteId = 0;
+    async function loadSiteOptions() {
+        let sites = [];
+        try { sites = await apiRequest('GET', '/sites/options'); } catch (e) { /* viewers cannot list sites: selector stays on "All sites" */ }
+        document.querySelectorAll('.site-select').forEach(sel => {
+            sel.replaceChildren(el('option', { text: 'All sites', attrs: { value: '0' } }), ...sites.map(s => el('option', { text: s.name, attrs: { value: String(s.id) } })));
+            sel.value = String(siteId);
+        });
+    }
+    const siteQuery = sep => (siteId > 0 ? sep + 'project_id=' + siteId : '');
+    function syncExportLinks() {
+        const e404 = document.getElementById('export-404'); if (e404) e404.href = BASE + '/api/404-monitor/export' + siteQuery('?');
+        document.querySelectorAll('.export-rules').forEach(a => { a.href = BASE + '/api/redirections/export?format=' + a.dataset.format + siteQuery('&'); });
+    }
+    const load404 = () => { syncExportLinks(); return loadInto('404-logs', '/404-monitor/logs?per_page=100' + siteQuery('&'), render404Logs, '404 log'); };
+    const loadRedirections = () => { syncExportLinks(); return loadInto('redirections-list', '/redirections' + siteQuery('?'), renderRedirections, 'redirect rules'); };
+    const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
     const loadSitemaps = () => loadInto('sitemap-list', '/sitemap', (box, rows) => setContent(box,
         rows.length ? el('p', { class: 'text-muted', text: rows.length + ' URL(s) stored. ' }, el('a', { text: 'Download XML', attrs: { href: BASE + '/api/sitemap/generate-xml', target: '_blank', rel: 'noopener' } })) : muted('No sitemap URLs stored yet.')), 'sitemap');
 
@@ -441,8 +466,17 @@
         },
         'redirection-form': async form => {
             try {
-                await apiRequest('POST', '/redirections', { source_url: form.querySelector('#redir-source').value, target_url: form.querySelector('#redir-target').value, redirect_type: form.querySelector('#redir-type').value });
+                await apiRequest('POST', '/redirections', { source_url: form.querySelector('#redir-source').value, target_url: form.querySelector('#redir-target').value, redirect_type: form.querySelector('#redir-type').value, project_id: siteId });
                 form.reset(); form.classList.add('hidden'); showToast('Rule saved'); loadRedirections();
+            } catch (e) { showToast(e.message, 'error'); }
+        },
+        'site-create-form': async form => {
+            try {
+                const d = await apiRequest('POST', '/sites', { name: form.querySelector('#site-name').value.trim(), base_url: form.querySelector('#site-url').value.trim() });
+                form.reset(); form.classList.add('hidden');
+                const box = document.getElementById('site-secret');
+                setContent(box, el('div', { class: 'alert alert-error', text: 'Copy this secret into the plugin now. It is not shown again.' }), el('pre', { class: 'break-all', text: d.secret }));
+                box.classList.remove('hidden'); loadSites(); loadSiteOptions();
             } catch (e) { showToast(e.message, 'error'); }
         },
         'user-create-form': async form => {
@@ -488,7 +522,7 @@
             } catch (e) { showToast(e.message, 'error'); }
         },
         'log404-form': async form => {
-            try { await apiRequest('POST', '/404-monitor/log', { uri: form.querySelector('#log404-uri').value }); form.reset(); showToast('Entry added'); load404(); } catch (e) { showToast(e.message, 'error'); }
+            try { await apiRequest('POST', '/404-monitor/log', { uri: form.querySelector('#log404-uri').value, project_id: siteId }); form.reset(); showToast('Entry added'); load404(); } catch (e) { showToast(e.message, 'error'); }
         },
     };
 
@@ -510,6 +544,8 @@
     });
 
     document.addEventListener('change', async e => {
+        const ss = e.target.closest('[data-site-select]');
+        if (ss) { siteId = Number(ss.value) || 0; document.querySelectorAll('.site-select').forEach(x => { x.value = String(siteId); }); if (ss.dataset.siteSelect === '404') load404(); else loadRedirections(); return; }
         const t = e.target.closest('[data-change="user-role"]');
         if (!t) return;
         try { await apiRequest('PATCH', '/users/' + encodeURIComponent(t.dataset.id), { role: t.value }); showToast('Role updated'); } catch (err) { showToast(err.message, 'error'); loadUsers(); }
@@ -519,10 +555,13 @@
 
     const clickActions = {
         'delete-404': async t => { if (confirm('Delete this log entry?')) { await apiRequest('DELETE', '/404-monitor/' + encodeURIComponent(t.dataset.id)); showToast('Entry deleted'); load404(); } },
-        'clear-404': async () => { if (confirm('Clear ALL 404 log entries? This cannot be undone.')) { await apiRequest('POST', '/404-monitor/clear', { confirm: true }); showToast('Log cleared'); load404(); } },
+        'clear-404': async () => { if (confirm(siteId > 0 ? 'Clear all 404 entries of the selected site? This cannot be undone.' : 'Clear ALL 404 log entries of ALL sites? This cannot be undone.')) { await apiRequest('POST', '/404-monitor/clear', { confirm: true, project_id: siteId }); showToast('Log cleared'); load404(); } },
         'refresh-404': () => load404(),
         'delete-redirection': async t => { if (confirm('Delete this rule?')) { await apiRequest('DELETE', '/redirections/' + encodeURIComponent(t.dataset.id)); showToast('Rule deleted'); loadRedirections(); } },
         'delete-location': async t => { if (confirm('Delete this location?')) { await apiRequest('DELETE', '/local-seo/locations/' + encodeURIComponent(t.dataset.id)); showToast('Location deleted'); loadLocations(); } },
+        'site-sync': async t => { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/sync', {}); showToast('Sync started'); await new Promise(r => setTimeout(r, 2500)); loadSites(); return d; },
+        'site-rotate': async t => { if (confirm('Create a new secret? Syncing stops until the plugin has it.')) { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/rotate-secret', {}); const box = document.getElementById('site-secret'); setContent(box, el('div', { class: 'alert alert-error', text: 'New secret (shown once): put it into the plugin.' }), el('pre', { class: 'break-all', text: d.secret })); box.classList.remove('hidden'); loadSites(); } },
+        'delete-site': async t => { if (confirm('Remove this site from Sitewright? Its rules and 404 entries are kept.')) { await apiRequest('DELETE', '/sites/' + encodeURIComponent(t.dataset.id)); showToast('Site removed'); loadSites(); loadSiteOptions(); } },
         'delete-user': async t => { if (confirm('Delete this user permanently?')) { await apiRequest('DELETE', '/users/' + encodeURIComponent(t.dataset.id)); showToast('User deleted'); loadUsers(); } },
         'user-toggle': async t => { const disabling = t.textContent === 'Disable'; if (!disabling || confirm('Disable this account? Their sessions end immediately.')) { await apiRequest('PATCH', '/users/' + encodeURIComponent(t.dataset.id), { disabled: disabling }); showToast(disabling ? 'Disabled' : 'Enabled'); loadUsers(); } },
         'user-reset-mfa': async t => { if (confirm('Remove two-step verification from this account?')) { await apiRequest('POST', '/users/' + encodeURIComponent(t.dataset.id) + '/reset-mfa', {}); showToast('Two-step verification removed'); loadUsers(); } },
@@ -544,6 +583,7 @@
         try { await withPending(null, () => clickActions[t.dataset.action](t)); } catch (err) { showToast(err.message, 'error'); }
     });
 
+    loadSiteOptions();
     window.addEventListener('popstate', () => switchView(viewFromLocation(), false));
     switchView(viewFromLocation(), false);
 })();
