@@ -151,7 +151,7 @@ class ContentAiController
         try {
             $res = SafeHttpClient::default()->request('POST', $url, [
                 'headers' => ['Content-Type: application/json', 'x-goog-api-key: ' . Config::get('gemini.api_key')], // key in a header, never the URL
-                'body' => json_encode(['contents' => [['parts' => [['text' => $prompt]]]], 'generationConfig' => ['temperature' => 0.7, 'maxOutputTokens' => 800]]),
+                'body' => json_encode(['contents' => [['parts' => [['text' => $prompt]]]], 'generationConfig' => ['temperature' => 0.7, 'maxOutputTokens' => 2048, 'thinkingConfig' => ['thinkingBudget' => 0]]]),
                 'max_bytes' => 1048576, 'timeout' => 30, 'accept' => 'application/json', 'follow' => false,
             ]);
         } catch (FetchException $e) {
@@ -164,8 +164,11 @@ class ContentAiController
         }
         $json = json_decode($res['body'], true);
         if (!is_array($json) || !isset($json['candidates'])) { return [null, 'malformed_response']; }
-        $parts = $json['candidates'][0]['content']['parts'] ?? null;
-        $text = is_array($parts) ? trim(implode('', array_map(static fn ($p) => is_string($p['text'] ?? null) ? $p['text'] : '', $parts))) : '';
+        $cand = $json['candidates'][0] ?? [];
+        // Gemini 3 spends output tokens on hidden "thinking"; a cut-off answer (MAX_TOKENS) must not be shown as finished copy.
+        if (($cand['finishReason'] ?? '') === 'MAX_TOKENS') { return [null, 'truncated']; }
+        $parts = $cand['content']['parts'] ?? null;
+        $text = is_array($parts) ? trim(implode('', array_map(static fn ($p) => is_string($p['text'] ?? null) && empty($p['thought']) ? $p['text'] : '', $parts))) : '';
         return $text === '' ? [null, 'empty_response'] : [$text, null];
     }
 

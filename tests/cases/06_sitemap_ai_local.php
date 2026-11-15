@@ -90,7 +90,15 @@ test('AI: success => source gemini, key in x-goog-api-key header and NEVER in th
     eq($req['method'], 'POST');
     eq((int)$db->fetchOne('SELECT credits_used c FROM sw_content_ai ORDER BY id DESC LIMIT 1')['c'], 1);
 });
-foreach ([[403, '{"error":"forbidden"}', 'http_403'], [404, 'model gone', 'http_404'], [503, 'x', 'http_503'], [200, 'not json', 'malformed_response'], [200, '{"candidates":[{"finishReason":"SAFETY"}]}', 'empty_response']] as [$st, $body, $code]) {
+test('AI: thinking disabled in the request; thought parts never reach the user (live finding: 768 thinking tokens ate the 800-token budget)', function () use ($aiUrl) {
+    Config::set('gemini.api_key', 'TEST_KEY_123');
+    fakeWeb([$aiUrl => fn () => [200, [], json_encode(['candidates' => [['finishReason' => 'STOP', 'content' => ['parts' => [['text' => 'internal reasoning', 'thought' => true], ['text' => 'Final copy']]]]]])]]);
+    $r = call(Ai::class, 'generateContent', ['method' => 'POST', 'body' => ['keyword' => 'coffee', 'content_type' => 'title']]);
+    eq($r['json']['data']['content'], 'Final copy');
+    $cfg = json_decode($GLOBALS['__calls'][0]['body'], true)['generationConfig'];
+    eq($cfg['thinkingConfig']['thinkingBudget'], 0); ok($cfg['maxOutputTokens'] >= 2048);
+});
+foreach ([[403, '{"error":"forbidden"}', 'http_403'], [404, 'model gone', 'http_404'], [503, 'x', 'http_503'], [200, 'not json', 'malformed_response'], [200, '{"candidates":[{"finishReason":"SAFETY"}]}', 'empty_response'], [200, '{"candidates":[{"finishReason":"MAX_TOKENS","content":{"parts":[{"text":"half a sent"}]}}]}', 'truncated']] as [$st, $body, $code]) {
     test("AI: Gemini $st/$code => template_fallback, flagged, zero credits, body not logged (FUNC-001)", function () use ($st, $body, $code, $aiUrl, $db) {
         Config::set('gemini.api_key', 'TEST_KEY_123');
         fakeWeb([$aiUrl => [$st, [], $body]]);
