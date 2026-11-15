@@ -329,6 +329,7 @@
                             field('username').closest('.form-group').classList.add('hidden');
                             field('password').closest('.form-group').classList.add('hidden');
                             field('password').value = '';
+                            field('username').required = false; field('password').required = false; field('code').required = true;   // hidden required fields would make the browser block the submit
                             document.getElementById('login-mfa').classList.remove('hidden');
                             field('code').focus();
                             return;

@@ -19,4 +19,12 @@ for v in "root:8081:" "alias:8082:/seo" "FileInfo-only:8083:"; do
   chk "$n: backup denied"    "$B/config.sql"          403
   chk "$n: README denied"    "$B/readme.md"           403
 done
+# every security header exactly once (PHP and .htaccess must not both add it)
+for v in "root:8081:" "alias:8082:/seo" "FileInfo-only:8083:"; do
+  n=${v%%:*}; r=${v#*:}; port=${r%%:*}; pre=${r#*:}
+  for h in x-frame-options content-security-policy x-content-type-options referrer-policy; do
+    c=$(curl -s -D- -o /dev/null "http://localhost:$port$pre/" | grep -ic "^$h:")
+    [ "$c" = 1 ] && echo "ok   $n: $h sent once" || { echo "FAIL $n: $h sent $c times"; fail=1; }
+  done
+done
 rm -f /tmp/sw-ap.$$; exit $fail

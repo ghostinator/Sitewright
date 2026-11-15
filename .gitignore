@@ -9,3 +9,6 @@ node_modules/
 /storage/*
 !/storage/.gitkeep
 .playwright-mcp/
+
+tests/browser/node_modules/
+tests/browser/test-results/

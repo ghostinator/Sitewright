@@ -24,8 +24,9 @@ step "JS tests"
 if [ "$1" != quick ]; then
   step "Apache variants (.htaccess behaviour)"
   tests/docker/smoke.sh up && sleep 4 && run tests/docker/apache-check.sh
-  [ -x tests/browser/run.sh ] && { step "Browser suite"; run tests/browser/run.sh; }
   tests/docker/smoke.sh down >/dev/null
+  step "Browser suite (Playwright, real Apache + worker)"; run tests/browser/run.sh
+  step "WordPress end-to-end (real WordPress + the agent plugin)"; run tests/docker/wordpress-e2e.sh
   step "Backup / restore drills"
   run tests/docker/backup-drill.sh mariadb:10.11
   run tests/docker/backup-drill.sh mariadb:11.8

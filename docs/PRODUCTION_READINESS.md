@@ -21,7 +21,7 @@ Updated with every commit of the production-readiness phase. Verdict stays **SAF
 | 5 | Background jobs (crawl, bulk images, mail, alerts) with worker, stale-job recovery, per-user quota; health check; systemd units | **Done** (`tests/cases/12_jobs_mail_alerts.php`, 342 PHP + 15 JS). Not yet deployed to the VM |
 | 6 | Site integration: WordPress plugin (Sitewright calls the site; nothing needs to be public), 404 collection, redirect enforcement | **Done and tested against real WordPress 6** (`tests/docker/wordpress-e2e.sh`: 29 checks incl. signatures, replay, nonce, enforcement, hostile rules, SSRF) + `tests/cases/14_sites.php`. UI for sites still to do |
 | 7 | Location edit UI with opening hours and JSON-LD view | **Done** (jsdom tests; browser suite below exercises it end to end) |
-| 8 | Permanent browser test suite | planned |
+| 8 | Permanent browser test suite (`tests/browser`, Playwright in Docker against Apache + MariaDB + worker) | **Done**: 8 tests. First run found two real bugs (duplicate security headers; hidden `required` field blocked the MFA code step) |
 | 9 | Google Search Console OAuth | planned (mock-tested only until credentials exist) |
 
 ## Still needs you (cannot be done by me)
