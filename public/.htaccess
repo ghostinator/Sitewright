@@ -1,22 +1,25 @@
 # Document root = this directory (public/). Works at the web root or in a sub-directory (no RewriteBase needed).
-Options -Indexes -MultiViews
+#
+# Only directives that fit "AllowOverride FileInfo" are used here (rewrite, headers, deflate, AcceptPathInfo), so the file works on shared
+# hosts that do not grant Options/Indexes/AuthConfig overrides (those would answer HTTP 500). Everything that used to need those rights is
+# done with rewrite rules instead: no directory listings, no dotfiles/backups, front controller for the root.
 AcceptPathInfo Off
-DirectoryIndex index.php
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    # Never serve dotfiles or backup/config leftovers
+    RewriteRule (^|/)\. - [F,L]
+    RewriteRule \.(bak|sql|md|log|ini|dist|example|lock|php~|orig|swp)$ - [F,L]
+    # No directory listings (and no probing of directories): only the root is a directory we answer
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^.+ - [R=404,L]
     # API -> front controller
     RewriteRule ^api/ api.php [L,QSA]
-    # Anything that is not a real file -> SPA shell (it answers 404 itself for unknown views)
+    # The root, and anything that is not a real file -> SPA shell (it answers 404 itself for unknown views)
+    RewriteRule ^$ index.php [L]
     RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.php [L,QSA]
 </IfModule>
-
-# Never serve dotfiles or backup/config leftovers
-<FilesMatch "^\.|\.(bak|sql|md|log|ini|dist|example|lock)$">
-    Require all denied
-</FilesMatch>
 
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"

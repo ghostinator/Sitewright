@@ -22,7 +22,7 @@ A small, self-hosted PHP + vanilla-JS toolkit for a few common on-page SEO tasks
 
 * PHP **8.1 or newer** (tested on 8.1, 8.3 and 8.4) with `pdo_mysql`, `curl`, `mbstring`, `dom`, `json` (`intl` recommended for IDN hosts)
 * MariaDB 10.5+ (tested on 10.11 and 11.8) or MySQL 8 (generated columns and `SHA2()` are used; MySQL 8 is untested)
-* Apache (mod_rewrite, mod_headers; `AllowOverride` for `Options`, `FileInfo`, `Limit`) or nginx + PHP-FPM
+* Apache (mod_rewrite, mod_headers; `AllowOverride FileInfo` is enough: `.htaccess` uses no Options/Indexes/AuthConfig directives) or nginx + PHP-FPM
 * HTTPS for anything beyond localhost
 
 ## Install (CLI)

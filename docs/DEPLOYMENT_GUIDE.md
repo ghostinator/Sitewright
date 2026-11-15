@@ -90,7 +90,7 @@ server {
 * Schedule `php bin/purge-404.php` and `php bin/purge-audit.php` daily.
 * **Backups**: `SW_DB_NAME=... SW_DB_USER=... SW_DB_PASS=... bin/db-backup.sh backup /var/backups/sitewright` (consistent `mysqldump --single-transaction`, gzip, mode 0600, keeps the newest 14). Restore into an empty database with `SW_RESTORE_CONFIRM=yes bin/db-backup.sh restore <file>`. The dump holds password hashes and TOTP secrets: encrypt it and keep it off the web server. Rehearse a restore with `tests/docker/backup-drill.sh [db-image]` (drops everything and checks the counts), and do the same against your real backups quarterly.
 * Do not run the web server or PHP as root; no recursive `chmod 755/777` — files need only read access for the PHP user, `storage/` write access for the installer.
-* Rotate any API key that was ever committed (and that you own). The CI workflow scans the working tree with gitleaks; scan history yourself when you adopt the repository.
+* Rotate any API key that was ever committed (and that you own). `tests/all.sh` scans the working tree with gitleaks; scan git history yourself when you adopt the repository.
 
 ## 6. Upgrades
 

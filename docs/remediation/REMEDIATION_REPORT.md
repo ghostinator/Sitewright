@@ -239,7 +239,7 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 * Single role: every account is a full administrator; no password reset or account-management UI (manage accounts with `bin/user.php`). **Update:** TOTP MFA and an audit log now exist (section 11).
 * The SSRF guard validates DNS answers from the host's resolver and pins them for the connection; a compromised resolver, or private ranges reachable through public IPs (e.g. SSRF into a public host that proxies inward), are out of scope. Add egress firewall rules.
 * Analysis, crawl and image jobs run synchronously inside web requests (bounded: 15 s/request, 2 min crawl, 50 images); rate limits are per minute and DB-backed, not CPU/memory quotas.
-* `Options -Indexes` in `.htaccess` requires `AllowOverride Options`; otherwise Apache returns 500 — use the vhost directive instead.
+* ~~`Options -Indexes` in `.htaccess` needs `AllowOverride Options`, otherwise HTTP 500~~ — fixed (section 12): `.htaccess` now uses only FileInfo-class directives (verified on a host that grants nothing else). **Still true:** a symlinked sub-path (`/seo -> public/`) makes every `mod_rewrite` rule fail with AH00037 in my Docker test even with `FollowSymLinks`; use `Alias` (tested) instead.
 * Features relabelled rather than implemented: redirect enforcement, 404 capture, GSC, location hours/edit UI.
 * The default Gemini model name is from Google's documentation of 2026-11-15 and may be retired. Endpoint, header and model were confirmed against the live API on 2026-11-15 (section 10); a retired model name falls back to templates and is flagged.
 * **Reverse proxies**: login throttling and rate limits key on `REMOTE_ADDR`, and the same-origin check compares `Origin` with the `Host` header. Behind a proxy all users share one IP (the 30-per-15-minute IP login limit becomes a global lockout) and a proxy that rewrites `Host` makes every POST fail with 403. The proxy must preserve `Host`. **Update:** trusted-proxy handling for `X-Forwarded-For` is now implemented (`SW_TRUSTED_PROXIES`, section 11); `Host` must still be preserved.
@@ -287,11 +287,11 @@ Source list: the "what would it take" answer given after the first report; statu
 | Audit log | `audit_log` table (migration 004); logins, failures, MFA, logout, deletes, imports, CLI account changes; never passwords/keys/prompts; unknown usernames stored as `(unknown)`; `bin/audit.php`, `bin/purge-audit.php`, retention setting | tests incl. a leak check over every secret used in the run |
 | Backup | `bin/db-backup.sh` (backup/restore, 0600 files, restore needs explicit confirmation) and a drop-and-restore drill | `tests/docker/backup-drill.sh` passes on MariaDB 10.11 and MySQL 8.4 |
 | Databases | Full suite also run on MySQL 8.4 (`DB_IMAGE=mysql:8.4 tests/docker/run.sh`) | 321/321 |
-| CI | `.github/workflows/ci.yml` | **Written, not executed**: not pushed, so GitHub has never run it. YAML parses; lint, tests, JS tests and gitleaks were run locally |
+| Test runner | `tests/all.sh` runs the whole matrix locally (PHP 8.1/8.3/8.4, MariaDB 10.11/11.8, MySQL 8.4, JS, Apache variants, backup drills, secret scan). The project deliberately has **no hosted CI** | each part run individually |
 | Bugs found on the way | `str_split('')` on PHP 8.1 made `base32Encode('')` return `AA` (caught by the RFC 4648 vectors) | fixed, tested on 8.1 and 8.3 |
 
 **Test totals now:** 321 PHP tests on PHP 8.1, 8.3 and 8.4 with MariaDB 10.11, on 8.4 with MariaDB 11.8, and on 8.3 with MySQL 8.4 (all Docker); 14 JS tests. Migration 004 and the new code are **not yet deployed to the staging VM** (access was removed at the end of the previous step); the same PHP 8.4 + MariaDB 11.8 pair passes in Docker. The backup drill passes on MariaDB 10.11 and 11.8 and MySQL 8.4.
 
-**Verdict (section 9) unchanged: SAFE FOR STAGING.** MFA, proxy handling and the audit log retire items from section 8 but do not by themselves make this production-ready; see `docs/PRODUCTION_READINESS.md` for what remains (pen test, CI executed, logging/monitoring, password reset, roles, async jobs, product decisions).
+**Verdict (section 9) unchanged: SAFE FOR STAGING.** MFA, proxy handling and the audit log retire items from section 8 but do not by themselves make this production-ready; see `docs/PRODUCTION_READINESS.md` for what remains.
 
 **Deferred on purpose:** async jobs (queue + worker + UI), roles, password reset (needs email) and structured logging/alerting: each is a project of its own.
