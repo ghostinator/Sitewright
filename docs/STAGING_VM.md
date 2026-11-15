@@ -10,7 +10,7 @@ Created 2026-11-15 on the Proxmox host `pve-pueblo-mini` (`100.106.88.45`). Noth
 | Stack | nginx 1.26, PHP 8.4-FPM, MariaDB 11.8, Docker 26, Node 20, ufw, fail2ban, nftables |
 | App | `/srv/sitewright` (document root `public/`), config `config/config.php` (0640 `sitewright:www-data`) |
 | Database | `sitewright`; runtime account `sw_app` (SELECT/INSERT/UPDATE/DELETE), migration account `sw_migrate`, test account `sw_tester` (only `sw_test`/`sw_inst`). Passwords: `/etc/sitewright/db.env` (root, 0600) |
-| TLS | self-signed certificate for `192.168.0.147` / `sitewright-staging` (browsers warn) — replace via Tailscale certs or your own CA |
+| TLS | `https://sitewright-staging.tail1d3605.ts.net/` uses a Let's Encrypt certificate from `tailscale cert` (expires in ~90 days: re-run `sudo tailscale cert` in `/etc/ssl/sitewright-ts` and `sudo systemctl reload nginx`). `https://192.168.0.147/` still uses a self-signed certificate (browsers warn) |
 | Admin login | user `admin`; initial password in `/home/sitewright/admin-initial-credentials.txt` on the VM. Change it: `cd /srv/sitewright && php bin/user.php passwd admin` |
 
 ## Firewalls
