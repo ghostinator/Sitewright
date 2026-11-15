@@ -94,4 +94,4 @@ server {
 
 ## 6. Upgrades
 
-`git pull && php bin/migrate.php` (run with the migration-capable DB account). Migrations are tracked in `schema_migrations`; a v1.0 database is detected and adopted automatically. Migration `003` drops the never-used `projects`, `schema`, `settings` and `analytics_pages` tables.
+**Migrate in the same step as the code update, before reloading PHP-FPM / Apache.** Release 004 (MFA + audit) reads `users.totp_secret`; new code against an un-migrated database fails every sign-in with HTTP 500. Sequence: back up (`bin/db-backup.sh backup`), update the code, `php bin/migrate.php` (migration-capable DB account), run the tests, then reload PHP. `git pull && php bin/migrate.php` (run with the migration-capable DB account). Migrations are tracked in `schema_migrations`; a v1.0 database is detected and adopted automatically. Migration `003` drops the never-used `projects`, `schema`, `settings` and `analytics_pages` tables.

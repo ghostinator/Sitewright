@@ -1,5 +1,6 @@
-# Written but NOT yet executed on GitHub (see docs/PRODUCTION_READINESS.md). Every command below was run locally in Docker, except the
-# GitHub-specific steps (checkout, setup-php, setup-node).
+# Written but NOT yet executed on GitHub (see docs/PRODUCTION_READINESS.md). The lint loop was checked locally against a deliberately broken
+# file under both `bash -e` and `bash -eo pipefail`; the test commands were run in Docker; the GitHub-specific steps (checkout, setup-php,
+# setup-node, service containers) have never run.
 name: ci
 on:
   push:
@@ -41,9 +42,9 @@ jobs:
           coverage: none
       - name: Lint
         run: |
-          fail=0
-          for f in $(git ls-files '*.php'); do php -l "$f" | grep -v '^No syntax errors' && fail=1; done
-          exit $fail
+          for f in $(git ls-files '*.php'); do
+            out=$(php -l "$f" 2>&1) || { echo "$out"; exit 1; }
+          done
       - name: Tests
         env:
           SW_TEST_DB_HOST: 127.0.0.1

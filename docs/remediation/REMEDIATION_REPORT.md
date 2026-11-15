@@ -145,7 +145,7 @@ Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, t
 | CSRF-001 | HIGH | Wildcard CORS + no CSRF protection | FIXED | core/App.php, Auth.php, Request.php | 04: no CORS headers (OPTIONS 405); missing/forged token 403; foreign Origin/null/Sec-Fetch-Site 403; wrong Content-Type 415; foreign Host 400 | Same-origin assumption: reverse proxies that rewrite Host must be configured in SW_ALLOWED_HOSTS. |
 | XSS-001 | HIGH | Stored XSS via innerHTML | FIXED | public/assets/js/app.js (rewritten) | tests/js/render.test.js: 10 payloads x 10 renderers (+dashboard) inert; source greps for forbidden sinks; browser E2E with hostile 404 URI/location name | Relies on CSP + DOM APIs; untested on legacy browsers. |
 | XSS-002 | HIGH | XSS from third-party content / inline onclick | FIXED | public/assets/js/app.js, public/index.php; removed test-api.html | jsdom tests incl. copy-from-variable; E2E analysis of a hostile fixture page (title/meta/H1/alt) showed text only, 0 injected nodes; CSP without unsafe-inline, no inline handlers/styles in page (04) | As XSS-001. |
-| FUNC-001 | HIGH | Content AI misrepresents provenance / dead model | FIXED | modules/ContentAi/ContentAiController.php, core/Config.php | 06 with mocked transport: 200, 403, 404, 503, malformed JSON, empty/safety, timeout; key header-only; credits 0 on fallback; status endpoint makes no call | Never run against live Gemini (rule 7). Default model gemini-3.6-flash taken from Google docs on 2026-11-15; endpoint form/header name not shown on the fetched pages. Verify with your key. |
+| FUNC-001 | HIGH | Content AI misrepresents provenance / dead model | FIXED | modules/ContentAi/ContentAiController.php, core/Config.php | 06 with mocked transport: 200, 403, 404, 503, malformed JSON, empty/safety, timeout; key header-only; credits 0 on fallback; status endpoint makes no call | Originally never run live (rule 7). **Later verified live** (section 10): endpoint, `x-goog-api-key` header and model `gemini-3.6-flash` work; the live run also exposed a thinking-token truncation bug, fixed and tested. |
 | DOS-001 | MEDIUM | Resource exhaustion / amplification | MITIGATED | SafeHttpClient, all fetching controllers, App.php, RateLimiter.php | 05/06/09: single fetch, bulk cap, crawl cap + budget, import row caps (413), body limit 413, 429 after 10/min | Per-minute DB counters; no CPU/memory quotas; crawl/bulk run inside the request. |
 | SEC-004 | MEDIUM | phpinfo.php / check.php disclosure | FIXED | deleted phpinfo.php, check.php; added bin/check-env.php (CLI only) | file listing; public/ contains only index.php, api.php, assets | - |
 | SEC-005 | LOW | Web-executable sample data generator | FIXED | bin/generate-sample-data.php (CLI guard, --yes, is_sample flag) | lint; UI shows "sample data" badges; research/dashboard expose includes_sample_data (06,07) | - |
@@ -218,7 +218,7 @@ Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, t
 | Browser E2E (Playwright, Apache 2.4 + PHP 8.3 in Docker, localhost only) | Root deployment `http://localhost:8081/` and sub-path `http://localhost:8082/seo/` (Alias): login failure message, login, every view loaded, SEO + competitor analysis of a local fixture (dev CIDR exemption), hostile fixture page rendered as text (0 injected nodes), Content AI templates banner, add location, bulk image analysis, sitemap crawl, 404 add/delete, redirect rule add, analytics view; console showed no CSP violations (only a favicon 404, fixed afterwards) |
 | `git diff` review | route/response shapes the JS depends on re-checked by the E2E; no files missing after the `public/` move |
 
-**Not run / limits**: no live Gemini or Nominatim call (rule 7), so the real Gemini request shape/model name is only verified against a mocked transport and Google's documentation; no real-internet SSRF test (the guard was tested with scripted DNS plus a real curl transport against a local server); Apache symlinked sub-path deployment failed in my container with `AH00037` (Alias works); the E2E was driven through Playwright scripts, not a permanent browser test suite; PHP 8.0, MySQL (non-Maria), nginx and Windows were not exercised.
+**Not run / limits at the time of the first report** (rule 7 forbade live third-party calls): no live Gemini or Nominatim call and no real-internet SSRF test. **Since then** these were run on the staging VM and are recorded in section 10 (live Gemini, live Nominatim, real-DNS SSRF checks, browser pass) and section 11 (MySQL 8.4, PHP 8.4, MariaDB 11.8). Still true: Apache symlinked sub-path deployment failed in my container with `AH00037` (Alias works); the browser pass was driven by scripts, not a permanent browser test suite; PHP 8.0 and Windows were not exercised.
 
 ## 6. NETWORK / PRIVACY STATUS
 
@@ -230,7 +230,7 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 2. Create a least-privilege DB user and give the installer/migration step a separate DDL-capable account (`docs/DEPLOYMENT_GUIDE.md`).
 3. Run `php bin/install.php …` to create the first admin (nothing is created automatically).
 4. Set the web server document root to `public/`, configure HTTPS, `SW_BASE_URL`, `SW_ALLOWED_HOSTS` (and `SW_HSTS=true`).
-5. Optional: supply a Gemini key and confirm the model name against Google's current list.
+5. ~~Supply a Gemini key and confirm the model name~~ — done on the staging VM (section 10). Production needs its own key via `SW_GEMINI_API_KEY`.
 6. ~~Choose a LICENSE~~ — MIT added (see README for the upstream caveat). The project was renamed to Sitewright; check that name for trademark availability before publishing.
 7. Tell me if you want a 404 ingest endpoint, redirect enforcement, or GSC OAuth built.
 
@@ -251,7 +251,7 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 
 **SAFE FOR STAGING** (behind HTTPS with `SW_BASE_URL`/`SW_ALLOWED_HOSTS` set).
 
-Evidence: all three Critical and all High code findings are fixed and covered by tests that ran (292 PHP + 12 JS, two PHP versions, real MariaDB, real curl against a local server, real Apache + browser). Not `READY FOR PRODUCTION`: Gemini/Nominatim and internet-facing behaviour were never exercised live; auth is single-role without MFA; and several medium items are mitigated rather than eliminated.
+Evidence: all three Critical and all High code findings are fixed and covered by tests that ran (292 PHP + 12 JS, two PHP versions, real MariaDB, real curl against a local server, real Apache + browser). (Counts at the time of the first report; see sections 10 and 11 for the later totals.) Not `READY FOR PRODUCTION`: at the time, Gemini/Nominatim and internet-facing behaviour had never been exercised live (they have been, on a staging VM, since: section 10); auth is single-role (MFA and an audit log were added later, section 11); and several medium items are mitigated rather than eliminated.
 
 ## Sources
 
@@ -290,7 +290,7 @@ Source list: the "what would it take" answer given after the first report; statu
 | CI | `.github/workflows/ci.yml` | **Written, not executed**: not pushed, so GitHub has never run it. YAML parses; lint, tests, JS tests and gitleaks were run locally |
 | Bugs found on the way | `str_split('')` on PHP 8.1 made `base32Encode('')` return `AA` (caught by the RFC 4648 vectors) | fixed, tested on 8.1 and 8.3 |
 
-**Test totals now:** 321 PHP tests on PHP 8.1 and 8.3 with MariaDB 10.11, and on 8.3 with MySQL 8.4; 14 JS tests. Migration 004 has not been run on MariaDB 11.8 / PHP 8.4 on the staging VM (access was removed at the end of the previous step).
+**Test totals now:** 321 PHP tests on PHP 8.1, 8.3 and 8.4 with MariaDB 10.11, on 8.4 with MariaDB 11.8, and on 8.3 with MySQL 8.4 (all Docker); 14 JS tests. Migration 004 and the new code are **not yet deployed to the staging VM** (access was removed at the end of the previous step); the same PHP 8.4 + MariaDB 11.8 pair passes in Docker. The backup drill passes on MariaDB 10.11 and 11.8 and MySQL 8.4.
 
 **Verdict (section 9) unchanged: SAFE FOR STAGING.** MFA, proxy handling and the audit log retire items from section 8 but do not by themselves make this production-ready; see `docs/PRODUCTION_READINESS.md` for what remains (pen test, CI executed, logging/monitoring, password reset, roles, async jobs, product decisions).
 

@@ -24,7 +24,8 @@ Created 2026-11-15 on the Proxmox host `pve-pueblo-mini` (`100.106.88.45`). Noth
 # deploy an update from your Mac (code only; config.php and storage/ are preserved)
 rsync -a --delete --exclude node_modules --exclude .git --exclude config/config.php --exclude storage/install.lock ./ sitewright@192.168.0.147:/srv/sitewright/
 ssh sitewright@192.168.0.147 'sudo chmod -R g+rX /srv/sitewright'
-# migrations (migration-capable account)
+# migrations (migration-capable account). RUN THIS IMMEDIATELY AFTER THE RSYNC: since release 004 the new code reads users.totp_secret, so
+# code without the migration answers every sign-in with HTTP 500. Order: rsync, migrate, tests, then `sudo systemctl reload php8.4-fpm`.
 ssh sitewright@192.168.0.147 'cd /srv/sitewright && sudo bash -c ". /etc/sitewright/db.env; sudo -u sitewright env SW_DB_USER=sw_migrate SW_DB_PASS=\$SW_DB_MIGRATE_PASS php bin/migrate.php"'
 # tests (PHP 8.4 + MariaDB 11.8)
 ssh sitewright@192.168.0.147 'cd /srv/sitewright && . <(sudo cat /etc/sitewright/db.env) && SW_TEST_DB_HOST=127.0.0.1 SW_TEST_DB_USER=sw_tester SW_TEST_DB_PASS="$SW_DB_TEST_PASS" php tests/run.php'
