@@ -19,18 +19,14 @@ Branch `remediation/audit-2026-11` (start tag `pre-remediation-24209d6`). Baseli
 
 ## 3. FILES CHANGED
 
-(`git diff --name-status -M 24209d6..HEAD`, 109 entries)
+(`git diff --name-status -M 24209d6..HEAD`; browser artifacts excluded)
+
+Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, the controller rewrite, the installer and migrations (the brief asked for one concern per commit). History was not rewritten (not authorised).
 
 | Change | File | Purpose |
 |---|---|---|
 | modified | `.gitignore` | Ignore real config, env, logs, storage, node_modules |
 | deleted | `.htaccess` | Removed: duplicate tree / web installer / dev or disclosure utility |
-| created | `.playwright-mcp/page-2026-11-15T18-36-33-145Z.yml` |  |
-| created | `.playwright-mcp/page-2026-11-15T18-36-39-817Z.yml` |  |
-| created | `.playwright-mcp/page-2026-11-15T18-36-46-213Z.yml` |  |
-| created | `.playwright-mcp/page-2026-11-15T18-36-52-031Z.yml` |  |
-| created | `.playwright-mcp/page-2026-11-15T18-37-52-728Z.yml` |  |
-| created | `.playwright-mcp/page-2026-11-15T18-37-59-036Z.yml` |  |
 | deleted | `QUICKSTART.md` | Removed (merged into README; contained unsafe guidance) |
 | modified | `README.md` | Rewritten to describe only what exists |
 | deleted | `api.php` | Removed: duplicate tree / web installer / dev or disclosure utility |
@@ -78,7 +74,7 @@ Branch `remediation/audit-2026-11` (start tag `pre-remediation-24209d6`). Baseli
 | moved | `PROJECT_SUMMARY.md → docs/history/PROJECT_SUMMARY.md` | Stale reports moved here with a "historical, inaccurate" banner |
 | moved | `REAL_AI_SETUP.md → docs/history/REAL_AI_SETUP.md` | Stale reports moved here with a "historical, inaccurate" banner |
 | created | `docs/remediation/LEDGER.tsv` | Remediation ledger and this report |
-| deleted | `generate-sample-data.php` |  |
+| moved | `generate-sample-data.php → bin/generate-sample-data.php` | CLI-only sample data generator (rewritten, rows flagged is_sample) |
 | deleted | `index.php` | Removed: duplicate tree / web installer / dev or disclosure utility |
 | deleted | `install-handler.php` | Removed: duplicate tree / web installer / dev or disclosure utility |
 | deleted | `install.php` | Removed: duplicate tree / web installer / dev or disclosure utility |
@@ -138,12 +134,12 @@ Branch `remediation/audit-2026-11` (start tag `pre-remediation-24209d6`). Baseli
 | FINDING ID | ORIGINAL SEVERITY | DESCRIPTION | FIX STATUS | FILES CHANGED | TEST / VERIFICATION | RESIDUAL RISK |
 |---|---|---|---|---|---|---|
 | SEC-001 | CRITICAL | Installer RCE / re-run / .htaccess overwrite / SQL injection via db_name,prefix | FIXED | core/Installer.php, bin/install.php, bin/migrate.php; removed install.php, install-handler.php | tests 08_installer (payload rejection, var_export round-trip with token scan, lock/second run refused, prefix placeholder, CLI port payload) | CLI only; DB admin password is read from env/file/prompt (prompt echoes). |
-| AUTH-001 | CRITICAL | No authentication/authorization | FIXED | core/Auth.php, AuthController.php, App.php, RateLimiter.php, config/routes.php, public/index.php | 04_http_security: all 46 routes 401 unauthenticated (table iterated); login/logout/throttle/regeneration/cookie flags; 09: idle/absolute timeout, pw-change invalidation, rate limit | Single role (every user is admin). No MFA, no password reset flow, no per-user audit log. |
+| AUTH-001 | CRITICAL | No authentication/authorization | FIXED | core/Auth.php, AuthController.php, App.php, RateLimiter.php, config/routes.php, public/index.php | 04_http_security: all 44 protected routes answer 401 unauthenticated (real table iterated); the 2 public routes verified not to demand auth; login/logout/throttle/regeneration/cookie flags; 09: idle/absolute timeout, pw-change invalidation, rate limit | Single role (every user is admin). No MFA, no password reset flow, no per-user audit log. |
 | SQLI-001 | CRITICAL | SQL injection in 404 getLogs | FIXED | modules/Monitor/MonitorController.php, core/Database.php | 04_http_security: 13 payloads (ORDER BY/LIMIT/OFFSET/SLEEP/UNION) answered 200 in <3 s with clamped values; 07: identifier rejection | None known. All other SQL reviewed: values are bound, identifiers validated or code-defined. |
 | SSRF-001 | HIGH | SEO analysis SSRF | FIXED | core/SafeHttpClient.php, Html.php, modules/SeoAnalysis/* | 02_safe_http_client (102 cases: IP classes, scheme/credential/port/numeric-host forms, DNS->private, redirect revalidation/limit, size, timeout, curl pinning against local server); 05 (internal URLs never reach transport) | Guard is application-level: DNS answered by the OS resolver is validated and pinned, but egress firewalling is still advised. IPv6 zone IDs rejected. |
 | SSRF-002 | HIGH | Image SEO SSRF / stream wrappers / second-order | FIXED | modules/ImageSeo/ImageSeoController.php | 05: file/phar/php/internal URLs refused with zero transport calls; bulk page pointing at 10.0.0.5 and 127.0.0.1 skipped; getimagesizefromstring only | Images are downloaded up to 10 MB each (50 max per run). |
 | SSRF-003 | HIGH | Sitemap crawler SSRF + unbounded crawl | FIXED | modules/Sitemap/SitemapController.php, core/Url.php | 06: internal bases rejected pre-request; max_pages=1000000 clamped to server cap; time budget; robots.txt | Crawl is synchronous in the web request (capped at 2 min). |
-| SEC-003 | HIGH | Real-looking Google API key published in docs | BLOCKED - REQUIRES USER ACTION | docs/API_CONFIGURATION.md (key replaced by placeholder) | secret scan: no AIza/GOCSPX/PEM patterns in tree | KEY STILL EXISTS IN GIT HISTORY (commits before 1b8c068) and upstream. Owner must revoke/rotate it and scan history. Not tested/rotated by me. |
+| SEC-003 | HIGH | Real-looking Google API key published in docs | BLOCKED - REQUIRES USER ACTION | docs/API_CONFIGURATION.md (key replaced by placeholder) | secret scan: no AIza/GOCSPX/PEM patterns in tree | KEY STILL EXISTS IN EVERY COMMIT BEFORE 1b8c068 (including 4f0b58d on this branch) and upstream; pushing this branch republishes it. Owner must revoke/rotate it and scan history. Not tested/rotated by me. |
 | CSRF-001 | HIGH | Wildcard CORS + no CSRF protection | FIXED | core/App.php, Auth.php, Request.php | 04: no CORS headers (OPTIONS 405); missing/forged token 403; foreign Origin/null/Sec-Fetch-Site 403; wrong Content-Type 415; foreign Host 400 | Same-origin assumption: reverse proxies that rewrite Host must be configured in RMW_ALLOWED_HOSTS. |
 | XSS-001 | HIGH | Stored XSS via innerHTML | FIXED | public/assets/js/app.js (rewritten) | tests/js/render.test.js: 10 payloads x 10 renderers (+dashboard) inert; source greps for forbidden sinks; browser E2E with hostile 404 URI/location name | Relies on CSP + DOM APIs; untested on legacy browsers. |
 | XSS-002 | HIGH | XSS from third-party content / inline onclick | FIXED | public/assets/js/app.js, public/index.php; removed test-api.html | jsdom tests incl. copy-from-variable; E2E analysis of a hostile fixture page (title/meta/H1/alt) showed text only, 0 injected nodes; CSP without unsafe-inline, no inline handlers/styles in page (04) | As XSS-001. |
@@ -228,7 +224,7 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 
 ## 7. USER ACTIONS REQUIRED
 
-1. **Revoke/rotate the exposed Google API key** (`AIzaSyAP…<REDACTED>`, formerly in `docs/API_CONFIGURATION.md` line ~173) in Google AI Studio / Cloud Console, and scan history with gitleaks/trufflehog. The key remains in commits up to `24209d6` and in the public upstream repository. A history rewrite was **not** performed (needs your explicit approval; rotation matters more).
+1. **Revoke/rotate the exposed Google API key** (`AIzaSyAP…<REDACTED>`, formerly in `docs/API_CONFIGURATION.md` line ~173) in Google AI Studio / Cloud Console, and scan history with gitleaks/trufflehog. The key remains in every commit before `1b8c068` (including `4f0b58d` on this branch) and in the public upstream repository; pushing this branch publishes it again. A history rewrite was **not** performed (needs your explicit approval; rotation matters more).
 2. Create a least-privilege DB user and give the installer/migration step a separate DDL-capable account (`docs/DEPLOYMENT_GUIDE.md`).
 3. Run `php bin/install.php …` to create the first admin (nothing is created automatically).
 4. Set the web server document root to `public/`, configure HTTPS, `RMW_BASE_URL`, `RMW_ALLOWED_HOSTS` (and `RMW_HSTS=true`).
@@ -244,6 +240,7 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 * `Options -Indexes` in `.htaccess` requires `AllowOverride Options`; otherwise Apache returns 500 — use the vhost directive instead.
 * Features relabelled rather than implemented: redirect enforcement, 404 capture, GSC, location hours/edit UI.
 * The default Gemini model name is from Google's documentation of 2026-11-15 and may be retired; the endpoint path/header were not displayed on the fetched pages and are untested against the live API.
+* **Reverse proxies**: login throttling and rate limits key on `REMOTE_ADDR`, and the same-origin check compares `Origin` with the `Host` header. Behind a proxy all users share one IP (the 30-per-15-minute IP login limit becomes a global lockout) and a proxy that rewrites `Host` makes every POST fail with 403. The proxy must preserve `Host`; trusted-proxy handling (`X-Forwarded-For`) is **not implemented**.
 * The anonymous `/api/health` endpoint and the login page are publicly reachable by design.
 * Existing databases lose the unused `projects`, `schema`, `settings`, `analytics_pages` tables (migration 003); `project_id` NULLs become 0; non-general sitemap rows become general; duplicate rows are collapsed before unique keys are added — back up first.
 * Licence/name: the project uses the "RankMath" name and has no LICENSE file.
@@ -253,3 +250,7 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 **SAFE FOR STAGING** (behind HTTPS with `RMW_BASE_URL`/`RMW_ALLOWED_HOSTS` set and the exposed key rotated).
 
 Evidence: all three Critical and all High code findings are fixed and covered by tests that ran (292 PHP + 12 JS, two PHP versions, real MariaDB, real curl against a local server, real Apache + browser). Not `READY FOR PRODUCTION`: `SEC-003` is open until the owner rotates the key; Gemini/Nominatim and internet-facing behaviour were never exercised live; auth is single-role without MFA; and several medium items are mitigated rather than eliminated.
+
+## Sources
+
+* Gemini model status: [Google AI Studio models page](https://aistudio.google.com/docs/models) and [deprecations page](https://aistudio.google.com/docs/deprecations) (fetched 2026-11-15; the ai.google.dev URLs redirect there).

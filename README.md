@@ -1,6 +1,6 @@
 # RankMath SEO Webapp
 
-A small, self-hosted PHP + vanilla-JS toolkit for a few common on-page SEO tasks. It is **not** a port of, and not affiliated with, any commercial SEO plugin, and it does not implement "all" features of any such product.
+A small, self-hosted PHP + vanilla-JS toolkit for a few common on-page SEO tasks. The audit found no code from any commercial SEO plugin in this repository, and the app does not implement "all" features of any such product.
 
 **Status: suitable for controlled local testing and staging. Read [Limitations](#what-it-does-and-does-not-do) and [Remaining risks](docs/remediation/REMEDIATION_REPORT.md) before exposing it to the internet.**
 
@@ -21,7 +21,7 @@ A small, self-hosted PHP + vanilla-JS toolkit for a few common on-page SEO tasks
 ## Requirements
 
 * PHP **8.1 or newer** with `pdo_mysql`, `curl`, `mbstring`, `dom`, `json` (`intl` recommended for IDN hosts)
-* MariaDB 10.5+ / MySQL 8+ (generated columns and `SHA2()` are used)
+* MariaDB 10.5+ (tested on 10.11) or MySQL 8 (generated columns and `SHA2()` are used; MySQL 8 is untested)
 * Apache (mod_rewrite, mod_headers; `AllowOverride` for `Options`, `FileInfo`, `Limit`) or nginx + PHP-FPM
 * HTTPS for anything beyond localhost
 
@@ -62,6 +62,8 @@ Quick local try-out without Apache: `RMW_DB_NAME=… RMW_DB_USER=… RMW_DB_PASS
 Run `php bin/check-env.php` to verify the environment (CLI only).
 
 ## Security model
+
+> Behind a reverse proxy: the proxy must preserve the `Host` header (the same-origin check uses it), and login throttling uses the connecting IP, so all users behind one proxy share a single throttle bucket. Trusted-proxy handling is not implemented.
 
 * **Authentication**: session login against the `users` table (bcrypt/argon via `password_hash`). Single role — every account is an administrator. All API routes require a session except `GET /api/health` and `POST /api/auth/login`. Login is throttled (5 failures / 15 min per account, 30 / 15 min per IP). Cookies are `HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS; idle timeout 30 min, absolute 8 h.
 * **CSRF / CORS**: no CORS headers at all (same-origin only). State-changing requests need `Content-Type: application/json`, an `X-CSRF-Token` header, a same-origin `Origin`, and an allowed `Host`.

@@ -36,13 +36,16 @@ chmod 600 config/config.php
 <VirtualHost *:443>
     ServerName seo.example.com
     DocumentRoot /srv/rankmath/public
-    SSLEngine on  # certificate configuration omitted
+    # Certificate configuration (SSLEngine, SSLCertificateFile, ...) omitted.
+    SSLEngine on
     <Directory /srv/rankmath/public>
         Options -Indexes
-        AllowOverride All          # public/.htaccess carries the rewrite + header rules
+        # public/.htaccess carries the rewrite and header rules.
+        AllowOverride All
         Require all granted
     </Directory>
-    SetEnv RMW_BASE_URL https://seo.example.com   # or put everything in config/config.php
+    # Or put everything in config/config.php instead of SetEnv.
+    SetEnv RMW_BASE_URL https://seo.example.com
 </VirtualHost>
 ```
 
@@ -77,6 +80,7 @@ server {
 
 ## 5. Hardening checklist
 
+* Behind a reverse proxy: preserve the `Host` header and note that throttling uses the connecting IP (trusted-proxy headers are not implemented).
 * HTTPS only; set `RMW_BASE_URL` (https) and `RMW_ALLOWED_HOSTS`; enable `RMW_HSTS=true`.
 * `display_errors=Off` in PHP (the app also forces it off unless `RMW_DEBUG`); `expose_php=Off`.
 * `config/config.php` mode `0600`, owned by the PHP user; keep backups encrypted.
