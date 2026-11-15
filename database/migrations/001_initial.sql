@@ -1,8 +1,8 @@
--- RankMath SEO Webapp Database Schema
--- MySQL/MariaDB compatible
+-- 001: baseline schema (as shipped in v1.0). `{{prefix}}` is replaced by the Migrator.
+-- Existing v1.0 installs are detected and marked as already at 001.
 
 -- Users table (for multi-user support if needed in future)
-CREATE TABLE IF NOT EXISTS `rm_users` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}users` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `username` varchar(60) NOT NULL,
   `email` varchar(100) NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS `rm_users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Projects/Websites table
-CREATE TABLE IF NOT EXISTS `rm_projects` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}projects` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `url` varchar(500) NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS `rm_projects` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- SEO Analysis Results
-CREATE TABLE IF NOT EXISTS `rm_seo_analysis` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}seo_analysis` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `url` varchar(500) NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS `rm_seo_analysis` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Analytics data (keywords, impressions, clicks)
-CREATE TABLE IF NOT EXISTS `rm_analytics_keywords` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}analytics_keywords` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `keyword` varchar(500) NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS `rm_analytics_keywords` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Analytics pages
-CREATE TABLE IF NOT EXISTS `rm_analytics_pages` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}analytics_pages` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `url` varchar(1000) NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS `rm_analytics_pages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 404 Monitor
-CREATE TABLE IF NOT EXISTS `rm_404_monitor` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}404_monitor` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `uri` varchar(1000) NOT NULL,
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS `rm_404_monitor` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Redirections
-CREATE TABLE IF NOT EXISTS `rm_redirections` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}redirections` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `source_url` varchar(1000) NOT NULL,
@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS `rm_redirections` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Local SEO Locations
-CREATE TABLE IF NOT EXISTS `rm_local_locations` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}local_locations` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `name` varchar(255) NOT NULL,
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS `rm_local_locations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Sitemaps
-CREATE TABLE IF NOT EXISTS `rm_sitemaps` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}sitemaps` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `type` enum('general','news','video','image') NOT NULL DEFAULT 'general',
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS `rm_sitemaps` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Schema/Structured Data
-CREATE TABLE IF NOT EXISTS `rm_schema` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}schema` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `url` varchar(1000) NOT NULL,
@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS `rm_schema` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Content AI History
-CREATE TABLE IF NOT EXISTS `rm_content_ai` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}content_ai` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `keyword` varchar(500) NOT NULL,
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS `rm_content_ai` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Image SEO Data
-CREATE TABLE IF NOT EXISTS `rm_image_seo` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}image_seo` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` bigint(20) UNSIGNED DEFAULT NULL,
   `image_url` varchar(1000) NOT NULL,
@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS `rm_image_seo` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Application Settings
-CREATE TABLE IF NOT EXISTS `rm_settings` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}settings` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `setting_key` varchar(191) NOT NULL,
   `setting_value` longtext DEFAULT NULL,
@@ -211,9 +211,3 @@ CREATE TABLE IF NOT EXISTS `rm_settings` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `setting_key` (`setting_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Insert default settings
-INSERT INTO `rm_settings` (`setting_key`, `setting_value`, `autoload`) VALUES
-('app_installed', '1', 1),
-('app_version', '1.0.0', 1),
-('install_date', NOW(), 1);

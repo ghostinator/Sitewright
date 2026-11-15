@@ -55,6 +55,13 @@ final class Database
         }
     }
 
+    /** True when $e wraps a duplicate-key violation (MySQL 1062). */
+    public static function isDuplicate(\Throwable $e): bool
+    {
+        $prev = $e->getPrevious();
+        return $prev instanceof PDOException && (int)($prev->errorInfo[1] ?? 0) === 1062;
+    }
+
     public function getConnection(): PDO
     {
         return $this->pdo;
@@ -68,7 +75,10 @@ final class Database
     /** Prefixed table name, e.g. t('seo_analysis') => rm_seo_analysis. */
     public function t(string $table): string
     {
-        self::assertIdentifier($table);
+        // Table names may start with a digit (404_monitor); the validated prefix keeps the full name a legal identifier.
+        if (!preg_match('/^[a-z0-9_]+$/', $table)) {
+            throw new DatabaseException('Invalid SQL identifier');
+        }
         return $this->prefix . $table;
     }
 

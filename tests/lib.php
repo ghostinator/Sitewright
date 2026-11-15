@@ -75,3 +75,87 @@ function dbAvailable(): bool
 {
     try { RankMathWebapp\Core\Database::connect(testDbConfig(), false); return true; } catch (Throwable) { return false; }
 }
+
+/** Start the real app under php -S. @return array{port:int,proc:resource,base:string} */
+function startServer(array $env = []): array
+{
+    $sock = stream_socket_server('tcp://127.0.0.1:0', $en, $es);
+    $port = (int)substr(strrchr((string)stream_socket_get_name($sock, false), ':'), 1);
+    fclose($sock);
+    $c = testDbConfig();
+    $env = $env + ['RMW_DB_HOST' => $c['host'], 'RMW_DB_NAME' => $c['name'], 'RMW_DB_USER' => $c['user'], 'RMW_DB_PASS' => $c['pass'], 'PATH' => (string)getenv('PATH')];
+    $proc = proc_open([PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=1', '-S', "127.0.0.1:$port", '-t', dirname(__DIR__) . '/public', __DIR__ . '/router.php'],
+        [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/tmp/rmw-server.log', 'a']], $pipes, dirname(__DIR__), $env);
+    for ($i = 0; $i < 60; $i++) { if (@fsockopen('127.0.0.1', $port)) { break; } usleep(100000); }
+    return ['port' => $port, 'proc' => $proc, 'base' => "http://127.0.0.1:$port"];
+}
+
+function stopServer(array $s): void
+{
+    if (is_resource($s['proc'])) { proc_terminate($s['proc']); proc_close($s['proc']); }
+}
+
+/** Minimal test HTTP client (test-only; the application itself only uses SafeHttpClient). Keeps a cookie jar. */
+final class TestHttp
+{
+    public array $cookies = [];
+    public ?string $csrf = null;
+    public function __construct(private string $base) {}
+
+    /** @return array{status:int,headers:array<string,string>,body:string,json:?array,ms:int} */
+    public function req(string $method, string $path, ?array $json = null, array $headers = [], ?string $rawBody = null): array
+    {
+        $ch = curl_init($this->base . $path);
+        $h = [];
+        foreach ($headers as $k => $v) { $h[] = "$k: $v"; }
+        if ($this->cookies) { $h[] = 'Cookie: ' . implode('; ', array_map(fn ($k, $v) => "$k=$v", array_keys($this->cookies), $this->cookies)); }
+        $resp = [];
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $h, CURLOPT_TIMEOUT => 20,
+            CURLOPT_HEADERFUNCTION => function ($c, $line) use (&$resp) {
+                if (str_contains($line, ':')) { [$k, $v] = explode(':', $line, 2); $resp[strtolower(trim($k))][] = trim($v); }
+                return strlen($line);
+            },
+        ]);
+        if ($json !== null) { curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($json)); }
+        if ($rawBody !== null) { curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody); }
+        $t = microtime(true);
+        $body = (string)curl_exec($ch);
+        $ms = (int)((microtime(true) - $t) * 1000);
+        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        curl_close($ch);
+        foreach ($resp['set-cookie'] ?? [] as $sc) { [$kv] = explode(';', $sc, 2); [$k, $v] = explode('=', $kv, 2); $this->cookies[$k] = $v; }
+        return ['status' => $status, 'headers' => array_map(fn ($v) => implode(', ', $v), $resp), 'body' => $body, 'json' => json_decode($body, true), 'ms' => $ms, 'raw_set_cookie' => $resp['set-cookie'] ?? []];
+    }
+
+    /** Authenticated JSON request with the CSRF header and correct content type. */
+    public function api(string $method, string $path, ?array $json = null, array $headers = []): array
+    {
+        $headers += ['Content-Type' => 'application/json', 'X-CSRF-Token' => (string)$this->csrf];
+        return $this->req($method, $path, $json ?? ($method === 'GET' ? null : []), $headers);
+    }
+
+    /** Load the shell page (creates the session + CSRF token) and return the embedded config. */
+    public function bootstrap(string $path = '/'): array
+    {
+        $r = $this->req('GET', $path);
+        preg_match('#<script type="application/json" id="app-config">(.*?)</script>#s', $r['body'], $m);
+        $cfg = json_decode($m[1] ?? 'null', true) ?: [];
+        $this->csrf = $cfg['csrfToken'] ?? null;
+        return $cfg + ['_response' => $r];
+    }
+
+    public function login(string $user, string $pass): array
+    {
+        $this->bootstrap();
+        $r = $this->req('POST', '/api/auth/login', ['username' => $user, 'password' => $pass], ['Content-Type' => 'application/json', 'X-CSRF-Token' => (string)$this->csrf]);
+        if ($r['status'] === 200) { $this->csrf = $r['json']['data']['csrf_token']; }
+        return $r;
+    }
+}
+
+function seedAdmin(string $user = 'admin', string $pass = 'correct horse battery'): void
+{
+    $db = RankMathWebapp\Core\Database::getInstance();
+    $db->insert('users', ['username' => $user, 'email' => "$user@example.test", 'password' => password_hash($pass, PASSWORD_DEFAULT), 'display_name' => $user]);
+}

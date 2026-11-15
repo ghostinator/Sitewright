@@ -1,0 +1,33 @@
+# Document root = this directory (public/). Works at the web root or in a sub-directory (no RewriteBase needed).
+Options -Indexes -MultiViews
+AcceptPathInfo Off
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # API -> front controller
+    RewriteRule ^api/ api.php [L,QSA]
+    # Anything that is not a real file -> SPA shell (it answers 404 itself for unknown views)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L,QSA]
+</IfModule>
+
+# Never serve dotfiles or backup/config leftovers
+<FilesMatch "^\.|\.(bak|sql|md|log|ini|dist|example|lock)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    # Enable only when the site is served over HTTPS:
+    # Header always set Strict-Transport-Security "max-age=31536000"
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css application/javascript application/json
+</IfModule>

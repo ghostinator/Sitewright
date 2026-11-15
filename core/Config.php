@@ -9,8 +9,8 @@ namespace RankMathWebapp\Core;
  */
 final class Config
 {
-    /** Default Gemini model; override with RMW_GEMINI_MODEL / config. Verified against Google's model list at implementation time. */
-    public const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+    /** Default Gemini model; override with RMW_GEMINI_MODEL / config. Listed as Stable on Google's model page on 2026-11-15; models are retired regularly, so set RMW_GEMINI_MODEL if it stops working. */
+    public const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
 
     private static ?array $data = null;
     private static ?string $file = null;
