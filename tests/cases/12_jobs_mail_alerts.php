@@ -121,6 +121,37 @@ test('mail: queued mail is delivered by the worker; server down => retried, not 
     eq($r['status'], 'queued'); ok($r['error'] !== null && str_contains($r['error'], 'mail:'));
 });
 
+// ---- mailer: Postal HTTP API driver ---------------------------------------------------------------------------------------
+$postalCfg = function (array $o = []) { foreach (['driver' => 'postal', 'postal_url' => 'https://postal.example.test', 'postal_key' => 'POSTAL-KEY-SECRET-123', 'host' => '', 'from' => 'sitewright@example.test', 'from_name' => 'Sitewright'] as $k => $v) { Config::set("mail.$k", $o[$k] ?? $v); } };
+test('postal: configured() needs url + key + from; SMTP settings are not needed', function () use ($postalCfg) {
+    $postalCfg(); ok(Mailer::configured()); $postalCfg(['postal_key' => '']); ok(!Mailer::configured()); $postalCfg(['postal_url' => '']); ok(!Mailer::configured());
+    Config::set('mail.driver', 'smtp'); Config::set('mail.host', ''); ok(!Mailer::configured());
+});
+test('postal: sends JSON to /api/v1/send/message with the key in X-Server-API-Key only', function () use ($postalCfg) {
+    $postalCfg(); fakeWeb(['https://postal.example.test/api/v1/send/message' => [200, [], '{"status":"success","data":{"message_id":"x"}}']]);
+    Mailer::send('ops@example.test', 'Grüße', "line one\n.dot");
+    $c = $GLOBALS['__calls'][0]; $b = json_decode($c['body'], true);
+    eq($c['method'], 'POST'); ok(in_array('X-Server-API-Key: POSTAL-KEY-SECRET-123', $c['headers'], true));
+    eq($b['to'], ['ops@example.test']); eq($b['from'], 'Sitewright <sitewright@example.test>'); eq($b['subject'], 'Grüße'); eq($b['plain_body'], "line one\n.dot");
+    ok(!str_contains($c['url'], 'POSTAL-KEY') && !str_contains($c['body'], 'POSTAL-KEY'), 'key only in the header');
+});
+test('postal: errors are explained without leaking the key; CR/LF and bad URLs are refused before any request', function () use ($postalCfg) {
+    $postalCfg();
+    foreach ([[401, '{"status":"error","data":{"code":"InvalidServerAPIKey"}}', 'API key was rejected'], [200, '{"status":"error","data":{"code":"UnauthenticatedFromAddress"}}', 'not on a domain verified'], [500, 'oops', 'HTTP 500']] as [$st, $body, $want]) {
+        fakeWeb(['https://postal.example.test/api/v1/send/message' => [$st, [], $body]]);
+        try { Mailer::send('ops@example.test', 's', 'b'); ok(false, 'must fail'); } catch (MailException $e) { ok(str_contains($e->getMessage(), $want) && !str_contains($e->getMessage(), 'POSTAL-KEY'), $e->getMessage()); }
+    }
+    fakeWeb([]); throws(MailException::class, fn () => Mailer::send('ops@example.test', "x\r\nBcc: e@example.test", 'b'));
+    $postalCfg(['postal_url' => 'http://postal.example.test']); throws(MailException::class, fn () => Mailer::send('ops@example.test', 's', 'b'));
+    $postalCfg(['postal_url' => 'https://127.0.0.1']); fakeWeb([]); throws(MailException::class, fn () => Mailer::send('ops@example.test', 's', 'b'), 'private addresses stay blocked by the SSRF guard');
+    eq(count($GLOBALS['__calls']), 0, 'no request left the process');
+});
+test('postal: queued mail is delivered by the worker through the API', function () use ($postalCfg, $wipe, $job) {
+    $wipe(); $postalCfg(); fakeWeb(['https://postal.example.test/api/v1/send/message' => [200, [], '{"status":"success"}']]);
+    Mailer::queue('ops@example.test', 'queued', 'body'); ok(Jobs::runNext()); eq(count($GLOBALS['__calls']), 1);
+    $postalCfg(['driver' => 'smtp', 'host' => '']);
+});
+
 // ---- alerts ----------------------------------------------------------------------------------------------------------------
 $alertCfg = function (array $o = []) { Config::set('alerts', $o + ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 3]); Config::set('mail.host', ''); };
 $TG = 'https://api.telegram.org/bot123456:SECRET-TOKEN/sendMessage';

@@ -10,7 +10,7 @@ Updated with every commit of the production-readiness phase. Verdict stays **SAF
 | TOTP MFA, audit log, trusted proxies, backups, MIT licence, privacy notice | report section 11; tests 10, 11; `tests/docker/backup-drill.sh` |
 | MySQL 8.4, MariaDB 10.11/11.8, PHP 8.1/8.3/8.4 | 321/321 in Docker |
 
-**Deployed to the staging VM on 2026-11-15** (backup, code, migrations 004-008, 397/397 tests on PHP 8.4 + MariaDB 11.8, worker + health timer running, live crawl through the queue verified over the Tailscale HTTPS URL). Still unproven live: Postal, Teams, Telegram, Google (no credentials entered yet); the Postal egress rule needs your mail server's address.
+**Deployed to the staging VM on 2026-11-15** (backup, code, migrations 004-008, 397/397 tests on PHP 8.4 + MariaDB 11.8, worker + health timer running, live crawl through the queue verified over the Tailscale HTTPS URL). Mail now supports the Postal HTTP API (`sw-set-secrets postal`; `app.ghosties.email` resolves to public addresses, so no firewall rule is needed). Still unproven live: Postal, Teams, Telegram, Google (no credentials entered yet); the Postal egress rule needs your mail server's address.
 
 ## This phase (one commit per row; status updated as work lands)
 | # | Item | Status |

@@ -32,6 +32,7 @@ final class Config
             'sites'            => ['sync_minutes' => 10],
             'log' => ['file' => '', 'level' => 'info', 'requests' => true],
             'mail' => [
+                'driver' => 'smtp', 'postal_url' => '', 'postal_key' => '',
                 'host' => '', 'port' => 587, 'encryption' => 'starttls', 'username' => '', 'password' => '',
                 'from' => '', 'from_name' => 'Sitewright', 'verify_tls' => true, 'timeout' => 10,
             ],
@@ -146,6 +147,7 @@ final class Config
         if (($v = $env('SW_DEBUG')) !== null) { $cfg['debug'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         foreach (['file' => 'SW_LOG_FILE', 'level' => 'SW_LOG_LEVEL'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['log'][$k] = $v; } }
         foreach (['host' => 'SW_MAIL_HOST', 'encryption' => 'SW_MAIL_ENCRYPTION', 'username' => 'SW_MAIL_USERNAME', 'password' => 'SW_MAIL_PASSWORD', 'from' => 'SW_MAIL_FROM', 'from_name' => 'SW_MAIL_FROM_NAME'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['mail'][$k] = $v; } }
+        foreach (['driver' => 'SW_MAIL_DRIVER', 'postal_url' => 'SW_MAIL_POSTAL_URL', 'postal_key' => 'SW_MAIL_POSTAL_KEY'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['mail'][$k] = $v; } }
         if (($v = $env('SW_MAIL_PORT')) !== null) { $cfg['mail']['port'] = (int)$v; }
         if (($v = $env('SW_MAIL_VERIFY_TLS')) !== null) { $cfg['mail']['verify_tls'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         if (($v = $env('SW_ALERT_EMAIL_TO')) !== null) { $cfg['alerts']['email_to'] = $list($v); }
@@ -165,6 +167,8 @@ final class Config
 
         $cfg['mail']['port'] = (int)$cfg['mail']['port'];
         $cfg['mail']['verify_tls'] = (bool)$cfg['mail']['verify_tls'];
+        if (!in_array($cfg['mail']['driver'], ['smtp', 'postal'], true)) { throw new ConfigException('mail.driver must be smtp or postal'); }
+        if ($cfg['mail']['postal_url'] !== '') { $cfg['mail']['postal_url'] = rtrim((string)$cfg['mail']['postal_url'], '/'); }
         if (!in_array($cfg['mail']['encryption'], ['starttls', 'tls', 'none'], true)) {
             throw new ConfigException('mail.encryption must be starttls, tls or none');
         }

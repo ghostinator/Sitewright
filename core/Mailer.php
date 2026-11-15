@@ -13,7 +13,9 @@ final class Mailer
 {
     public static function configured(): bool
     {
-        return (string)Config::get('mail.host') !== '' && (string)Config::get('mail.from') !== '';
+        $m = (array)Config::get('mail');
+        if ($m['from'] === '') { return false; }
+        return $m['driver'] === 'postal' ? ($m['postal_url'] !== '' && $m['postal_key'] !== '') : $m['host'] !== '';
     }
 
     /** Job handler for the 'mail' queue type. */
@@ -45,7 +47,8 @@ final class Mailer
             if (preg_match('/[\r\n\0]/', $v)) { throw new MailException('Invalid characters in a mail header'); }
         }
         if (!filter_var($to, FILTER_VALIDATE_EMAIL) || !filter_var($cfg['from'], FILTER_VALIDATE_EMAIL)) { throw new MailException('Invalid sender or recipient address'); }
-        if ($cfg['host'] === '') { throw new MailException('Mail is not configured'); }
+        if (!self::configured()) { throw new MailException('Mail is not configured'); }
+        if ($cfg['driver'] === 'postal') { self::sendViaPostal($cfg, $to, $subject, $text); return; }
 
         $domain = substr((string)strrchr((string)$cfg['from'], '@'), 1);
         $headers = [
@@ -74,6 +77,37 @@ final class Mailer
         } finally {
             $conn->close();
         }
+    }
+
+    /**
+     * Postal HTTP API: POST {postal_url}/api/v1/send/message with the server API key in X-Server-API-Key. Goes through SafeHttpClient
+     * (https only for public hosts, SSRF-guarded like every other outbound call); the key is never logged or put in an error message.
+     * The From address must belong to a domain that is verified on that Postal server.
+     */
+    private static function sendViaPostal(array $cfg, string $to, string $subject, string $text): void
+    {
+        $url = (string)$cfg['postal_url'];
+        if (!preg_match('#^https://[A-Za-z0-9.-]+(:\d+)?(/[A-Za-z0-9._~/-]*)?$#D', $url)) { throw new MailException('mail.postal_url must be an https:// address'); }
+        if (preg_match('/[\s\x00-\x1F]/', (string)$cfg['postal_key'])) { throw new MailException('Invalid Postal API key'); }
+        $from = $cfg['from_name'] !== '' ? $cfg['from_name'] . ' <' . $cfg['from'] . '>' : $cfg['from'];
+        try {
+            $res = SafeHttpClient::default()->request('POST', $url . '/api/v1/send/message', [
+                'headers' => ['Content-Type: application/json', 'X-Server-API-Key: ' . $cfg['postal_key']],
+                'body' => (string)json_encode(['to' => [$to], 'from' => $from, 'subject' => $subject, 'plain_body' => $text, 'tag' => 'sitewright'], JSON_UNESCAPED_UNICODE),
+                'max_bytes' => 65536, 'timeout' => 20, 'accept' => 'application/json', 'follow' => false,
+            ]);
+        } catch (FetchException $e) {
+            throw new MailException('Could not reach the Postal server: ' . $e->getMessage());
+        }
+        $j = json_decode((string)$res['body'], true);
+        if ($res['status'] === 200 && is_array($j) && ($j['status'] ?? '') === 'success') { return; }
+        $code = is_array($j) && is_string($j['data']['code'] ?? null) ? preg_replace('/[^A-Za-z0-9_]/', '', $j['data']['code']) : '';
+        $why = match (true) {
+            $res['status'] === 401 || $res['status'] === 403 || $code === 'InvalidServerAPIKey' => 'the API key was rejected',
+            $code === 'UnauthenticatedFromAddress' => 'the From address is not on a domain verified in Postal',
+            default => 'HTTP ' . $res['status'] . ($code !== '' ? " ($code)" : ''),
+        };
+        throw new MailException('Postal refused the message: ' . $why);
     }
 
     private static function encodeHeader(string $v): string
