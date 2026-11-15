@@ -295,3 +295,11 @@ Source list: the "what would it take" answer given after the first report; statu
 **Verdict (section 9) unchanged: SAFE FOR STAGING.** MFA, proxy handling and the audit log retire items from section 8 but do not by themselves make this production-ready; see `docs/PRODUCTION_READINESS.md` for what remains.
 
 **Deferred on purpose:** async jobs (queue + worker + UI), roles, password reset (needs email) and structured logging/alerting: each is a project of its own.
+
+## 12. PRODUCTION-READINESS PHASE 2 (jobs, accounts, sites, Search Console)
+
+Status per item is in `docs/PRODUCTION_READINESS.md`. Summary: CI removed (`tests/all.sh` runs everything locally); `.htaccess` now works under `AllowOverride FileInfo` and sends each security header once; JSON logging; Postal SMTP mailer; alerts to e-mail/Teams/Telegram; background job queue + worker + health check; roles, user management, password reset, self-service MFA, audit viewer; connected WordPress sites with a signed pull/push protocol and agent plugin (tested against real WordPress 6); location edit UI with hours; permanent Playwright suite (found 2 real bugs); Google Search Console OAuth (mock-tested only).
+
+Evidence at last run: 397 PHP tests on PHP 8.1/8.3/8.4, 18 JS tests, 8 browser tests, 29 WordPress end-to-end checks. The final `tests/all.sh` run was started but its result was not read before the session ended: re-run it.
+
+Not done / not proven: nothing in this phase has been deployed to the staging VM (SSH access was removed); real Postal, Teams, Telegram and Google credentials have not been used; symlinked Apache sub-path still unsupported (use Alias). Verdict unchanged: SAFE FOR STAGING.
