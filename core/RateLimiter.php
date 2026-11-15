@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /** Fixed-window counter stored in {prefix}rate_limits (shared between PHP workers). */
 final class RateLimiter

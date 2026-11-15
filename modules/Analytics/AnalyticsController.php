@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Modules\Analytics;
+namespace Sitewright\Modules\Analytics;
 
-use RankMathWebapp\Core\{Config, Database, Request, Response, Validator};
+use Sitewright\Core\{Config, Database, Request, Response, Validator};
 
 /**
  * Keyword metrics that YOU add (API) or import as JSON. There is no Google Search Console / OAuth

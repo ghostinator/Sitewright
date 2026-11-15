@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /** Front controller: bootstrap, security middleware (host, origin, auth, content-type, CSRF, rate limit), dispatch. */
 final class App

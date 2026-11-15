@@ -1,11 +1,11 @@
 <?php
-use RankMathWebapp\Core\{Config, Database, FetchTimeoutException};
-use RankMathWebapp\Modules\SeoAnalysis\SeoAnalysisController as Seo;
-use RankMathWebapp\Modules\ImageSeo\ImageSeoController as Img;
+use Sitewright\Core\{Config, Database, FetchTimeoutException};
+use Sitewright\Modules\SeoAnalysis\SeoAnalysisController as Seo;
+use Sitewright\Modules\ImageSeo\ImageSeoController as Img;
 
 if (!dbAvailable()) { test('database available', fn () => ok(false, 'MariaDB not reachable')); return; }
 $db = freshDb();
-$count = fn (string $t) => (int)$db->fetchOne("SELECT COUNT(*) c FROM rm_$t")['c'];
+$count = fn (string $t) => (int)$db->fetchOne("SELECT COUNT(*) c FROM sw_$t")['c'];
 
 $page = html(
     '<h1>Hello wörld</h1><p>Un deux trois quatre cinq</p><script>var spam = "one two three four five six seven eight nine ten";</script><style>.a{content:"x y z"}</style>'
@@ -86,8 +86,8 @@ test('Image bulk: URL resolution, internal targets skipped, dedupe, cap, unknown
     eq($srcs, ['https://cdn.example/c.png', 'https://site.example:8443/abs.png', 'https://site.example:8443/blog/post/img/a.png', 'https://site.example:8443/blog/post/lazy.png', 'https://site.example:8443/blog/up/b.png']);
     eq($r['json']['data']['skipped'], 2, 'the two internal image URLs are skipped');
     foreach ($GLOBALS['__calls'] as $c) { ok(!in_array($c['host'], ['10.0.0.5', '127.0.0.1'], true), 'internal host contacted'); }
-    eq((int)$db->fetchOne("SELECT optimized o FROM rm_image_seo WHERE image_url = 'https://site.example:8443/blog/up/b.png'")['o'], 0, 'no alt => not optimized');
-    eq((int)$db->fetchOne("SELECT optimized o FROM rm_image_seo WHERE image_url = 'https://site.example:8443/blog/post/img/a.png'")['o'], 1);
+    eq((int)$db->fetchOne("SELECT optimized o FROM sw_image_seo WHERE image_url = 'https://site.example:8443/blog/up/b.png'")['o'], 0, 'no alt => not optimized');
+    eq((int)$db->fetchOne("SELECT optimized o FROM sw_image_seo WHERE image_url = 'https://site.example:8443/blog/post/img/a.png'")['o'], 1);
     // cap
     Config::set('limits.bulk_images', 2);
     $r = call(Img::class, 'bulkAnalyze', ['method' => 'POST', 'body' => ['url' => 'https://site.example:8443/blog/post/']]);
@@ -96,7 +96,7 @@ test('Image bulk: URL resolution, internal targets skipped, dedupe, cap, unknown
 });
 test('Image: unknown size is NULL optimized, never true (FUNC-012)', function () use ($db) {
     $db->insert('image_seo', ['image_url' => 'https://u.example/u.png']);
-    $r = $db->fetchOne("SELECT optimized FROM rm_image_seo WHERE image_url = 'https://u.example/u.png'");
+    $r = $db->fetchOne("SELECT optimized FROM sw_image_seo WHERE image_url = 'https://u.example/u.png'");
     eq($r['optimized'], null);
 });
 test('Image: alt-text suggestion is labelled as a filename heuristic, not AI (FUNC-010)', function () {

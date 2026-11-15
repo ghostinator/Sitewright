@@ -3,7 +3,7 @@
 ## Layout
 
 ```
-/srv/rankmath/            <- NOT web-accessible
+/srv/sitewright/            <- NOT web-accessible
 ├── core/ modules/ config/ database/ bin/ docs/ tests/ storage/
 └── public/               <- the ONLY web-accessible directory (document root)
 ```
@@ -11,22 +11,22 @@
 ## 1. Database (least privilege)
 
 ```sql
-CREATE DATABASE rankmath CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE sitewright CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 -- Runtime account (what the web app uses): no DDL, no TRUNCATE, no FILE.
-CREATE USER 'rm_app'@'127.0.0.1' IDENTIFIED BY '<long random password>';
-GRANT SELECT, INSERT, UPDATE, DELETE ON rankmath.* TO 'rm_app'@'127.0.0.1';
--- Install/upgrade account (used only by bin/install.php and bin/migrate.php, e.g. via RMW_DB_USER/RMW_DB_PASS):
-CREATE USER 'rm_migrate'@'127.0.0.1' IDENTIFIED BY '<another long random password>';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP ON rankmath.* TO 'rm_migrate'@'127.0.0.1';
+CREATE USER 'sw_app'@'127.0.0.1' IDENTIFIED BY '<long random password>';
+GRANT SELECT, INSERT, UPDATE, DELETE ON sitewright.* TO 'sw_app'@'127.0.0.1';
+-- Install/upgrade account (used only by bin/install.php and bin/migrate.php, e.g. via SW_DB_USER/SW_DB_PASS):
+CREATE USER 'sw_migrate'@'127.0.0.1' IDENTIFIED BY '<another long random password>';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP ON sitewright.* TO 'sw_migrate'@'127.0.0.1';
 ```
 
-Install as `rm_migrate`, then edit `config/config.php` (or the environment) to use `rm_app`. Never use `root`; never `GRANT ALL`.
+Install as `sw_migrate`, then edit `config/config.php` (or the environment) to use `sw_app`. Never use `root`; never `GRANT ALL`.
 
 ## 2. Install
 
 ```bash
-export RMW_DB_PASS='<rm_migrate password>' RMW_ADMIN_PASSWORD='<min 12 chars>'
-php bin/install.php --db-user=rm_migrate --db-name=rankmath --admin-user=admin --admin-email=you@example.com
+export SW_DB_PASS='<sw_migrate password>' SW_ADMIN_PASSWORD='<min 12 chars>'
+php bin/install.php --db-user=sw_migrate --db-name=sitewright --admin-user=admin --admin-email=you@example.com
 chmod 600 config/config.php
 ```
 
@@ -35,23 +35,23 @@ chmod 600 config/config.php
 ```apache
 <VirtualHost *:443>
     ServerName seo.example.com
-    DocumentRoot /srv/rankmath/public
+    DocumentRoot /srv/sitewright/public
     # Certificate configuration (SSLEngine, SSLCertificateFile, ...) omitted.
     SSLEngine on
-    <Directory /srv/rankmath/public>
+    <Directory /srv/sitewright/public>
         Options -Indexes
         # public/.htaccess carries the rewrite and header rules.
         AllowOverride All
         Require all granted
     </Directory>
     # Or put everything in config/config.php instead of SetEnv.
-    SetEnv RMW_BASE_URL https://seo.example.com
+    SetEnv SW_BASE_URL https://seo.example.com
 </VirtualHost>
 ```
 
 Required modules: `rewrite`, `headers`. Environment variables for PHP can be set with `PassEnv`/`SetEnv`, PHP-FPM `env[...]`, or simply `config/config.php`.
 
-**Sub-path** (e.g. `https://example.com/seo/`): `Alias /seo /srv/rankmath/public` with the same `<Directory>` block, and `RMW_BASE_URL=https://example.com/seo`. Tested with Apache 2.4 (`tests/docker/smoke.sh`). If your host maps the sub-path differently and rewrites misroute, add `RewriteBase /seo/` inside that `<Directory>`. Do not deploy the whole repository inside the web root.
+**Sub-path** (e.g. `https://example.com/seo/`): `Alias /seo /srv/sitewright/public` with the same `<Directory>` block, and `SW_BASE_URL=https://example.com/seo`. Tested with Apache 2.4 (`tests/docker/smoke.sh`). If your host maps the sub-path differently and rewrites misroute, add `RewriteBase /seo/` inside that `<Directory>`. Do not deploy the whole repository inside the web root.
 
 ## 4. nginx + PHP-FPM
 
@@ -59,7 +59,7 @@ Required modules: `rewrite`, `headers`. Environment variables for PHP can be set
 server {
     listen 443 ssl http2;
     server_name seo.example.com;
-    root /srv/rankmath/public;
+    root /srv/sitewright/public;
     index index.php;
 
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
@@ -81,12 +81,12 @@ server {
 ## 5. Hardening checklist
 
 * Behind a reverse proxy: preserve the `Host` header and note that throttling uses the connecting IP (trusted-proxy headers are not implemented).
-* HTTPS only; set `RMW_BASE_URL` (https) and `RMW_ALLOWED_HOSTS`; enable `RMW_HSTS=true`.
-* `display_errors=Off` in PHP (the app also forces it off unless `RMW_DEBUG`); `expose_php=Off`.
+* HTTPS only; set `SW_BASE_URL` (https) and `SW_ALLOWED_HOSTS`; enable `SW_HSTS=true`.
+* `display_errors=Off` in PHP (the app also forces it off unless `SW_DEBUG`); `expose_php=Off`.
 * `config/config.php` mode `0600`, owned by the PHP user; keep backups encrypted.
 * Block outbound access from the PHP host to internal networks and cloud metadata endpoints at the firewall as a second layer behind the application's SSRF guard.
 * Schedule `php bin/purge-404.php` daily if you use the 404 log.
-* Backups: `mysqldump --defaults-extra-file=/root/.my.cnf rankmath | gzip > backup.sql.gz` (keep credentials in the option file, not on the command line).
+* Backups: `mysqldump --defaults-extra-file=/root/.my.cnf sitewright | gzip > backup.sql.gz` (keep credentials in the option file, not on the command line).
 * Do not run the web server or PHP as root; no recursive `chmod 755/777` — files need only read access for the PHP user, `storage/` write access for the installer.
 * Rotate any API key that was ever committed. Scan history with gitleaks/trufflehog.
 

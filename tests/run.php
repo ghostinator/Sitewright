@@ -12,8 +12,8 @@ set_error_handler(static function (int $no, string $str, string $file, int $line
 require __DIR__ . '/../core/autoload.php';
 require __DIR__ . '/lib.php';
 
-putenv('RMW_BASE_URL'); putenv('RMW_ALLOWED_HOSTS'); // deterministic config
-RankMathWebapp\Core\Config::useFile('/nonexistent/config.php');
+putenv('SW_BASE_URL'); putenv('SW_ALLOWED_HOSTS'); // deterministic config
+Sitewright\Core\Config::useFile('/nonexistent/config.php');
 
 $filter = $argv[1] ?? null;
 foreach (glob(__DIR__ . '/cases/*.php') ?: [] as $file) {

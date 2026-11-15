@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /**
  * The ONLY code in this application allowed to open an outbound HTTP connection.
@@ -297,7 +297,7 @@ final class SafeHttpClient
     private function userAgent(): string
     {
         $contact = trim((string)Config::get('contact', ''));
-        return 'RankMathWebapp-SEO/1.0' . ($contact !== '' ? " (+$contact)" : '');
+        return 'Sitewright-SEO/1.0' . ($contact !== '' ? " (+$contact)" : '');
     }
 
     /** @param array<string,mixed> $r */

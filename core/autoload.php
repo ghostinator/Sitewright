@@ -3,12 +3,12 @@ declare(strict_types=1);
 
 /**
  * Minimal PSR-4-style autoloader.
- *   RankMathWebapp\Core\Foo            -> core/Foo.php
- *   RankMathWebapp\Modules\X\YThing    -> modules/X/YThing.php
+ *   Sitewright\Core\Foo            -> core/Foo.php
+ *   Sitewright\Modules\X\YThing    -> modules/X/YThing.php
  * All "*Exception" classes in Core live together in core/Exceptions.php.
  */
 spl_autoload_register(static function (string $class): void {
-    $prefix = 'RankMathWebapp\\';
+    $prefix = 'Sitewright\\';
     if (strncmp($class, $prefix, strlen($prefix)) !== 0) {
         return;
     }

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /** HTML parsing helpers shared by the analysers (never fetches anything itself). */
 final class Html

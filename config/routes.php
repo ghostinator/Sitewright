@@ -5,8 +5,8 @@
  *          limit (rate-limit group), upload (multipart body instead of JSON).
  * Everything NOT marked public requires an authenticated session (deny by default).
  */
-$C = 'RankMathWebapp\\Core\\';
-$M = 'RankMathWebapp\\Modules\\';
+$C = 'Sitewright\\Core\\';
+$M = 'Sitewright\\Modules\\';
 
 return [
     // Authentication

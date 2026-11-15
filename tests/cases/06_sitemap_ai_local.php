@@ -1,8 +1,8 @@
 <?php
-use RankMathWebapp\Core\{Config, Database, FetchTimeoutException};
-use RankMathWebapp\Modules\Sitemap\SitemapController as Sm;
-use RankMathWebapp\Modules\ContentAi\ContentAiController as Ai;
-use RankMathWebapp\Modules\LocalSeo\LocalSeoController as Loc;
+use Sitewright\Core\{Config, Database, FetchTimeoutException};
+use Sitewright\Modules\Sitemap\SitemapController as Sm;
+use Sitewright\Modules\ContentAi\ContentAiController as Ai;
+use Sitewright\Modules\LocalSeo\LocalSeoController as Loc;
 
 if (!dbAvailable()) { test('database available', fn () => ok(false, 'MariaDB not reachable')); return; }
 $db = freshDb();
@@ -21,14 +21,14 @@ test('Sitemap crawl: only same-site 200 HTML pages, skips mailto/tel/js/data, st
     Config::set('limits.crawl_delay_ms', 0);
     $r = call(Sm::class, 'crawlAndGenerate', ['method' => 'POST', 'body' => ['base_url' => 'https://s.example/']]);
     eq($r['status'], 200);
-    $urls = array_column($db->fetchAll('SELECT url FROM rm_sitemaps ORDER BY url'), 'url');
+    $urls = array_column($db->fetchAll('SELECT url FROM sw_sitemaps ORDER BY url'), 'url');
     eq($urls, ['https://s.example/', 'https://s.example/a', 'https://s.example/a?x=1&y=2', 'https://s.example/b']);
     foreach ($GLOBALS['__calls'] as $c) { ok(!str_contains($c['url'], '/private/'), 'robots.txt violated'); ok($c['host'] === 's.example', 'left the site'); }
 });
 test('Sitemap crawl: re-crawl does not create duplicates (DB-001)', function () use ($site, $db) {
     fakeWeb($site);
     $r = call(Sm::class, 'crawlAndGenerate', ['method' => 'POST', 'body' => ['base_url' => 'https://s.example/']]);
-    eq($r['json']['data']['added'], 0); eq((int)$db->fetchOne('SELECT COUNT(*) c FROM rm_sitemaps')['c'], 4);
+    eq($r['json']['data']['added'], 0); eq((int)$db->fetchOne('SELECT COUNT(*) c FROM sw_sitemaps')['c'], 4);
 });
 test('Sitemap crawl: max_pages=1000000 is clamped to the server cap (DOS-001, SSRF-003)', function () {
     $pages = [];
@@ -88,17 +88,17 @@ test('AI: success => source gemini, key in x-goog-api-key header and NEVER in th
     ok(!str_contains($req['url'], 'TEST_KEY') && !str_contains($req['url'], 'key='), 'key leaked into URL');
     ok(in_array('x-goog-api-key: TEST_KEY_123', $req['headers'], true));
     eq($req['method'], 'POST');
-    eq((int)$db->fetchOne('SELECT credits_used c FROM rm_content_ai ORDER BY id DESC LIMIT 1')['c'], 1);
+    eq((int)$db->fetchOne('SELECT credits_used c FROM sw_content_ai ORDER BY id DESC LIMIT 1')['c'], 1);
 });
 foreach ([[403, '{"error":"forbidden"}', 'http_403'], [404, 'model gone', 'http_404'], [503, 'x', 'http_503'], [200, 'not json', 'malformed_response'], [200, '{"candidates":[{"finishReason":"SAFETY"}]}', 'empty_response']] as [$st, $body, $code]) {
     test("AI: Gemini $st/$code => template_fallback, flagged, zero credits, body not logged (FUNC-001)", function () use ($st, $body, $code, $aiUrl, $db) {
         Config::set('gemini.api_key', 'TEST_KEY_123');
         fakeWeb([$aiUrl => [$st, [], $body]]);
-        $log = tempnam(sys_get_temp_dir(), 'rmwlog'); $old = ini_set('error_log', $log);
+        $log = tempnam(sys_get_temp_dir(), 'swlog'); $old = ini_set('error_log', $log);
         $r = call(Ai::class, 'generateContent', ['method' => 'POST', 'body' => ['keyword' => 'coffee']]);
         ini_set('error_log', (string)$old);
         eq($r['json']['data']['source'], 'template_fallback'); eq($r['json']['data']['ai_error'], $code); ok(str_contains($r['json']['data']['powered_by'], 'failed'));
-        eq((int)$db->fetchOne('SELECT credits_used c FROM rm_content_ai ORDER BY id DESC LIMIT 1')['c'], 0);
+        eq((int)$db->fetchOne('SELECT credits_used c FROM sw_content_ai ORDER BY id DESC LIMIT 1')['c'], 0);
         $logged = (string)file_get_contents($log); unlink($log);
         ok(!str_contains($logged, 'model gone') && !str_contains($logged, 'forbidden') && !str_contains($logged, 'TEST_KEY'), 'response body or key logged');
     });
@@ -154,13 +154,13 @@ test('Local SEO: when enabled, Nominatim gets the address with an identifying UA
     Config::set('enable_geocoding', true); Config::set('contact', 'https://example.com/contact');
     $url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' . rawurlencode('9 Elm St, Metropolis');
     fakeWeb([$url => [200, [], '[{"lat":"12.5","lon":"34.5"}]']]);
-    $db->query('DELETE FROM rm_rate_limits');
+    $db->query('DELETE FROM sw_rate_limits');
     $r = call(Loc::class, 'addLocation', ['method' => 'POST', 'body' => ['name' => 'Geo', 'address' => '9 Elm St', 'city' => 'Metropolis']]);
     eq($r['json']['data']['geocoded'], true); eq(count($GLOBALS['__calls']), 1);
-    ok(str_contains($GLOBALS['__calls'][0]['user_agent'], 'RankMathWebapp-SEO') && str_contains($GLOBALS['__calls'][0]['user_agent'], 'https://example.com/contact'));
+    ok(str_contains($GLOBALS['__calls'][0]['user_agent'], 'Sitewright-SEO') && str_contains($GLOBALS['__calls'][0]['user_agent'], 'https://example.com/contact'));
     $r = call(Loc::class, 'addLocation', ['method' => 'POST', 'body' => ['name' => 'Geo 2', 'address' => '9 Elm St', 'city' => 'Metropolis']]);
     eq(count($GLOBALS['__calls']), 1, 'identical address reuses stored coordinates (cache)');
-    eq($db->fetchOne("SELECT latitude FROM rm_local_locations WHERE name = 'Geo 2'")['latitude'], '12.50000000');
+    eq($db->fetchOne("SELECT latitude FROM sw_local_locations WHERE name = 'Geo 2'")['latitude'], '12.50000000');
     Config::set('enable_geocoding', false);
 });
 test('Local SEO: validation (email/phone/website/coords/hours) returns 400 not 500 (FUNC-015, DB-004)', function () {

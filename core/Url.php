@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /** RFC 3986 reference resolution and http(s) URL normalisation, shared by the crawler and image analysis. */
 final class Url

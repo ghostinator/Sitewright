@@ -1,5 +1,5 @@
 /**
- * RankMath SEO Webapp - front end.
+ * Sitewright - front end.
  *
  * Security rules for this file (CSP: script-src 'self', no inline handlers):
  *  - Data from the server (which includes data from third-party sites) is NEVER parsed as HTML.
@@ -163,7 +163,7 @@
     // ------------------------------------------------------------------ test export (no side effects)
 
     const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard };
-    window.RMW = exported;
+    window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
     if (!cfgNode) return; // loaded by a test harness
@@ -245,7 +245,7 @@
         document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === view));
         document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
         document.getElementById('page-title').textContent = TITLES[view];
-        document.title = 'RankMath SEO Webapp - ' + TITLES[view];
+        document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
         const loaders = { dashboard: loadDashboard, analytics: loadAnalytics, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps };
         if (loaders[view]) loaders[view]();

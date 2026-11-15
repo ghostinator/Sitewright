@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /** Input validation helpers. Every failure becomes a 400 with a field-level message (never a 500). */
 final class Validator

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /**
  * Response helpers. Every helper THROWS a ResponseException; App::run() emits it.

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/core/autoload.php';
 
-use RankMathWebapp\Core\{App, Auth, Config};
+use Sitewright\Core\{App, Auth, Config};
 
 App::boot();
 $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -11,7 +11,7 @@ $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUBS
 if (!Config::hostAllowed((string)($_SERVER['HTTP_HOST'] ?? ''))) {
     http_response_code(400);
     header('Content-Type: text/plain; charset=utf-8');
-    exit('Invalid host. Set RMW_ALLOWED_HOSTS / RMW_BASE_URL.');
+    exit('Invalid host. Set SW_ALLOWED_HOSTS / SW_BASE_URL.');
 }
 foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 
@@ -48,7 +48,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>RankMath SEO Webapp - <?= $h($user ? $views[$view] : 'Sign in') ?></title>
+    <title>Sitewright - <?= $h($user ? $views[$view] : 'Sign in') ?></title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="<?= $h($base) ?>/assets/css/style.css">
     <script type="application/json" id="app-config"><?= $configJson ?></script>
@@ -67,7 +67,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
 <?php else: ?>
     <div class="app-container">
         <aside class="sidebar">
-            <div class="logo"><h2>🚀 RankMath</h2><p>SEO Toolkit</p></div>
+            <div class="logo"><h2>🚀 Sitewright</h2><p>SEO Toolkit</p></div>
             <nav class="nav-menu">
 <?php foreach ($views as $slugName => $title): ?>
                 <a href="<?= $h($base . ($slugName === 'dashboard' ? '/' : '/' . $slugName)) ?>" class="nav-item" data-view="<?= $h($slugName) ?>"><span class="icon"><?= $icons[$slugName] ?></span><?= $h($title) ?></a>

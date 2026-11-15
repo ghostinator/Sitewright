@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Modules\Monitor;
+namespace Sitewright\Modules\Monitor;
 
-use RankMathWebapp\Core\{Config, Database, Request, Response, Validator};
+use Sitewright\Core\{Config, Database, Request, Response, Validator};
 
 /**
  * 404 log. This application does NOT detect 404s on your site by itself: entries are added manually

@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Modules\SeoAnalysis;
+namespace Sitewright\Modules\SeoAnalysis;
 
-use RankMathWebapp\Core\{Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
+use Sitewright\Core\{Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
 
 /**
  * On-page SEO checks for one URL. The page is fetched ONCE through SafeHttpClient and every check

@@ -34,7 +34,7 @@ stopServer($srv);
 
 $cfgFile = tempnam(sys_get_temp_dir(), 'cfg');
 file_put_contents($cfgFile, "<?php return ['session' => ['idle_timeout' => 2, 'absolute_timeout' => 4]];");
-$short = startServer(['RMW_CONFIG_FILE' => $cfgFile]);
+$short = startServer(['SW_CONFIG_FILE' => $cfgFile]);
 test('session idle timeout (server-side) logs the user out; activity keeps it alive', function () use ($short) {
     $h = new TestHttp($short['base']);
     eq($h->login('admin', 'correct horse battery')['status'], 200);

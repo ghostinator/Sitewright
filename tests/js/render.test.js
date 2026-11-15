@@ -14,7 +14,7 @@ const PAYLOADS = [
 function load() {
   const dom = new JSDOM('<!doctype html><body><div id="c"></div></body>', { runScripts: 'outside-only', url: 'http://localhost/' });
   dom.window.eval(SRC);
-  return { dom, RMW: dom.window.RMW, box: dom.window.document.getElementById('c') };
+  return { dom, SW: dom.window.SW, box: dom.window.document.getElementById('c') };
 }
 
 function assertInert(box, payload, where) {
@@ -39,18 +39,18 @@ const seoData = p => ({ url: p, score: 77, results: {
 
 for (const p of PAYLOADS) {
   test(`renderers neutralise payload: ${p.slice(0, 30)}`, () => {
-    const { RMW, box } = load();
+    const { SW, box } = load();
     const doc = box.ownerDocument;
     const cases = {
-      seo: () => RMW.renderSeoResults(box, seoData(p)),
-      content: () => { let copied; RMW.renderContentResult(box, { content: p, content_type: p, source: 'gemini', powered_by: p, ai_error: p }, t => { copied = t; }); assert.equal(copied, p, 'copy uses the raw JS string'); },
-      contentFallback: () => RMW.renderContentResult(box, { content: p, content_type: 'title', source: 'template_fallback', ai_error: p }),
-      image: () => RMW.renderImageResults(box, { images: [{ src: p, has_alt: false, size: 10, dimensions: p, optimized: null }], found: 1, skipped: 1, truncated: true, limit: p }),
-      analytics: () => RMW.renderAnalytics(box, { keywords: [{ keyword: p, total_impressions: 1, total_clicks: 1, avg_position: '2.5', is_sample: 1 }], summary: {}, range: { start: p, end: p } }),
-      logs: () => RMW.render404Logs(box, { logs: [{ id: 1, uri: p, hits: p, last_accessed: p, is_sample: 0 }] }),
-      redirects: () => RMW.renderRedirections(box, [{ id: p, source_url: p, target_url: p, redirect_type: p, is_sample: 1 }]),
-      locations: () => RMW.renderLocations(box, [{ id: 1, name: p, address: p, city: p, state: p, postal_code: p, country: p, latitude: p, longitude: p }]),
-      sitemap: () => RMW.renderSitemapResult(box, { fetched: p, total_found: p, added: p, stopped_early: true, max_pages: p }, '/api/sitemap/generate-xml'),
+      seo: () => SW.renderSeoResults(box, seoData(p)),
+      content: () => { let copied; SW.renderContentResult(box, { content: p, content_type: p, source: 'gemini', powered_by: p, ai_error: p }, t => { copied = t; }); assert.equal(copied, p, 'copy uses the raw JS string'); },
+      contentFallback: () => SW.renderContentResult(box, { content: p, content_type: 'title', source: 'template_fallback', ai_error: p }),
+      image: () => SW.renderImageResults(box, { images: [{ src: p, has_alt: false, size: 10, dimensions: p, optimized: null }], found: 1, skipped: 1, truncated: true, limit: p }),
+      analytics: () => SW.renderAnalytics(box, { keywords: [{ keyword: p, total_impressions: 1, total_clicks: 1, avg_position: '2.5', is_sample: 1 }], summary: {}, range: { start: p, end: p } }),
+      logs: () => SW.render404Logs(box, { logs: [{ id: 1, uri: p, hits: p, last_accessed: p, is_sample: 0 }] }),
+      redirects: () => SW.renderRedirections(box, [{ id: p, source_url: p, target_url: p, redirect_type: p, is_sample: 1 }]),
+      locations: () => SW.renderLocations(box, [{ id: 1, name: p, address: p, city: p, state: p, postal_code: p, country: p, latitude: p, longitude: p }]),
+      sitemap: () => SW.renderSitemapResult(box, { fetched: p, total_found: p, added: p, stopped_early: true, max_pages: p }, '/api/sitemap/generate-xml'),
     };
     for (const [name, run] of Object.entries(cases)) {
       box.replaceChildren();
@@ -60,15 +60,15 @@ for (const p of PAYLOADS) {
     }
     // dashboard writes into fixed ids
     doc.body.insertAdjacentHTML('beforeend', '<p id="recent-activity"></p><p id="stat-seo"></p><p id="stat-keywords"></p><p id="stat-impressions"></p><p id="stat-clicks"></p><p id="dashboard-note"></p>');
-    RMW.renderDashboard({ seo_score: 1, total_keywords: 1, impressions: 1, clicks: 1, includes_sample_data: true, recent_activity: [{ type: p, url: p, score: p, date: p, is_sample: 1 }] });
+    SW.renderDashboard({ seo_score: 1, total_keywords: 1, impressions: 1, clicks: 1, includes_sample_data: true, recent_activity: [{ type: p, url: p, score: p, date: p, is_sample: 1 }] });
     assertInert(doc.getElementById('recent-activity'), p, 'dashboard');
     assert.ok(doc.getElementById('recent-activity').textContent.includes(p));
   });
 }
 
 test('delete buttons carry ids only in data-* attributes (delegated listeners, no inline handlers)', () => {
-  const { RMW, box } = load();
-  RMW.renderRedirections(box, [{ id: 7, source_url: '/a', target_url: '/b', redirect_type: '301' }]);
+  const { SW, box } = load();
+  SW.renderRedirections(box, [{ id: 7, source_url: '/a', target_url: '/b', redirect_type: '301' }]);
   const b = box.querySelector('button');
   assert.equal(b.dataset.action, 'delete-redirection'); assert.equal(b.dataset.id, '7'); assert.equal(b.getAttribute('onclick'), null);
 });

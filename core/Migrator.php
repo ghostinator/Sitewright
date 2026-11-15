@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 use PDO;
 
@@ -24,14 +24,14 @@ final class Migrator
     public function run(): array
     {
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $lock = $this->pdo->query("SELECT GET_LOCK('rmw_migrate', 10)")->fetchColumn();
+        $lock = $this->pdo->query("SELECT GET_LOCK('sw_migrate', 10)")->fetchColumn();
         if ((int)$lock !== 1) {
             throw new DatabaseException('Could not obtain migration lock');
         }
         try {
             return $this->apply();
         } finally {
-            $this->pdo->query("SELECT RELEASE_LOCK('rmw_migrate')");
+            $this->pdo->query("SELECT RELEASE_LOCK('sw_migrate')");
         }
     }
 
@@ -58,7 +58,7 @@ final class Migrator
         $applied = [];
 
         if ($legacy && !$done) {
-            // A v1.0 install (rm_settings exists, no migration table): its schema is exactly 001.
+            // A v1.0 install (sw_settings exists, no migration table): its schema is exactly 001.
             $first = array_key_first($files);
             $this->record($first);
             $done[] = $first;

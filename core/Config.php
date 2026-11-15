@@ -1,15 +1,15 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /**
- * Layered configuration: built-in defaults < config/config.php < RMW_* environment variables.
+ * Layered configuration: built-in defaults < config/config.php < SW_* environment variables.
  * config/config.php is git-ignored; see config/config.example.php.
  */
 final class Config
 {
-    /** Default Gemini model; override with RMW_GEMINI_MODEL / config. Listed as Stable on Google's model page on 2026-11-15; models are retired regularly, so set RMW_GEMINI_MODEL if it stops working. */
+    /** Default Gemini model; override with SW_GEMINI_MODEL / config. Listed as Stable on Google's model page on 2026-11-15; models are retired regularly, so set SW_GEMINI_MODEL if it stops working. */
     public const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
 
     private static ?array $data = null;
@@ -27,8 +27,8 @@ final class Config
             'retention_days_404' => 90,
             'hsts'             => false,
             'db' => [
-                'host' => '127.0.0.1', 'port' => 3306, 'name' => 'rankmath_webapp',
-                'user' => '', 'pass' => '', 'prefix' => 'rm_',
+                'host' => '127.0.0.1', 'port' => 3306, 'name' => 'sitewright_webapp',
+                'user' => '', 'pass' => '', 'prefix' => 'sw_',
             ],
             'gemini' => [
                 'api_key'  => '',
@@ -36,7 +36,7 @@ final class Config
                 'endpoint' => 'https://generativelanguage.googleapis.com/v1beta/models',
             ],
             'session' => [
-                'name' => 'rmw_session', 'idle_timeout' => 1800, 'absolute_timeout' => 28800, 'secure' => null,
+                'name' => 'sw_session', 'idle_timeout' => 1800, 'absolute_timeout' => 28800, 'secure' => null,
             ],
             'limits' => [
                 'body_bytes' => 1048576, 'max_pages' => 500, 'bulk_images' => 50, 'import_rows' => 5000,
@@ -110,7 +110,7 @@ final class Config
     {
         $cfg = self::defaults();
 
-        $file = self::$file ?? ((($e = getenv('RMW_CONFIG_FILE')) !== false && $e !== '') ? $e : self::root() . '/config/config.php');
+        $file = self::$file ?? ((($e = getenv('SW_CONFIG_FILE')) !== false && $e !== '') ? $e : self::root() . '/config/config.php');
         if (is_file($file)) {
             $loaded = (static function (string $f) { return require $f; })($file);
             if (is_array($loaded)) {
@@ -121,22 +121,22 @@ final class Config
         $env = static fn (string $k): ?string => (($v = getenv($k)) === false || $v === '') ? null : $v;
         $list = static fn (string $v): array => array_values(array_filter(array_map('trim', explode(',', $v)), 'strlen'));
 
-        foreach (['host' => 'RMW_DB_HOST', 'name' => 'RMW_DB_NAME', 'user' => 'RMW_DB_USER', 'pass' => 'RMW_DB_PASS', 'prefix' => 'RMW_DB_PREFIX'] as $k => $e) {
+        foreach (['host' => 'SW_DB_HOST', 'name' => 'SW_DB_NAME', 'user' => 'SW_DB_USER', 'pass' => 'SW_DB_PASS', 'prefix' => 'SW_DB_PREFIX'] as $k => $e) {
             if (($v = $env($e)) !== null) { $cfg['db'][$k] = $v; }
         }
-        if (($v = $env('RMW_DB_PORT')) !== null) { $cfg['db']['port'] = (int)$v; }
-        if (($v = $env('RMW_GEMINI_API_KEY')) !== null) { $cfg['gemini']['api_key'] = $v; }
-        if (($v = $env('RMW_GEMINI_MODEL')) !== null) { $cfg['gemini']['model'] = $v; }
-        if (($v = $env('RMW_BASE_URL')) !== null) { $cfg['base_url'] = rtrim($v, '/'); }
-        if (($v = $env('RMW_ALLOWED_HOSTS')) !== null) { $cfg['allowed_hosts'] = $list($v); }
-        if (($v = $env('RMW_CONTACT')) !== null) { $cfg['contact'] = $v; }
-        if (($v = $env('RMW_ENABLE_GEOCODING')) !== null) { $cfg['enable_geocoding'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
-        if (($v = $env('RMW_DEBUG')) !== null) { $cfg['debug'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
-        if (($v = $env('RMW_HSTS')) !== null) { $cfg['hsts'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
-        // Outbound controls are deliberately separate from RMW_ALLOWED_HOSTS (inbound Host validation).
-        if (($v = $env('RMW_FETCH_ALLOW_HOSTS')) !== null) { $cfg['fetch']['allow_hosts'] = $list($v); }
-        if (($v = $env('RMW_FETCH_BLOCK_HOSTS')) !== null) { $cfg['fetch']['block_hosts'] = $list($v); }
-        if (($v = $env('RMW_FETCH_DEV_ALLOW_CIDRS')) !== null) { $cfg['fetch']['dev_allow_cidrs'] = $list($v); }
+        if (($v = $env('SW_DB_PORT')) !== null) { $cfg['db']['port'] = (int)$v; }
+        if (($v = $env('SW_GEMINI_API_KEY')) !== null) { $cfg['gemini']['api_key'] = $v; }
+        if (($v = $env('SW_GEMINI_MODEL')) !== null) { $cfg['gemini']['model'] = $v; }
+        if (($v = $env('SW_BASE_URL')) !== null) { $cfg['base_url'] = rtrim($v, '/'); }
+        if (($v = $env('SW_ALLOWED_HOSTS')) !== null) { $cfg['allowed_hosts'] = $list($v); }
+        if (($v = $env('SW_CONTACT')) !== null) { $cfg['contact'] = $v; }
+        if (($v = $env('SW_ENABLE_GEOCODING')) !== null) { $cfg['enable_geocoding'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
+        if (($v = $env('SW_DEBUG')) !== null) { $cfg['debug'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
+        if (($v = $env('SW_HSTS')) !== null) { $cfg['hsts'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
+        // Outbound controls are deliberately separate from SW_ALLOWED_HOSTS (inbound Host validation).
+        if (($v = $env('SW_FETCH_ALLOW_HOSTS')) !== null) { $cfg['fetch']['allow_hosts'] = $list($v); }
+        if (($v = $env('SW_FETCH_BLOCK_HOSTS')) !== null) { $cfg['fetch']['block_hosts'] = $list($v); }
+        if (($v = $env('SW_FETCH_DEV_ALLOW_CIDRS')) !== null) { $cfg['fetch']['dev_allow_cidrs'] = $list($v); }
 
         $cfg['debug']            = (bool)$cfg['debug'];
         $cfg['enable_geocoding'] = (bool)$cfg['enable_geocoding'];

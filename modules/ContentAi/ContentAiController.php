@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Modules\ContentAi;
+namespace Sitewright\Modules\ContentAi;
 
-use RankMathWebapp\Core\{Config, Database, FetchException, Request, Response, SafeHttpClient, Validator};
+use Sitewright\Core\{Config, Database, FetchException, Request, Response, SafeHttpClient, Validator};
 
 /**
  * Content generation. Every result states where it came from:

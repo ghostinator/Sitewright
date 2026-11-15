@@ -5,4 +5,4 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require dirname(__DIR__) . '/core/autoload.php';
 
-echo 'Purged ' . (new RankMathWebapp\Modules\Monitor\MonitorController())->purgeExpired() . " rows\n";
+echo 'Purged ' . (new Sitewright\Modules\Monitor\MonitorController())->purgeExpired() . " rows\n";

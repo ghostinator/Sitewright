@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-use RankMathWebapp\Core\ResponseException;
+use Sitewright\Core\ResponseException;
 
 $GLOBALS['__t'] = ['pass' => 0, 'fail' => 0, 'failures' => []];
 
@@ -52,28 +52,28 @@ function resp(callable $fn): array
 function testDbConfig(): array
 {
     return [
-        'host' => getenv('RMW_TEST_DB_HOST') ?: '127.0.0.1', 'port' => 3306, 'name' => 'rmw_test',
-        'user' => getenv('RMW_TEST_DB_USER') ?: 'root', 'pass' => getenv('RMW_TEST_DB_PASS') ?: '', 'prefix' => 'rm_',
+        'host' => getenv('SW_TEST_DB_HOST') ?: '127.0.0.1', 'port' => 3306, 'name' => 'sw_test',
+        'user' => getenv('SW_TEST_DB_USER') ?: 'root', 'pass' => getenv('SW_TEST_DB_PASS') ?: '', 'prefix' => 'sw_',
     ];
 }
 
 /** Fresh schema via the real migrations; returns the Database. */
-function freshDb(): RankMathWebapp\Core\Database
+function freshDb(): Sitewright\Core\Database
 {
     $c = testDbConfig();
-    $pdo = RankMathWebapp\Core\Database::connect($c, false);
-    $pdo->exec('DROP DATABASE IF EXISTS `rmw_test`');
-    $pdo->exec('CREATE DATABASE `rmw_test` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
-    foreach (['host', 'port', 'name', 'user', 'pass', 'prefix'] as $k) { RankMathWebapp\Core\Config::set("db.$k", $c[$k]); }
-    RankMathWebapp\Core\Database::reset();
-    $db = RankMathWebapp\Core\Database::getInstance();
-    (new RankMathWebapp\Core\Migrator($db->getConnection(), $c['prefix']))->run();
+    $pdo = Sitewright\Core\Database::connect($c, false);
+    $pdo->exec('DROP DATABASE IF EXISTS `sw_test`');
+    $pdo->exec('CREATE DATABASE `sw_test` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+    foreach (['host', 'port', 'name', 'user', 'pass', 'prefix'] as $k) { Sitewright\Core\Config::set("db.$k", $c[$k]); }
+    Sitewright\Core\Database::reset();
+    $db = Sitewright\Core\Database::getInstance();
+    (new Sitewright\Core\Migrator($db->getConnection(), $c['prefix']))->run();
     return $db;
 }
 
 function dbAvailable(): bool
 {
-    try { RankMathWebapp\Core\Database::connect(testDbConfig(), false); return true; } catch (Throwable) { return false; }
+    try { Sitewright\Core\Database::connect(testDbConfig(), false); return true; } catch (Throwable) { return false; }
 }
 
 /** Start the real app under php -S. @return array{port:int,proc:resource,base:string} */
@@ -83,9 +83,9 @@ function startServer(array $env = []): array
     $port = (int)substr(strrchr((string)stream_socket_get_name($sock, false), ':'), 1);
     fclose($sock);
     $c = testDbConfig();
-    $env = $env + ['RMW_DB_HOST' => $c['host'], 'RMW_DB_NAME' => $c['name'], 'RMW_DB_USER' => $c['user'], 'RMW_DB_PASS' => $c['pass'], 'PATH' => (string)getenv('PATH')];
+    $env = $env + ['SW_DB_HOST' => $c['host'], 'SW_DB_NAME' => $c['name'], 'SW_DB_USER' => $c['user'], 'SW_DB_PASS' => $c['pass'], 'PATH' => (string)getenv('PATH')];
     $proc = proc_open([PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=1', '-S', "127.0.0.1:$port", '-t', dirname(__DIR__) . '/public', __DIR__ . '/router.php'],
-        [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/tmp/rmw-server.log', 'a']], $pipes, dirname(__DIR__), $env);
+        [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/tmp/sw-server.log', 'a']], $pipes, dirname(__DIR__), $env);
     for ($i = 0; $i < 60; $i++) { if (@fsockopen('127.0.0.1', $port)) { break; } usleep(100000); }
     return ['port' => $port, 'proc' => $proc, 'base' => "http://127.0.0.1:$port"];
 }
@@ -156,7 +156,7 @@ final class TestHttp
 
 function seedAdmin(string $user = 'admin', string $pass = 'correct horse battery'): void
 {
-    $db = RankMathWebapp\Core\Database::getInstance();
+    $db = Sitewright\Core\Database::getInstance();
     $db->insert('users', ['username' => $user, 'email' => "$user@example.test", 'password' => password_hash($pass, PASSWORD_DEFAULT), 'display_name' => $user]);
 }
 
@@ -175,7 +175,7 @@ function fakeWeb(array $pages, array $dns = [], array $cfg = []): void
         if (is_callable($p)) { $p = $p($r); }
         return ['status' => $p[0], 'headers' => $p[1], 'body' => $p[2]];
     };
-    RankMathWebapp\Core\SafeHttpClient::setDefault(new RankMathWebapp\Core\SafeHttpClient($resolver, $transport, array_replace(RankMathWebapp\Core\Config::get('fetch'), $cfg)));
+    Sitewright\Core\SafeHttpClient::setDefault(new Sitewright\Core\SafeHttpClient($resolver, $transport, array_replace(Sitewright\Core\Config::get('fetch'), $cfg)));
 }
 
 function html(string $body, string $head = ''): array
@@ -185,7 +185,7 @@ function html(string $body, string $head = ''): array
 
 function call(string $class, string $method, array $request = [], array $params = []): array
 {
-    RankMathWebapp\Core\Request::fake($request);
+    Sitewright\Core\Request::fake($request);
     return resp(fn () => (new $class())->$method($params));
 }
 

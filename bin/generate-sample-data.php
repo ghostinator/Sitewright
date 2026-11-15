@@ -8,7 +8,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require dirname(__DIR__) . '/core/autoload.php';
 
-use RankMathWebapp\Core\Database;
+use Sitewright\Core\Database;
 
 if (!in_array('--yes', $argv, true)) { fwrite(STDERR, "This inserts FABRICATED demo rows (flagged is_sample). Re-run with --yes to confirm.\n"); exit(1); }
 

@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Modules\Sitemap;
+namespace Sitewright\Modules\Sitemap;
 
-use RankMathWebapp\Core\{Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
+use Sitewright\Core\{Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
 
 /** Plain XML URL sitemaps (the "general" type). Crawling is bounded, polite and goes through SafeHttpClient. */
 class SitemapController

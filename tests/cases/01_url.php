@@ -1,5 +1,5 @@
 <?php
-use RankMathWebapp\Core\Url;
+use Sitewright\Core\Url;
 
 // RFC 3986 §5.4 examples (base http://a/b/c/d;p?q)
 $base = 'http://a/b/c/d;p?q';

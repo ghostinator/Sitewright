@@ -5,7 +5,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require dirname(__DIR__) . '/core/autoload.php';
 
-use RankMathWebapp\Core\{Config, Database, Migrator};
+use Sitewright\Core\{Config, Database, Migrator};
 
 try {
     $m = new Migrator(Database::getInstance()->getConnection(), (string)Config::get('db.prefix'));

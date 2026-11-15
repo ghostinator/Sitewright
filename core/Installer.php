@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /** CLI installer logic (bin/install.php). There is no web installer. */
 final class Installer
@@ -17,7 +17,7 @@ final class Installer
         $name = (string)($in['name'] ?? '');
         $user = (string)($in['user'] ?? '');
         $pass = (string)($in['pass'] ?? '');
-        $prefix = (string)($in['prefix'] ?? 'rm_');
+        $prefix = (string)($in['prefix'] ?? 'sw_');
 
         $hostOk = preg_match('/^[A-Za-z0-9]([A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?$/D', $host) || filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6);
         if (!$hostOk) { throw new \InvalidArgumentException('Invalid database host'); }

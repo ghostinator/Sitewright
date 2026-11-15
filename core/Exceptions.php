@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 /** Carries a finished HTTP response out of controller code. Not an error. */
 final class ResponseException extends \Exception

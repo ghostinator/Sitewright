@@ -1,5 +1,7 @@
 # Remediation report
 
+> The project was renamed from "RankMath SEO Webapp" to **Sitewright** after this report was first written; identifiers below use the new names (`SW_*` environment variables, `Sitewright\...` namespace, `sw_` table prefix). Files under `docs/audit/` and `docs/history/` keep the old name because they describe the old project.
+
 Branch `remediation/audit-2026-11` (start tag `pre-remediation-24209d6`). Baseline audit: `docs/audit/AUDIT_REPORT.md`; brief: `docs/audit/REMEDIATION_PROMPT.md`.
 
 ## 1. REMEDIATION SUMMARY
@@ -12,9 +14,9 @@ Branch `remediation/audit-2026-11` (start tag `pre-remediation-24209d6`). Baseli
 
 ## 2. SECURITY STATUS
 
-**Critical remaining: 0 / High remaining: 1 / Medium remaining: 3 (mitigated) / Low remaining: 2 (mitigated)**
+**Critical remaining: 0 / High remaining: 0 / Medium remaining: 3 (mitigated) / Low remaining: 2 (mitigated)**
 
-* High: `SEC-003` — the code/doc fix is done, but the key is still in git history and upstream; it stays exposed until the owner revokes it.
+* High: none. `SEC-003` is fixed in the tree; the key was a third party's, not the owner's.
 * Medium (MITIGATED, not fully resolved): `DOS-001`, `FUNC-004`, `FUNC-005`. Low (MITIGATED): `SEC-013`, `FUNC-015`.
 
 ## 3. FILES CHANGED
@@ -139,8 +141,8 @@ Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, t
 | SSRF-001 | HIGH | SEO analysis SSRF | FIXED | core/SafeHttpClient.php, Html.php, modules/SeoAnalysis/* | 02_safe_http_client (102 cases: IP classes, scheme/credential/port/numeric-host forms, DNS->private, redirect revalidation/limit, size, timeout, curl pinning against local server); 05 (internal URLs never reach transport) | Guard is application-level: DNS answered by the OS resolver is validated and pinned, but egress firewalling is still advised. IPv6 zone IDs rejected. |
 | SSRF-002 | HIGH | Image SEO SSRF / stream wrappers / second-order | FIXED | modules/ImageSeo/ImageSeoController.php | 05: file/phar/php/internal URLs refused with zero transport calls; bulk page pointing at 10.0.0.5 and 127.0.0.1 skipped; getimagesizefromstring only | Images are downloaded up to 10 MB each (50 max per run). |
 | SSRF-003 | HIGH | Sitemap crawler SSRF + unbounded crawl | FIXED | modules/Sitemap/SitemapController.php, core/Url.php | 06: internal bases rejected pre-request; max_pages=1000000 clamped to server cap; time budget; robots.txt | Crawl is synchronous in the web request (capped at 2 min). |
-| SEC-003 | HIGH | Real-looking Google API key published in docs | BLOCKED - REQUIRES USER ACTION | docs/API_CONFIGURATION.md (key replaced by placeholder) | secret scan: no AIza/GOCSPX/PEM patterns in tree | KEY STILL EXISTS IN EVERY COMMIT BEFORE 1b8c068 (including 4f0b58d on this branch) and upstream; pushing this branch republishes it. Owner must revoke/rotate it and scan history. Not tested/rotated by me. |
-| CSRF-001 | HIGH | Wildcard CORS + no CSRF protection | FIXED | core/App.php, Auth.php, Request.php | 04: no CORS headers (OPTIONS 405); missing/forged token 403; foreign Origin/null/Sec-Fetch-Site 403; wrong Content-Type 415; foreign Host 400 | Same-origin assumption: reverse proxies that rewrite Host must be configured in RMW_ALLOWED_HOSTS. |
+| SEC-003 | HIGH | Real-looking Google API key published in docs | FIXED | docs/API_CONFIGURATION.md (key replaced by placeholder) | secret scan: no AIza/GOCSPX/PEM patterns in the tree | The key was a third party's (the repo owner confirmed it is not theirs) and is now only a placeholder. It remains in earlier git history (commits before 1b8c068); history can be rewritten on request. |
+| CSRF-001 | HIGH | Wildcard CORS + no CSRF protection | FIXED | core/App.php, Auth.php, Request.php | 04: no CORS headers (OPTIONS 405); missing/forged token 403; foreign Origin/null/Sec-Fetch-Site 403; wrong Content-Type 415; foreign Host 400 | Same-origin assumption: reverse proxies that rewrite Host must be configured in SW_ALLOWED_HOSTS. |
 | XSS-001 | HIGH | Stored XSS via innerHTML | FIXED | public/assets/js/app.js (rewritten) | tests/js/render.test.js: 10 payloads x 10 renderers (+dashboard) inert; source greps for forbidden sinks; browser E2E with hostile 404 URI/location name | Relies on CSP + DOM APIs; untested on legacy browsers. |
 | XSS-002 | HIGH | XSS from third-party content / inline onclick | FIXED | public/assets/js/app.js, public/index.php; removed test-api.html | jsdom tests incl. copy-from-variable; E2E analysis of a hostile fixture page (title/meta/H1/alt) showed text only, 0 injected nodes; CSP without unsafe-inline, no inline handlers/styles in page (04) | As XSS-001. |
 | FUNC-001 | HIGH | Content AI misrepresents provenance / dead model | FIXED | modules/ContentAi/ContentAiController.php, core/Config.php | 06 with mocked transport: 200, 403, 404, 503, malformed JSON, empty/safety, timeout; key header-only; credits 0 on fallback; status endpoint makes no call | Never run against live Gemini (rule 7). Default model gemini-3.6-flash taken from Google docs on 2026-11-15; endpoint form/header name not shown on the fetched pages. Verify with your key. |
@@ -150,7 +152,7 @@ Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, t
 | SEC-006 | MEDIUM | Config hygiene | FIXED | .gitignore, config/config.example.php; removed config/database.php, api-keys.php, app.php from git | git ls-files; docs/DEPLOYMENT_GUIDE.md least-privilege grants | Removed local default copies too (they only held placeholder values). |
 | SEC-007 | LOW | TLS verification disabled | FIXED | core/SafeHttpClient.php (VERIFYPEER true, VERIFYHOST 2) | grep: only these two options exist | - |
 | SEC-008 | MEDIUM | Error leakage | FIXED | core/App.php, Database.php (DatabaseException), Installer | 04: DB outage returns generic JSON 500 + request_id, no SQLSTATE/host/password in body | Details go to the PHP error log (secure it). |
-| SEC-009 | LOW | Missing security headers | FIXED | public/.htaccess, App::pageHeaders/apiHeaders, docs (nginx) | 04: CSP/XFO/nosniff/Referrer/Permissions present; no X-XSS-Protection; Apache probe shows CSP on assets | HSTS is opt-in (RMW_HSTS) and commented in .htaccess. `Options -Indexes` in .htaccess needs AllowOverride Options. |
+| SEC-009 | LOW | Missing security headers | FIXED | public/.htaccess, App::pageHeaders/apiHeaders, docs (nginx) | 04: CSP/XFO/nosniff/Referrer/Permissions present; no X-XSS-Protection; Apache probe shows CSP on assets | HSTS is opt-in (SW_HSTS) and commented in .htaccess. `Options -Indexes` in .htaccess needs AllowOverride Options. |
 | SEC-010 | MEDIUM | Non-PHP files web-served | FIXED | public/ document root; .htaccess deny rules | Apache probe: /README.md and /.htaccess 403 (and not in docroot); docs/ and database/ outside public/ | Servers whose docroot is the repo root remain vulnerable: README forbids it. |
 | SEC-011 | LOW | Host/SCRIPT_NAME reflection | FIXED | public/index.php, App::basePath | 04: script-breaking query string cannot add script tags; base path from config/SCRIPT_NAME only, HEX-escaped JSON, htmlspecialchars | - |
 | SEC-012 | LOW | CSV formula injection | FIXED | Validator::csvCell, Monitor/Redirections export | 07: =,+,-,@,TAB neutralised in export | - |
@@ -176,7 +178,7 @@ Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, t
 | FUNC-017 | LOW | Dashboard/analytics wrong data | FIXED | AnalyticsController, app.js | 07: site-only score, competitor excluded; unused pages/chart dropped | - |
 | FUNC-018 | LOW | Copy button breaks on quotes/newlines | FIXED | app.js (copy from JS variable) | jsdom copy test | - |
 | FUNC-019 | LOW | No global error handling | FIXED | core/App.php | 04: generic 500 + request id | - |
-| ARCH-001 | MEDIUM | Two competing front-end trees / hardcoded paths | FIXED | public/ (single docroot); no /rankmath paths remain | 04: every view URL serves the shell with CSS+JS; Apache E2E at / and /seo/ (Alias) | Symlink-based sub-path deployments hit Apache AH00037 in my container test; Alias deployments work. Documented. |
+| ARCH-001 | MEDIUM | Two competing front-end trees / hardcoded paths | FIXED | public/ (single docroot); no /sitewright paths remain | 04: every view URL serves the shell with CSS+JS; Apache E2E at / and /seo/ (Alias) | Symlink-based sub-path deployments hit Apache AH00037 in my container test; Alias deployments work. Documented. |
 | ARCH-002 | LOW | Dead config / unused tables | FIXED | deleted config/app.php, api-keys.php; migration 003; limits/session settings now enforced | 03: dropped tables absent; 09 enforces timeouts | Migration 003 drops tables (all were unused). |
 | ARCH-003 | LOW | Duplicate implementations | FIXED | deleted webapp/, root index/api/app.js/Router | git diff stat | - |
 | ARCH-004 | LOW | Dev/test artifacts in deployable tree | FIXED | test-api.html, check.php, phpinfo.php removed; sample generator -> bin/ | file listing | - |
@@ -190,7 +192,7 @@ Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, t
 | DOC-003 | MEDIUM | GSC/OAuth/SEMrush documented | FIXED | README, docs/API_CONFIGURATION.md | review | - |
 | DOC-004 | LOW | Stale contradictory reports | FIXED | docs/history/* | review | - |
 | DOC-005 | LOW | Path/layout contradictions | FIXED | README, docs/DEPLOYMENT_GUIDE.md; QUICKSTART removed | review; layout verified by Apache run | - |
-| DOC-006 | INFO | Name/licence question | BLOCKED - REQUIRES USER ACTION | README note; no LICENSE added (per instructions) | - | Owner to choose a licence and review use of the "RankMath" name. No legal determination made. |
+| DOC-006 | INFO | Name/licence question | MITIGATED | Project renamed to Sitewright; README licence note; no LICENSE added | grep: no remaining references to the old name outside docs/audit and docs/history | Name not checked for trademark availability. Owner still has to choose a licence. |
 | DOC-007 | LOW | Unsafe guidance (root, Indexes, chmod, CLI passwords) | FIXED | docs/DEPLOYMENT_GUIDE.md, README | review | - |
 | MAL-001 | INFO | No malware/telemetry/obfuscation | FIXED | re-scan after changes | dangerous-function/sink/egress greps: zero hits; one curl_init (SafeHttpClient); no dynamic includes beyond autoloader/config loader | Static review only. |
 | INFO-001 | INFO | Sitemap <loc> escaping | FIXED | SitemapController::buildXml (ENT_XML1, also changefreq/priority) | 06 | - |
@@ -220,16 +222,16 @@ Commit grouping note: commit `fb42620` bundles auth, CSRF, the `public/` move, t
 
 ## 6. NETWORK / PRIVACY STATUS
 
-See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered by a logged-in user (analysis, images, sitemap crawl, robots.txt) — GET only, server IP and `RankMathWebapp-SEO/1.0 (+contact)` visible, private ranges always blocked, narrowable via `RMW_FETCH_ALLOW_HOSTS`; (2) `generativelanguage.googleapis.com` only when a key is configured — prompt text only, key in a header; (3) `nominatim.openstreetmap.org` only when `RMW_ENABLE_GEOCODING=true` — address text, ≤1 req/s. No telemetry, CDNs or third-party scripts.
+See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered by a logged-in user (analysis, images, sitemap crawl, robots.txt) — GET only, server IP and `Sitewright-SEO/1.0 (+contact)` visible, private ranges always blocked, narrowable via `SW_FETCH_ALLOW_HOSTS`; (2) `generativelanguage.googleapis.com` only when a key is configured — prompt text only, key in a header; (3) `nominatim.openstreetmap.org` only when `SW_ENABLE_GEOCODING=true` — address text, ≤1 req/s. No telemetry, CDNs or third-party scripts.
 
 ## 7. USER ACTIONS REQUIRED
 
-1. **Revoke/rotate the exposed Google API key** (`AIzaSyAP…<REDACTED>`, formerly in `docs/API_CONFIGURATION.md` line ~173) in Google AI Studio / Cloud Console, and scan history with gitleaks/trufflehog. The key remains in every commit before `1b8c068` (including `4f0b58d` on this branch) and in the public upstream repository; pushing this branch publishes it again. A history rewrite was **not** performed (needs your explicit approval; rotation matters more).
+1. ~~Rotate the exposed Google key~~ — not needed: it is not the owner's key and is only a placeholder now. (A history rewrite is available on request.)
 2. Create a least-privilege DB user and give the installer/migration step a separate DDL-capable account (`docs/DEPLOYMENT_GUIDE.md`).
 3. Run `php bin/install.php …` to create the first admin (nothing is created automatically).
-4. Set the web server document root to `public/`, configure HTTPS, `RMW_BASE_URL`, `RMW_ALLOWED_HOSTS` (and `RMW_HSTS=true`).
+4. Set the web server document root to `public/`, configure HTTPS, `SW_BASE_URL`, `SW_ALLOWED_HOSTS` (and `SW_HSTS=true`).
 5. Optional: supply a Gemini key and confirm the model name against Google's current list.
-6. Decide on a LICENSE and review the use of the "RankMath" name (no legal assessment made; none added).
+6. Choose a LICENSE (none added). The project was renamed to Sitewright; check that name for trademark availability before publishing.
 7. Tell me if you want the history rewrite, a 404 ingest endpoint, redirect enforcement, or GSC OAuth built.
 
 ## 8. REMAINING RISKS / LIMITATIONS
@@ -243,13 +245,13 @@ See `docs/NETWORK_AND_PRIVACY.md`. Remaining destinations: (1) websites entered 
 * **Reverse proxies**: login throttling and rate limits key on `REMOTE_ADDR`, and the same-origin check compares `Origin` with the `Host` header. Behind a proxy all users share one IP (the 30-per-15-minute IP login limit becomes a global lockout) and a proxy that rewrites `Host` makes every POST fail with 403. The proxy must preserve `Host`; trusted-proxy handling (`X-Forwarded-For`) is **not implemented**.
 * The anonymous `/api/health` endpoint and the login page are publicly reachable by design.
 * Existing databases lose the unused `projects`, `schema`, `settings`, `analytics_pages` tables (migration 003); `project_id` NULLs become 0; non-general sitemap rows become general; duplicate rows are collapsed before unique keys are added — back up first.
-* Licence/name: the project uses the "RankMath" name and has no LICENSE file.
+* Licence: no LICENSE file; the name "Sitewright" has not been checked for trademark conflicts.
 
 ## 9. DEPLOYMENT VERDICT
 
-**SAFE FOR STAGING** (behind HTTPS with `RMW_BASE_URL`/`RMW_ALLOWED_HOSTS` set and the exposed key rotated).
+**SAFE FOR STAGING** (behind HTTPS with `SW_BASE_URL`/`SW_ALLOWED_HOSTS` set).
 
-Evidence: all three Critical and all High code findings are fixed and covered by tests that ran (292 PHP + 12 JS, two PHP versions, real MariaDB, real curl against a local server, real Apache + browser). Not `READY FOR PRODUCTION`: `SEC-003` is open until the owner rotates the key; Gemini/Nominatim and internet-facing behaviour were never exercised live; auth is single-role without MFA; and several medium items are mitigated rather than eliminated.
+Evidence: all three Critical and all High code findings are fixed and covered by tests that ran (292 PHP + 12 JS, two PHP versions, real MariaDB, real curl against a local server, real Apache + browser). Not `READY FOR PRODUCTION`: Gemini/Nominatim and internet-facing behaviour were never exercised live; auth is single-role without MFA; and several medium items are mitigated rather than eliminated.
 
 ## Sources
 

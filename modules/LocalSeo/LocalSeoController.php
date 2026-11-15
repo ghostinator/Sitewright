@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Modules\LocalSeo;
+namespace Sitewright\Modules\LocalSeo;
 
-use RankMathWebapp\Core\{Config, Database, FetchException, RateLimiter, Request, Response, SafeHttpClient, Validator};
+use Sitewright\Core\{Config, Database, FetchException, RateLimiter, Request, Response, SafeHttpClient, Validator};
 
 /**
  * Business locations + LocalBusiness JSON-LD. Geocoding via OpenStreetMap Nominatim is OPT-IN
- * (enable_geocoding / RMW_ENABLE_GEOCODING): when on, the address text you enter is sent to nominatim.openstreetmap.org.
+ * (enable_geocoding / SW_ENABLE_GEOCODING): when on, the address text you enter is sent to nominatim.openstreetmap.org.
  */
 class LocalSeoController
 {

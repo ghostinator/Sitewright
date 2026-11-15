@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Modules\ImageSeo;
+namespace Sitewright\Modules\ImageSeo;
 
-use RankMathWebapp\Core\{Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
+use Sitewright\Core\{Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
 
 /**
  * Image checks: alt text present, file size, pixel dimensions. Bytes are downloaded through SafeHttpClient

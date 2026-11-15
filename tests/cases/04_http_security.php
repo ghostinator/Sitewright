@@ -1,5 +1,5 @@
 <?php
-use RankMathWebapp\Core\{App, Router};
+use Sitewright\Core\{App, Router};
 
 if (!dbAvailable()) { test('database available', fn () => ok(false, 'MariaDB not reachable')); return; }
 
@@ -49,12 +49,12 @@ test('login: requires CSRF token even for the login request', function () use ($
 $user = new TestHttp($base);
 test('login success: session id regenerated, token rotated, cookie flags set', function () use ($user) {
     $cfg = $user->bootstrap();
-    $before = $user->cookies['rmw_session'] ?? '';
+    $before = $user->cookies['sw_session'] ?? '';
     $firstToken = $user->csrf;
     ok($before !== '' && $firstToken, 'pre-login session + token');
     $r = $user->req('POST', '/api/auth/login', ['username' => 'admin', 'password' => 'correct horse battery'], ['Content-Type' => 'application/json', 'X-CSRF-Token' => $firstToken]);
     eq($r['status'], 200);
-    ok(($user->cookies['rmw_session'] ?? '') !== $before, 'session id must change on login');
+    ok(($user->cookies['sw_session'] ?? '') !== $before, 'session id must change on login');
     ok($r['json']['data']['csrf_token'] !== $firstToken, 'CSRF token must rotate on login');
     $user->csrf = $r['json']['data']['csrf_token'];
     $sc = implode(' | ', $r['raw_set_cookie']);
@@ -91,7 +91,7 @@ test('Host header validation (DNS rebinding): foreign Host rejected on API and p
 
 // ---- SQLI-001 / FUNC-016 ---------------------------------------------------------------------
 foreach ([
-    'order_by=id;SELECT SLEEP(4)', 'order_by=(SELECT SLEEP(4))', 'order_by=IF(1=1,SLEEP(4),0)', 'order=ASC,(SELECT SLEEP(4))', 'order=DESC;DROP TABLE rm_users',
+    'order_by=id;SELECT SLEEP(4)', 'order_by=(SELECT SLEEP(4))', 'order_by=IF(1=1,SLEEP(4),0)', 'order=ASC,(SELECT SLEEP(4))', 'order=DESC;DROP TABLE sw_users',
     'per_page=1;SELECT SLEEP(4)', 'per_page=1%20UNION%20SELECT%20password,2,3,4,5,6,7,8,9,10%20FROM%20rm_users', 'page=1;SELECT SLEEP(4)', 'page=-5', 'page=abc', 'per_page=0', 'per_page=100000', 'project_id=1%20OR%201=1',
 ] as $qs) {
     test("getLogs injection payload neutralised: $qs", function () use ($user, $qs) {
@@ -103,7 +103,7 @@ foreach ([
         ok($r['json']['data']['pagination']['current_page'] >= 1);
     });
 }
-test('users table still intact after payloads', fn () => eq((int)$db->fetchOne('SELECT COUNT(*) c FROM rm_users')['c'], 1));
+test('users table still intact after payloads', fn () => eq((int)$db->fetchOne('SELECT COUNT(*) c FROM sw_users')['c'], 1));
 
 // ---- headers / page ----------------------------------------------------------------------------
 test('security headers on API and page; CSP has no unsafe-inline/eval', function () use ($user, $base) {
@@ -155,7 +155,7 @@ test('login throttling: 429 after repeated failures; correct password blocked wh
 stopServer($srv);
 
 // ---- SEC-008 / FUNC-019: DB outage returns generic errors only ----------------------------------
-$bad = startServer(['RMW_DB_PASS' => 'definitely-wrong', 'RMW_DB_HOST' => testDbConfig()['host']]);
+$bad = startServer(['SW_DB_PASS' => 'definitely-wrong', 'SW_DB_HOST' => testDbConfig()['host']]);
 test('database failure: generic JSON 500 with request id, no internals leaked', function () use ($bad) {
     $h = new TestHttp($bad['base']);
     $page = $h->bootstrap();                       // login page does not need the DB

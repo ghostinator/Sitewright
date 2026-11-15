@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RankMathWebapp\Core;
+namespace Sitewright\Core;
 
 use PDO;
 use PDOException;
@@ -72,7 +72,7 @@ final class Database
         return $this->prefix;
     }
 
-    /** Prefixed table name, e.g. t('seo_analysis') => rm_seo_analysis. */
+    /** Prefixed table name, e.g. t('seo_analysis') => sw_seo_analysis. */
     public function t(string $table): string
     {
         // Table names may start with a digit (404_monitor); the validated prefix keeps the full name a legal identifier.

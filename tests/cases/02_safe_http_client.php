@@ -1,12 +1,12 @@
 <?php
-use RankMathWebapp\Core\{SafeHttpClient, UrlRejectedException, BlockedAddressException, FetchException,
+use Sitewright\Core\{SafeHttpClient, UrlRejectedException, BlockedAddressException, FetchException,
     TooManyRedirectsException, FetchTimeoutException, ResponseTooLargeException};
 
 /** Client with scripted DNS and transport. $pages: url => [status, headers, body]; $dns: host => ips. */
 function mkClient(array $pages = [], array $dns = [], array $cfgOver = [], ?array &$log = null): SafeHttpClient
 {
     $log = [];
-    $cfg = array_replace(RankMathWebapp\Core\Config::get('fetch'), $cfgOver);
+    $cfg = array_replace(Sitewright\Core\Config::get('fetch'), $cfgOver);
     $resolver = static fn (string $h): array => $dns[$h] ?? ['93.184.216.34'];
     $transport = static function (array $r) use ($pages, &$log): array {
         $log[] = $r;
@@ -130,7 +130,7 @@ test('timeout passed to transport is capped by deadline and config', function ()
 
 // ---- real curl transport against a local server (no external network) ------
 $serverPort = null; $proc = null;
-$serverDir = sys_get_temp_dir() . '/rmw-fixture-' . getmypid();
+$serverDir = sys_get_temp_dir() . '/sw-fixture-' . getmypid();
 @mkdir($serverDir);
 file_put_contents($serverDir . '/router.php', <<<'PHP'
 <?php
@@ -147,12 +147,12 @@ $proc = proc_open([PHP_BINARY, '-S', "127.0.0.1:$serverPort", $serverDir . '/rou
 for ($i = 0; $i < 50; $i++) { if (@fsockopen('127.0.0.1', $serverPort)) { break; } usleep(100000); }
 $real = static fn (array $over = []) => new SafeHttpClient(
     static fn (string $h): array => ['127.0.0.1'], null,
-    array_replace(RankMathWebapp\Core\Config::get('fetch'), ['dev_allow_cidrs' => ['127.0.0.0/8'], 'allow_ports' => [$serverPort]], $over)
+    array_replace(Sitewright\Core\Config::get('fetch'), ['dev_allow_cidrs' => ['127.0.0.0/8'], 'allow_ports' => [$serverPort]], $over)
 );
 test('curl transport: pinned connection reaches validated IP for an unresolvable name', function () use ($real, $serverPort) {
     $r = $real()->get("http://pinned.test:$serverPort/hostecho");
     eq($r['status'], 200);
-    ok(str_starts_with($r['body'], "pinned.test:$serverPort|RankMathWebapp-SEO/1.0"), $r['body']);
+    ok(str_starts_with($r['body'], "pinned.test:$serverPort|Sitewright-SEO/1.0"), $r['body']);
 });
 test('curl transport: size cap aborts streaming download', function () use ($real, $serverPort) {
     throws(ResponseTooLargeException::class, fn () => $real()->get("http://pinned.test:$serverPort/big", ['max_bytes' => 100000]));
@@ -166,12 +166,12 @@ test('curl transport: redirect hop is revalidated (dev CIDR removed => blocked)'
     // First hop allowed via dev CIDR, but the redirect target 127.0.0.1 literal is checked against the same list: allowed here,
     // so assert the redirect IS followed when permitted and counted.
     $c = new SafeHttpClient(static fn ($h) => ['127.0.0.1'], null,
-        array_replace(RankMathWebapp\Core\Config::get('fetch'), ['dev_allow_cidrs' => ['127.0.0.0/8'], 'allow_ports' => [$serverPort]]));
+        array_replace(Sitewright\Core\Config::get('fetch'), ['dev_allow_cidrs' => ['127.0.0.0/8'], 'allow_ports' => [$serverPort]]));
     $r = $c->get("http://pinned.test:$serverPort/redir");
     eq(count($r['redirects']), 1); eq($r['status'], 200);
 });
 test('curl transport: loopback refused by default (no dev CIDR)', function () use ($serverPort) {
-    $c = new SafeHttpClient(static fn ($h) => ['127.0.0.1'], null, array_replace(RankMathWebapp\Core\Config::get('fetch'), ['allow_ports' => [$serverPort]]));
+    $c = new SafeHttpClient(static fn ($h) => ['127.0.0.1'], null, array_replace(Sitewright\Core\Config::get('fetch'), ['allow_ports' => [$serverPort]]));
     throws(BlockedAddressException::class, fn () => $c->get("http://pinned.test:$serverPort/ok"));
 });
 if (is_resource($proc)) { proc_terminate($proc); proc_close($proc); }

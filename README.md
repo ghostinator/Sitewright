@@ -1,4 +1,4 @@
-# RankMath SEO Webapp
+# Sitewright
 
 A small, self-hosted PHP + vanilla-JS toolkit for a few common on-page SEO tasks. The audit found no code from any commercial SEO plugin in this repository, and the app does not implement "all" features of any such product.
 
@@ -28,19 +28,19 @@ A small, self-hosted PHP + vanilla-JS toolkit for a few common on-page SEO tasks
 ## Install (CLI)
 
 ```bash
-git clone <repo> && cd RankMath-SEO-Webapp
+git clone <repo> && cd sitewright
 # Create a MariaDB database/user. Use a privileged account for this step only (see docs/DEPLOYMENT_GUIDE.md).
-export RMW_DB_PASS='…'                       # never put secrets on the command line
-export RMW_ADMIN_PASSWORD='at least 12 characters'
-php bin/install.php --db-host=127.0.0.1 --db-name=rankmath --db-user=rm_admin \
+export SW_DB_PASS='…'                       # never put secrets on the command line
+export SW_ADMIN_PASSWORD='at least 12 characters'
+php bin/install.php --db-host=127.0.0.1 --db-name=sitewright --db-user=sw_admin \
                     --admin-user=admin --admin-email=you@example.com --create-db
 ```
 
 The installer validates every input, applies the migrations, creates the first administrator (no default account exists), writes `config/config.php` (mode 0600) and a lock file; it refuses to run twice. There is no web installer.
 
-Point the web server's **document root at `public/`** and set `RMW_BASE_URL` and `RMW_ALLOWED_HOSTS` (see below). Upgrade later with `php bin/migrate.php`.
+Point the web server's **document root at `public/`** and set `SW_BASE_URL` and `SW_ALLOWED_HOSTS` (see below). Upgrade later with `php bin/migrate.php`.
 
-Quick local try-out without Apache: `RMW_DB_NAME=… RMW_DB_USER=… RMW_DB_PASS=… php -S 127.0.0.1:8080 -t public tests/router.php`.
+Quick local try-out without Apache: `SW_DB_NAME=… SW_DB_USER=… SW_DB_PASS=… php -S 127.0.0.1:8080 -t public tests/router.php`.
 
 ## Configuration
 
@@ -48,16 +48,16 @@ Quick local try-out without Apache: `RMW_DB_NAME=… RMW_DB_USER=… RMW_DB_PASS
 
 | Variable | Purpose |
 |---|---|
-| `RMW_DB_HOST` `RMW_DB_PORT` `RMW_DB_NAME` `RMW_DB_USER` `RMW_DB_PASS` `RMW_DB_PREFIX` | Database (runtime account needs only `SELECT, INSERT, UPDATE, DELETE`) |
-| `RMW_BASE_URL` | Public URL incl. sub-path, e.g. `https://seo.example.com` |
-| `RMW_ALLOWED_HOSTS` | Comma-separated hostnames accepted in the `Host` header (default: `localhost,127.0.0.1,[::1]`) — protects against DNS rebinding |
-| `RMW_GEMINI_API_KEY` / `RMW_GEMINI_MODEL` | Optional Content AI (default model `gemini-3.6-flash`; models are retired regularly — check Google's list) |
-| `RMW_ENABLE_GEOCODING` | `true` sends location addresses to nominatim.openstreetmap.org (default `false`) |
-| `RMW_CONTACT` | URL/e-mail added to the User-Agent of outbound requests |
-| `RMW_FETCH_ALLOW_HOSTS` / `RMW_FETCH_BLOCK_HOSTS` | **Outbound** host allow/block lists (separate from `RMW_ALLOWED_HOSTS`; the IP safety checks always apply) |
-| `RMW_FETCH_DEV_ALLOW_CIDRS` | **Development only**: exempt ranges from the private-address block (e.g. to analyse a local test site) |
-| `RMW_CONFIG_FILE` | Path of the config file if it lives outside the repo (default `config/config.php`) |
-| `RMW_HSTS`, `RMW_DEBUG` | HSTS header when served over HTTPS; verbose errors (never in production) |
+| `SW_DB_HOST` `SW_DB_PORT` `SW_DB_NAME` `SW_DB_USER` `SW_DB_PASS` `SW_DB_PREFIX` | Database (runtime account needs only `SELECT, INSERT, UPDATE, DELETE`) |
+| `SW_BASE_URL` | Public URL incl. sub-path, e.g. `https://seo.example.com` |
+| `SW_ALLOWED_HOSTS` | Comma-separated hostnames accepted in the `Host` header (default: `localhost,127.0.0.1,[::1]`) — protects against DNS rebinding |
+| `SW_GEMINI_API_KEY` / `SW_GEMINI_MODEL` | Optional Content AI (default model `gemini-3.6-flash`; models are retired regularly — check Google's list) |
+| `SW_ENABLE_GEOCODING` | `true` sends location addresses to nominatim.openstreetmap.org (default `false`) |
+| `SW_CONTACT` | URL/e-mail added to the User-Agent of outbound requests |
+| `SW_FETCH_ALLOW_HOSTS` / `SW_FETCH_BLOCK_HOSTS` | **Outbound** host allow/block lists (separate from `SW_ALLOWED_HOSTS`; the IP safety checks always apply) |
+| `SW_FETCH_DEV_ALLOW_CIDRS` | **Development only**: exempt ranges from the private-address block (e.g. to analyse a local test site) |
+| `SW_CONFIG_FILE` | Path of the config file if it lives outside the repo (default `config/config.php`) |
+| `SW_HSTS`, `SW_DEBUG` | HSTS header when served over HTTPS; verbose errors (never in production) |
 
 Run `php bin/check-env.php` to verify the environment (CLI only).
 
@@ -93,4 +93,4 @@ Layout: `public/` (only web-exposed directory) · `core/` framework · `modules/
 
 ## License
 
-No license file is included yet; the repository owner must choose one. The project name references a third-party product name; the owner should review naming/trademark questions (not legal advice).
+No license file is included yet; the repository owner must choose one. The name "Sitewright" has not been checked for trademark conflicts.
