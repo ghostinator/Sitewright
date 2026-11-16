@@ -28,7 +28,7 @@ loki.write "default" { endpoint { url = "http://LOKI:3100/loki/api/v1/push" } }
 Logrotate: `/var/log/sitewright/*.log { daily rotate 14 compress missingok copytruncate create 0640 www-data adm }`.
 
 ## Alerts (email, Teams, Telegram)
-Configure in `config/config.php` (or `SW_*` variables). Secrets never go in git or chat: on the staging VM use `sudo sw-set-secrets` (hidden prompts).
+Configure under **Settings → Mail & alerts** (there is a "Send test mail to me" button), or in `config/config.php` / `SW_*` variables (these outrank nothing but a Settings value you have not saved; environment variables outrank everything). Secrets never go in git or chat: on the staging VM use `sudo sw-set-secrets` (hidden prompts).
 ```php
 'mail' => ['host' => 'postal.lan', 'port' => 587, 'encryption' => 'starttls', 'username' => '…', 'password' => '…', 'from' => 'sitewright@example.com', 'from_name' => 'Sitewright', 'verify_tls' => true],
 'alerts' => ['email_to' => ['you@example.com'], 'teams_webhook' => 'https://…webhook.office.com/…', 'telegram_token' => '123456:ABC…', 'telegram_chat_id' => '123456789', 'cooldown' => 300, 'login_failures' => 10],

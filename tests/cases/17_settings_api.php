@@ -105,3 +105,14 @@ test('settings: changes are visible to the worker between jobs (Config::refreshS
     eq($seen, [120, 45]);
     foreach (['SW_DB_HOST', 'SW_DB_PORT', 'SW_DB_NAME', 'SW_DB_USER', 'SW_DB_PASS', 'SW_DB_PREFIX', 'SW_LOG_FILE'] as $k) { putenv($k); } Config::reset();
 });
+
+test('bin/settings-check.php warns when a config.php change would be shadowed by a saved setting or an environment variable', function () use ($db) {
+    $db->query('TRUNCATE sw_settings'); $db->query("INSERT INTO sw_settings (skey, svalue) VALUES ('limits.crawl_seconds', '45')");
+    $c = testDbConfig();
+    $env = sprintf('SW_DB_HOST=%s SW_DB_NAME=%s SW_DB_USER=%s SW_DB_PASS=%s SW_MAIL_FROM=x@example.test SW_CONFIG_FILE=/nonexistent', escapeshellarg($c['host']), 'sw_test', escapeshellarg($c['user']), escapeshellarg($c['pass']));
+    $run = fn (string $json) => (string)shell_exec('cd ' . escapeshellarg(dirname(__DIR__, 2)) . " && $env php bin/settings-check.php " . escapeshellarg($json) . ' 2>&1');
+    $out = $run('{"limits":{"crawl_seconds":10,"crawl_delay_ms":5},"mail":{"from":"a@b.co"}}');
+    ok(str_contains($out, 'limits.crawl_seconds also has a value saved under Settings'), $out); ok(!str_contains($out, 'crawl_delay_ms'));
+    ok(str_contains($out, 'mail.from is set by the environment variable SW_MAIL_FROM'), $out);
+    eq($run('{"mail":{"host":"h"}}'), '', 'silent when nothing shadows it'); eq($run('not json'), '');
+});
