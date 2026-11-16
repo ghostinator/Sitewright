@@ -94,3 +94,9 @@ test('settings: cleanup of the test environment', function () {
     foreach (['SW_DB_HOST', 'SW_DB_PORT', 'SW_DB_NAME', 'SW_DB_USER', 'SW_DB_PASS', 'SW_DB_PREFIX', 'SW_APP_KEY', 'SW_LOG_FILE'] as $k) { putenv($k); }
     Config::reset(); ok(true);
 });
+
+test('docs/SETTINGS_REFERENCE.md is exactly what bin/settings-doc.php generates (regenerate it after changing the registry)', function () {
+    $root = dirname(__DIR__, 2);
+    $generated = (string)shell_exec('cd ' . escapeshellarg($root) . ' && php bin/settings-doc.php 2>&1');
+    eq(file_get_contents($root . '/docs/SETTINGS_REFERENCE.md'), $generated, 'run: php bin/settings-doc.php > docs/SETTINGS_REFERENCE.md');
+});
