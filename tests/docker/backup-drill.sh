@@ -7,7 +7,7 @@ IMG="${1:-mariadb:10.11}"; N=sw-drill-$$
 trap 'docker rm -f $N >/dev/null 2>&1 || true' EXIT
 docker run -d --name $N -e MARIADB_ROOT_PASSWORD=pw -e MYSQL_ROOT_PASSWORD=pw -e MARIADB_DATABASE=drill -e MYSQL_DATABASE=drill "$IMG" >/dev/null
 CLI=mariadb; case "$IMG" in mysql*) CLI=mysql ;; esac
-for i in $(seq 1 60); do docker exec $N $CLI -uroot -ppw -e 'select 1' >/dev/null 2>&1 && break; sleep 1; done
+for i in $(seq 1 60); do docker exec $N $CLI -h127.0.0.1 -uroot -ppw -e 'select 1' >/dev/null 2>&1 && break; sleep 1; done
 docker exec $N sh -c "$CLI -uroot -ppw drill" < /dev/null
 for f in database/migrations/*.sql; do sed 's/{{prefix}}/sw_/g' "$f" | docker exec -i $N $CLI -uroot -ppw drill; done
 docker exec $N $CLI -uroot -ppw drill -e "INSERT INTO sw_users (username,email,password) VALUES ('a','a@x.test','h'),('b','b@x.test','h'); INSERT INTO sw_audit_log (username,action) VALUES ('a','x'),('b','y'),('c','z');"

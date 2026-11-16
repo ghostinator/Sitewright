@@ -3,4 +3,4 @@
 useDefault = true
 [allowlist]
 description = "synthetic test credentials"
-paths = ['''tests/docker/wordpress-e2e\.sh''', '''tests/cases/12_jobs_mail_alerts\.php''']
+paths = ['''tests/docker/wordpress-e2e\.sh''', '''tests/cases/12_jobs_mail_alerts\.php''', '''tests/cases/17_settings_api\.php''', '''tests/cases/16_settings_core\.php''']
