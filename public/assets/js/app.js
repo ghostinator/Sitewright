@@ -333,7 +333,7 @@
             body.push(ctl);
             if (s.unit) body.push(el('span', { class: 'settings-unit', text: s.unit }));
         }
-        const meta = [el('span', { class: 'mono', text: s.key + (s.env ? ' · ' + s.env : '') })];
+        const meta = [el('span', { class: 'mono settings-key', text: s.key + (s.env ? ' · ' + s.env : '') })];
         if (s.locked) meta.push(el('span', { text: 'Set by ' + s.env + ' on the server; change it there.' }));
         else if (s.source === 'saved') {
             meta.push(el('span', { text: 'Reset would use the ' + s.fallback + '.' }));

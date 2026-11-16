@@ -50,7 +50,6 @@ if ($user && Auth::needsMfaEnrolment() && $view !== 'account') { header('Locatio
 $base = App::basePath();
 $config = ['basePath' => $base, 'csrfToken' => $csrf, 'view' => $resetPage ? 'reset' : $view, 'user' => $user ? ['username' => $user['username'], 'role' => $user['role']] : null, 'mfaRequired' => $user ? Auth::needsMfaEnrolment() : false];
 $configJson = json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
-$icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔️', 'analytics' => '📈', 'content-ai' => '🤖', 'local-seo' => '📍', 'image-seo' => '🖼️', 'sitemaps' => '🗺️', '404-monitor' => '⚠️', 'redirections' => '↪️', 'account' => '👤', 'sites' => '🌐', 'users' => '👥', 'audit' => '📜', 'settings' => '⚙️'];
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -66,6 +65,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
 <?php if (!$user && $resetPage): ?>
     <main class="login-wrap">
         <form id="reset-form" class="card login-card" autocomplete="off">
+            <p class="brand">Sitewright</p>
             <h2>Choose a new password</h2>
             <div id="reset-error" class="alert alert-error hidden" role="alert"></div>
             <div id="reset-done" class="alert hidden" role="status"></div>
@@ -77,6 +77,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
 <?php elseif (!$user): ?>
     <main class="login-wrap">
         <form id="login-form" class="card login-card" autocomplete="on">
+            <p class="brand">Sitewright</p>
             <h2>Sign in</h2>
             <div id="login-error" class="alert alert-error hidden" role="alert"></div>
             <div class="form-group"><label for="login-username">Username</label><input id="login-username" name="username" type="text" autocomplete="username" required maxlength="60"></div>
@@ -86,6 +87,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
             <p><button type="button" class="btn btn-link" id="forgot-toggle">Forgot your password?</button></p>
         </form>
         <form id="forgot-form" class="card login-card hidden" autocomplete="on">
+            <p class="brand">Sitewright</p>
             <h2>Reset your password</h2>
             <div id="forgot-msg" class="alert hidden" role="status"></div>
             <div class="form-group"><label for="forgot-email">E-mail address</label><input id="forgot-email" name="email" type="email" autocomplete="email" required maxlength="100"></div>
@@ -96,12 +98,28 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
 <?php else: ?>
     <div class="app-container">
         <aside class="sidebar">
-            <div class="logo"><h2>🚀 Sitewright</h2><p>SEO Toolkit</p></div>
-            <nav class="nav-menu">
-<?php foreach ($views as $slugName => $title): if (in_array($slugName, $adminViews, true) && $user['role'] !== 'admin') { continue; } if (Auth::needsMfaEnrolment() && $slugName !== 'account') { continue; } ?>
-                <a href="<?= $h($base . ($slugName === 'dashboard' ? '/' : '/' . $slugName)) ?>" class="nav-item" data-view="<?= $h($slugName) ?>"><span class="icon"><?= $icons[$slugName] ?></span><?= $h($title) ?></a>
-<?php endforeach; ?>
+            <div class="logo"><h2>Sitewright</h2><p>SEO toolkit</p></div>
+<?php
+$navGroups = ['SEO tools' => [], 'Admin' => []];
+foreach ($views as $slugName => $title) {
+    if (in_array($slugName, $adminViews, true) && $user['role'] !== 'admin') { continue; }
+    if (Auth::needsMfaEnrolment() && $slugName !== 'account') { continue; }
+    if ($slugName === 'account') { continue; }
+    $navGroups[in_array($slugName, $adminViews, true) ? 'Admin' : 'SEO tools'][$slugName] = $title;
+}
+$navLink = function (string $slugName, string $title) use ($h, $base): string {
+    return '<a href="' . $h($base . ($slugName === 'dashboard' ? '/' : '/' . $slugName)) . '" class="nav-item" data-view="' . $h($slugName) . '">' . $h($title) . '</a>';
+};
+?>
+            <nav class="nav-menu" aria-label="Main">
+<?php foreach ($navGroups as $groupName => $items): if (!$items) { continue; } ?>
+                <p class="nav-heading"><?= $h($groupName) ?></p>
+<?php foreach ($items as $slugName => $title): ?>
+                <?= $navLink($slugName, $title) ?>
+
+<?php endforeach; endforeach; ?>
             </nav>
+            <div class="nav-foot"><?= $navLink('account', $views['account']) ?></div>
         </aside>
 
         <main class="main-content">
@@ -113,10 +131,10 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
             <div class="content-area" id="content-area">
                 <div class="view" id="view-dashboard">
                     <div class="stats-grid">
-                        <div class="stat-card" data-card="seo"><div class="stat-icon">🔍</div><div class="stat-info"><h3>SEO Score (your site)</h3><p class="stat-value" id="stat-seo">--</p></div></div>
-                        <div class="stat-card" data-card="keywords"><div class="stat-icon">📊</div><div class="stat-info"><h3>Tracked Keywords</h3><p class="stat-value" id="stat-keywords">--</p></div></div>
-                        <div class="stat-card" data-card="impressions"><div class="stat-icon">👁️</div><div class="stat-info"><h3>Impressions (30d)</h3><p class="stat-value" id="stat-impressions">--</p></div></div>
-                        <div class="stat-card" data-card="clicks"><div class="stat-icon">🖱️</div><div class="stat-info"><h3>Clicks (30d)</h3><p class="stat-value" id="stat-clicks">--</p></div></div>
+                        <div class="stat-card" data-card="seo"><div class="stat-info"><h3>SEO Score (your site)</h3><p class="stat-value" id="stat-seo">--</p></div></div>
+                        <div class="stat-card" data-card="keywords"><div class="stat-info"><h3>Tracked Keywords</h3><p class="stat-value" id="stat-keywords">--</p></div></div>
+                        <div class="stat-card" data-card="impressions"><div class="stat-info"><h3>Impressions (30d)</h3><p class="stat-value" id="stat-impressions">--</p></div></div>
+                        <div class="stat-card" data-card="clicks"><div class="stat-info"><h3>Clicks (30d)</h3><p class="stat-value" id="stat-clicks">--</p></div></div>
                     </div>
                     <p id="dashboard-note" class="text-muted"></p>
                     <div class="dashboard-grid">
