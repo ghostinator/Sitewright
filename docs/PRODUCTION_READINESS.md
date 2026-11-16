@@ -30,11 +30,13 @@ Updated with every commit of the production-readiness phase. Verdict stays **SAF
 | # | Item | Notes for when we pick it up |
 |---|------|------------------------------|
 | 10 | **Settings area in the app: DONE (both phases) and deployed 2026-11-16.** 100 settings in 10 groups, generated reference `docs/SETTINGS_REFERENCE.md`, user and admin guides, whole-branch review done and fixed (449/449 tests on the VM). Earlier note: (**Phase 1 done and deployed 2026-11-16**: registry, storage, API, page, worker reload, shadow warning, require-MFA; migration 009 applied on the VM; 426/426 tests on the VM; live-checked over HTTPS, 4 real secrets verified absent from the response. Phase 2 per-page tuning next)  (admin only) to control every setting the app needs, instead of editing `config.php` / running `sw-set-secrets` | Scope to decide together. Candidates: mail (Postal), alert channels and thresholds, Gemini, Google OAuth, geocoding on/off, session timeouts, rate limits, retention (404 / audit / jobs), log level, crawl limits, site sync interval, trusted proxies/base URL (read-only hints). Design points: secrets are write-only in the UI (shown as "set", never echoed) and stored encrypted with `app_key`; non-secret settings in a `settings` table that overrides file defaults; env/config-file values stay authoritative for bootstrap settings (database, `app_key`, `base_url`, allowed hosts); every change goes to the audit log and some raise an alert; a "Send test" button per channel; validation shared with the config loader; a per-setting note saying whether it needs a PHP-FPM/worker restart. |
+| 11 | Logging and uptime: warnings and errors to `/var/log/sitewright/app.log`, daily rotation, older days gzipped, 90 days kept (`deploy/setup-logging.sh`); health timer pings an Uptime Kuma push monitor only while healthy | **Done and deployed 2026-11-16** (`tests/docker/logging-drill.sh`; 450/450 on the VM). Waiting on the Kuma push URL from the owner |
 
 ## Still needs you (cannot be done by me)
 * Independent penetration test; trademark check on "Sitewright"; legal review of crawling third parties; privacy-notice controller name.
 * Real credentials for Postal, Teams, Telegram, Google OAuth (entered with the hidden-input helper, never in chat).
-* Choosing and running a log shipper / dashboards / uptime monitor (recommendations in the logging section of the deployment guide).
+* Connecting Uptime Kuma: create a Push monitor (120 s), then run `sudo sw-set-secrets uptime` on the VM. File logging with rotation is already deployed (2026-11-16); a searchable log shipper (Loki + Alloy) is optional and not needed yet.
+* Renew the Tailscale HTTPS certificate on the VM before it expires (about 90 days after issue).
 
 ## What stands between this and "ready for production"
 1. Everything above lands and its tests are green (done).
