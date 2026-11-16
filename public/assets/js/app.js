@@ -318,6 +318,14 @@
         return c;
     }
 
+    // A setting that only matters for one choice of another (SMTP fields vs Postal fields) is hidden while the other choice is selected; searching shows everything.
+    function settingApplies(s, data, st) {
+        if (!s.show_when) return true;
+        const dep = s.show_when[0], other = data.groups.flatMap(g => g.settings).find(x => x.key === dep);
+        if (!other) return true;
+        return (dep in st.edits ? st.edits[dep] : other.value) === s.show_when[1];
+    }
+
     function settingRow(s, st) {
         const id = settingId(s.key), ctl = settingControl(s, st), err = st.errors[s.key];
         const dirty = s.key in st.edits && !s.locked;
@@ -360,7 +368,7 @@
             ...data.groups.map(g => { const o = el('option', { text: g.label, attrs: { value: g.id } }); if (g.id === st.group) o.selected = true; return o; }));
         const panels = [];
         for (const g of shown) {
-            const rows = g.settings.filter(s => settingMatches(s, st.q) && (!st.only || s.source === 'saved' || s.key in st.edits));
+            const rows = g.settings.filter(s => settingMatches(s, st.q) && (!st.only || s.source === 'saved' || s.key in st.edits) && (st.q || settingApplies(s, data, st)));
             if (!rows.length) continue;
             const kids = [el('legend', { text: g.label }), g.description && !st.q ? el('p', { class: 'text-muted', text: g.description }) : null];
             if (g.id === 'mail' && !st.q) kids.push(el('p', {}, el('button', { class: 'btn btn-secondary btn-sm', text: 'Send test mail to me', attrs: { type: 'button' }, data: { action: 'settings-test', name: 'mail' } }), ' ',
@@ -796,6 +804,7 @@
         delete settingsState.errors[s.key];
         renderSettingsBar(document.getElementById('settings-bar'), settingsData, settingsState);
         const row = node.closest('.settings-row'); if (row) row.classList.toggle('settings-row-dirty', s.key in settingsState.edits);
+        if (allSettings(settingsData).some(x => x.show_when && x.show_when[0] === s.key)) { drawSettings(); const again = document.querySelector('[data-setting="' + s.key + '"]'); if (again) again.focus(); }
     }
     function openSettingsDialog() {
         const { changes } = diffSettings(settingsData, settingsState.edits);

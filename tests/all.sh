@@ -31,6 +31,7 @@ if [ "$1" != quick ]; then
   run tests/docker/backup-drill.sh mariadb:10.11
   run tests/docker/backup-drill.sh mariadb:11.8
   run tests/docker/backup-drill.sh mysql:8.4
+  run tests/docker/logging-drill.sh
   step "Secret scan (working tree)"
   run docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.18.4 detect --no-git --source /repo --redact
 fi

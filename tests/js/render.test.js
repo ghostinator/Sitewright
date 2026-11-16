@@ -281,3 +281,15 @@ test('settings: a non-secret value from the config file offers "Save this value 
   assert.ok(box.querySelector('[data-setting-row="contact"] [data-action="settings-promote"]').textContent.includes('Save this value here'));
   assert.ok(box.querySelector('[data-setting-row="gemini.api_key"] [data-action="settings-promote"]').textContent.includes('encrypted storage'));
 });
+
+test('settings: SMTP fields are hidden while Postal is chosen (and the other way round); searching still finds them', () => {
+  const d = settingsData();
+  const drv = { key: 'mail.driver', label: 'Mail method', help: '', unit: '', type: 'enum', enum: ['smtp', 'postal'], min: null, max: null, value: 'postal', default: 'smtp', source: 'saved', locked: false, secret: false, danger: false, danger_effects: [], show_when: null, env: 'SW_MAIL_DRIVER' };
+  const host = Object.assign({}, d.groups[0].settings[0], { key: 'mail.host', label: 'SMTP server', value: 'smtp.example.test', type: 'string', show_when: ['mail.driver', 'smtp'] });
+  d.groups[0].settings[0].show_when = ['mail.driver', 'postal']; d.groups[0].settings.unshift(drv, host);
+  const { box, st, redraw } = settingsPage(d);
+  assert.ok(box.querySelector('[data-setting-row="mail.postal_url"]')); assert.equal(box.querySelector('[data-setting-row="mail.host"]'), null);
+  st.edits['mail.driver'] = 'smtp'; redraw();
+  assert.ok(box.querySelector('[data-setting-row="mail.host"]')); assert.equal(box.querySelector('[data-setting-row="mail.postal_url"]'), null);
+  st.edits = {}; st.q = 'SMTP server'; redraw(); assert.ok(box.querySelector('[data-setting-row="mail.host"]'));
+});

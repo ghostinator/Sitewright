@@ -1,0 +1,14 @@
+# /etc/logrotate.d/sitewright  (installed by deploy/setup-logging.sh, which also sets the number of days to keep)
+# Daily: yesterday's log is kept as app.log.1 (plain text, easy to grep), older ones are gzip-compressed, and anything older than
+# `rotate` days is deleted. maxsize rotates early if a bad day produces a flood, so the logs can never fill the disk by themselves.
+# No copytruncate: the application opens the file for every line, so a renamed file is simply recreated.
+/var/log/sitewright/*.log {
+    daily
+    rotate 90
+    maxsize 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 www-data adm
+}

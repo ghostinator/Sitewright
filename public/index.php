@@ -58,7 +58,7 @@ $configJson = json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
     <meta name="robots" content="noindex, nofollow">
     <title>Sitewright - <?= $h($user ? $views[$view] : ($resetPage ? 'Reset password' : 'Sign in')) ?></title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="<?= $h($base) ?>/assets/css/style.css">
+    <link rel="stylesheet" href="<?= $h($base) ?>/assets/css/style.css?v=<?= (int)@filemtime(__DIR__ . '/assets/css/style.css') ?>">
     <script type="application/json" id="app-config"><?= $configJson ?></script>
 </head>
 <body>
@@ -358,6 +358,6 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <?php endif; ?>
-    <script src="<?= $h($base) ?>/assets/js/app.js"></script>
+    <script src="<?= $h($base) ?>/assets/js/app.js?v=<?= (int)@filemtime(__DIR__ . '/assets/js/app.js') ?>"></script>
 </body>
 </html>

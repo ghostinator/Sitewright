@@ -8,3 +8,6 @@ User=www-data
 WorkingDirectory=/srv/sitewright
 EnvironmentFile=-/etc/sitewright/worker.env
 ExecStart=/usr/bin/php /srv/sitewright/bin/healthcheck.php
+# Optional Uptime Kuma "Push" monitor: report in only while healthy. If this stops arriving (app unhealthy, VM down, timer dead) Kuma alerts.
+# Set the URL with: sudo sw-set-secrets uptime
+ExecStartPost=-/bin/sh -c 'if [ -n "$SW_UPTIME_PUSH_URL" ]; then /usr/bin/curl -fsS -m 10 -o /dev/null "$SW_UPTIME_PUSH_URL"; fi'

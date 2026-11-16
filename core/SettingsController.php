@@ -19,7 +19,7 @@ final class SettingsController
             $groups[$d['group']]['settings'][] = [
                 'key' => $key, 'label' => $d['label'], 'help' => $d['help'], 'unit' => $d['unit'], 'type' => $d['type'], 'enum' => $d['enum'], 'min' => $d['min'], 'max' => $d['max'],
                 'value' => $e['value'], 'default' => $d['secret'] ? null : $d['default'], 'source' => $e['source'], 'locked' => $e['locked'], 'env' => $d['env'], 'fallback' => $e['fallback'],
-                'secret' => $d['secret'], 'danger' => $d['danger'], 'danger_effects' => $d['danger_effects'], 'apply' => $d['apply'],
+                'secret' => $d['secret'], 'danger' => $d['danger'], 'danger_effects' => $d['danger_effects'], 'apply' => $d['apply'], 'show_when' => $d['show_when'],
                 'changed_by' => $meta[$key]['username'] ?? null, 'changed_at' => $meta[$key]['updated_at'] ?? null,
             ];
             if ($e['source'] === 'saved') { $groups[$d['group']]['changed_count']++; }

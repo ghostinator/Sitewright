@@ -49,6 +49,8 @@ For whoever installs, runs and secures Sitewright. Day-to-day use is in the [use
 | Purge old data | `php bin/purge-404.php`, `php bin/purge-audit.php` (the worker also purges hourly) |
 | Back up / restore | `bin/db-backup.sh backup /var/backups/sitewright`; `SW_RESTORE_CONFIRM=yes bin/db-backup.sh restore <file>` |
 | Rehearse a restore | `tests/docker/backup-drill.sh mariadb:11.8` |
+| Set up file logging with rotation | `sudo deploy/setup-logging.sh [keep_days] [level]` (default 90 days, warn) |
+| Connect Uptime Kuma (push monitor) | `sudo sw-set-secrets uptime` |
 | Test alert channels | `php bin/alert-test.php` |
 | Health check (cron/timer) | `php bin/healthcheck.php` (alerts only on a state change) |
 | Run migrations | `php bin/migrate.php` with the migration account |
@@ -59,7 +61,7 @@ For whoever installs, runs and secures Sitewright. Day-to-day use is in the [use
 1. Back up the database. 2. Copy the new code. 3. **Run migrations** (new code reads new columns; code without them answers every sign-in with HTTP 500). 4. Run the tests. 5. Reload PHP-FPM and restart the worker.
 
 ### Logging and alerts
-JSON lines with a request id; choose where they go and ship them with Grafana Loki + Alloy (Promtail is end-of-life) or just a file and logrotate. E-mail alerts use your mail provider (Postal HTTP API or SMTP); Teams and Telegram are supported but not proven live. Details: [ALERTS_AND_LOGGING.md](ALERTS_AND_LOGGING.md). Which events send alerts is a setting.
+JSON lines with a request id. Recommended for one VM: warnings and errors to a rotated, compressed file (`deploy/setup-logging.sh`) plus an Uptime Kuma push monitor fed by the health timer; Grafana Loki + Alloy if you later want search. E-mail alerts use your mail provider (Postal HTTP API or SMTP); Teams and Telegram are supported but not proven live. Details: [ALERTS_AND_LOGGING.md](ALERTS_AND_LOGGING.md). Which events send alerts is a setting.
 
 ### Connected WordPress sites
 Install the agent plugin (download it from the Sites page); Sitewright calls the site with signed requests (HMAC-SHA256, timestamp and nonce, replay-refused). The plugin stores no IPs or user agents. Needs `app_key`. Tested against WordPress 6 (`tests/docker/wordpress-e2e.sh`).

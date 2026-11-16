@@ -13,10 +13,10 @@ One JSON object per line, for every request and every notable event:
 ### Which log tooling to use (recommendation)
 | Size of setup | Use | Why |
 |---|---|---|
-| One VM, just you | **`SW_LOG_FILE=/var/log/sitewright/app.log` + logrotate**, read with `jq` / `grep` | Zero infrastructure; JSON lines are greppable |
+| One VM, just you | **`deploy/setup-logging.sh`** (file + logrotate, see below), read with `jq` / `grep` | Zero infrastructure; JSON lines are greppable |
 | Several VMs / you want search and dashboards | **Grafana Loki + Grafana Alloy** (on each host) | Light, runs fine in a homelab/Proxmox, free. Use **Alloy**, not Promtail: Promtail reached end-of-life on 2 March 2026 |
 | Already run an ELK/OpenSearch stack | Ship the same file with Filebeat / Fluent Bit | No app change |
-| Uptime and "is it up" alerts | **Uptime Kuma** pinging `/api/health` (it can alert to Teams and Telegram too) | Independent of the app, so it still alerts when the app is down |
+| Uptime and "is it up" alerts | **Uptime Kuma** push monitor fed by the health timer (it can alert to e-mail, Teams and Telegram too) | Independent of the app, so it still alerts when the app is down |
 The app does not care which you pick: it writes JSON lines; collectors read them.
 
 Minimal Alloy snippet (Loki):
@@ -25,7 +25,23 @@ local.file_match "sw" { path_targets = [{__path__ = "/var/log/sitewright/app.log
 loki.source.file "sw" { targets = local.file_match.sw.targets  forward_to = [loki.write.default.receiver] }
 loki.write "default" { endpoint { url = "http://LOKI:3100/loki/api/v1/push" } }
 ```
-Logrotate: `/var/log/sitewright/*.log { daily rotate 14 compress missingok copytruncate create 0640 www-data adm }`.
+### Recommended setup for one VM: warnings to a file, rotated, plus Uptime Kuma
+Log only what needs attention, keep it on disk for a bounded time, and let an independent monitor tell you when the app is down.
+
+```
+sudo /srv/sitewright/deploy/setup-logging.sh 90 warn     # keep 90 days, warnings and errors only
+```
+* Writes `/var/log/sitewright/app.log` (JSON lines) and sets `log.file` / `log.level` in `config.php`. At `warn`, the per-request lines (about one per click) are not written, so the file stays small: you get failed jobs, server errors, rejected requests and similar. Sign-ins, MFA, deletions and setting changes are still kept in full in the **Audit Log** (database, purged after `retention_days_audit`), so nothing security-relevant depends on the file level. Change the level later under Settings → Data & logging (`info` adds every request; use it for a day when debugging).
+* **Rotation** (`deploy/sitewright.logrotate`, installed to `/etc/logrotate.d/sitewright`): every day the log is rotated; yesterday's stays plain text (`app.log.1`, easy to grep), older days are gzip-compressed (`app.log.2.gz`, ...), and anything beyond the keep limit is deleted. A day that grows past 50 MB rotates early, so a flood cannot fill the disk. Change the number of days by running the script again with another value. Read old days with `zcat /var/log/sitewright/app.log.*.gz | jq .`.
+* The same file is what Loki/Alloy would read if you ever want search and dashboards; nothing changes in the app.
+* Proven by `tests/docker/logging-drill.sh` (rotation, compression, deletion at the limit, file mode, idempotent setup).
+
+**Uptime Kuma** (independent of the app; it still alerts when the app, the VM or the network is down). Use a **Push** monitor, because it needs no inbound access to Sitewright and no address or certificate to match:
+1. In Kuma: Add New Monitor, type **Push**, heartbeat interval **120 seconds**, and attach your notification channels (Kuma can send to e-mail, Teams and Telegram). Copy the Push URL it shows.
+2. On the Sitewright VM: `sudo sw-set-secrets uptime` and paste the URL (hidden prompt; stored in `/etc/sitewright/worker.env`, mode 0600). It must be reachable from the VM, so use the Home Assistant LAN address.
+3. `sudo systemctl start sitewright-health.service`: the monitor turns green.
+
+The health timer (`bin/healthcheck.php`, every minute) pings the URL only while everything passes: database reachable, worker running, no stuck queue, disk not nearly full. If a check fails, or the VM or timer stops, the pings stop and Kuma alerts after two missed intervals. A second, optional Kuma monitor of type HTTP(s) on `/api/health` only tells you the web server answers; the push monitor is the one that proves the whole system works.
 
 ## Alerts (email, Teams, Telegram)
 Configure under **Settings → Mail & alerts** (there is a "Send test mail to me" button), or in `config/config.php` / `SW_*` variables (these outrank nothing but a Settings value you have not saved; environment variables outrank everything). Secrets never go in git or chat: on the staging VM use `sudo sw-set-secrets` (hidden prompts).

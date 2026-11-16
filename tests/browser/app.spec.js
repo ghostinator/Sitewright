@@ -43,6 +43,9 @@ test('sign-in: wrong password is refused with a message; correct one reaches the
   await expect(page.locator('#login-error')).toContainText('Invalid');
   await login(page, ADMIN);
   await expect(page.locator('#page-title')).toHaveText('Dashboard');
+  // Stylesheet and script URLs change with the file, so a deploy is never masked by a cached copy.
+  await expect(page.locator('link[rel=stylesheet]')).toHaveAttribute('href', /style\.css\?v=\d{6,}/);
+  expect(await page.locator('script[src*="app.js"]').getAttribute('src')).toMatch(/app\.js\?v=\d{6,}/);
 });
 
 test('every view loads without error alerts or console errors (admin sees all, including Sites/Users/Audit)', async ({ page }) => {

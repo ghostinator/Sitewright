@@ -116,3 +116,10 @@ test('bin/settings-check.php warns when a config.php change would be shadowed by
     ok(str_contains($out, 'mail.from is set by the environment variable SW_MAIL_FROM'), $out);
     eq($run('{"mail":{"host":"h"}}'), '', 'silent when nothing shadows it'); eq($run('not json'), '');
 });
+
+test('settings API: provider-specific mail settings say which mail method they belong to', function () use ($admin, $find) {
+    $d = $admin()->api('GET', '/api/settings')['json']['data'];
+    foreach (['mail.postal_url', 'mail.postal_key'] as $k) { eq($find($d, $k)['show_when'], ['mail.driver', 'postal']); }
+    foreach (['mail.host', 'mail.port', 'mail.encryption', 'mail.username', 'mail.password', 'mail.verify_tls'] as $k) { eq($find($d, $k)['show_when'], ['mail.driver', 'smtp']); }
+    eq($find($d, 'mail.from')['show_when'], null);
+});

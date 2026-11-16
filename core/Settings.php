@@ -43,18 +43,18 @@ final class Settings
         $r = [];
         $add = static function (string $key, string $group, string $label, string $help, string $type, array $o = []) use (&$r): void {
             $r[$key] = $o + ['group' => $group, 'label' => $label, 'help' => $help, 'type' => $type, 'default' => self::defaultOf($key),
-                'min' => null, 'max' => null, 'enum' => null, 'pattern' => null, 'unit' => '', 'secret' => $type === 'secret', 'env' => null, 'apply' => 'live', 'danger' => false, 'danger_effects' => []];
+                'min' => null, 'max' => null, 'enum' => null, 'pattern' => null, 'unit' => '', 'secret' => $type === 'secret', 'env' => null, 'apply' => 'live', 'danger' => false, 'danger_effects' => [], 'show_when' => null];
         };
         // ---- Mail & alerts
         $add('mail.driver', 'mail', 'Mail method', 'Postal HTTP API, or a generic SMTP server.', 'enum', ['enum' => ['smtp', 'postal'], 'env' => 'SW_MAIL_DRIVER']);
-        $add('mail.postal_url', 'mail', 'Postal address', 'The https address of your Postal server. Changing it clears the stored API key.', 'url', ['env' => 'SW_MAIL_POSTAL_URL', 'danger' => true, 'danger_effects' => ['Clears the stored Postal API key; enter it again.']]);
-        $add('mail.postal_key', 'mail', 'Postal API key', 'The server API key from Postal (Credentials, type API).', 'secret', ['env' => 'SW_MAIL_POSTAL_KEY']);
-        $add('mail.host', 'mail', 'SMTP server', 'Only used when the mail method is SMTP. Changing it clears the stored SMTP password.', 'string', ['pattern' => '/^[A-Za-z0-9.-]{0,253}$/D', 'env' => 'SW_MAIL_HOST', 'danger' => true, 'danger_effects' => ['Clears the stored SMTP password; enter it again.']]);
-        $add('mail.port', 'mail', 'SMTP port', 'Usually 587 (STARTTLS) or 465 (TLS).', 'int', ['min' => 1, 'max' => 65535, 'env' => 'SW_MAIL_PORT', 'danger' => true, 'danger_effects' => ['Clears the stored SMTP password; enter it again.']]);
-        $add('mail.encryption', 'mail', 'SMTP encryption', 'starttls, tls or none.', 'enum', ['enum' => ['starttls', 'tls', 'none'], 'env' => 'SW_MAIL_ENCRYPTION', 'danger' => true, 'danger_effects' => ['Clears the stored SMTP password; enter it again.']]);
-        $add('mail.username', 'mail', 'SMTP username', 'Login for the SMTP server (blank if it needs none).', 'string', ['env' => 'SW_MAIL_USERNAME']);
-        $add('mail.password', 'mail', 'SMTP password', 'Stored encrypted; never shown again.', 'secret', ['env' => 'SW_MAIL_PASSWORD']);
-        $add('mail.verify_tls', 'mail', 'Check the mail server certificate', 'Leave on unless your SMTP server uses a certificate you cannot install.', 'bool', ['env' => 'SW_MAIL_VERIFY_TLS']);
+        $add('mail.postal_url', 'mail', 'Postal address', 'The https address of your Postal server. Changing it clears the stored API key.', 'url', ['env' => 'SW_MAIL_POSTAL_URL', 'danger' => true, 'danger_effects' => ['Clears the stored Postal API key; enter it again.'], 'show_when' => ['mail.driver', 'postal']]);
+        $add('mail.postal_key', 'mail', 'Postal API key', 'The server API key from Postal (Credentials, type API).', 'secret', ['env' => 'SW_MAIL_POSTAL_KEY', 'show_when' => ['mail.driver', 'postal']]);
+        $add('mail.host', 'mail', 'SMTP server', 'Only used when the mail method is SMTP. Changing it clears the stored SMTP password.', 'string', ['pattern' => '/^[A-Za-z0-9.-]{0,253}$/D', 'env' => 'SW_MAIL_HOST', 'danger' => true, 'danger_effects' => ['Clears the stored SMTP password; enter it again.'], 'show_when' => ['mail.driver', 'smtp']]);
+        $add('mail.port', 'mail', 'SMTP port', 'Usually 587 (STARTTLS) or 465 (TLS).', 'int', ['min' => 1, 'max' => 65535, 'env' => 'SW_MAIL_PORT', 'danger' => true, 'danger_effects' => ['Clears the stored SMTP password; enter it again.'], 'show_when' => ['mail.driver', 'smtp']]);
+        $add('mail.encryption', 'mail', 'SMTP encryption', 'starttls, tls or none.', 'enum', ['enum' => ['starttls', 'tls', 'none'], 'env' => 'SW_MAIL_ENCRYPTION', 'danger' => true, 'danger_effects' => ['Clears the stored SMTP password; enter it again.'], 'show_when' => ['mail.driver', 'smtp']]);
+        $add('mail.username', 'mail', 'SMTP username', 'Login for the SMTP server (blank if it needs none).', 'string', ['env' => 'SW_MAIL_USERNAME', 'show_when' => ['mail.driver', 'smtp']]);
+        $add('mail.password', 'mail', 'SMTP password', 'Stored encrypted; never shown again.', 'secret', ['env' => 'SW_MAIL_PASSWORD', 'show_when' => ['mail.driver', 'smtp']]);
+        $add('mail.verify_tls', 'mail', 'Check the mail server certificate', 'Leave on unless your SMTP server uses a certificate you cannot install.', 'bool', ['env' => 'SW_MAIL_VERIFY_TLS', 'show_when' => ['mail.driver', 'smtp']]);
         $add('mail.from', 'mail', 'From address', 'Must be on a domain verified in Postal / allowed by your SMTP server.', 'email', ['env' => 'SW_MAIL_FROM']);
         $add('mail.from_name', 'mail', 'From name', 'The sender name recipients see.', 'string', ['max' => 100, 'env' => 'SW_MAIL_FROM_NAME']);
         $add('mail.timeout', 'mail', 'Mail timeout', 'How long to wait for the mail server.', 'int', ['min' => 1, 'max' => 60, 'unit' => 'seconds']);
