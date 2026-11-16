@@ -31,6 +31,49 @@
 
 ---
 
+## UI Design (reviewed with the frontend-design skill; Tasks 3, 5 and 10 follow it)
+
+**Subject and job.** An internal control panel for one technical operator. The page's job is to let someone find one setting among ~60, see where its value comes from, change it safely, and prove it works. The memorable thing is **provenance**: every row says where its value comes from (default, config file, saved here, or locked by an environment variable) and what Reset would fall back to. Everything else stays quiet.
+
+**Fit with the app.** Reuse the existing shell, tokens (`--primary-color`, `--border`, `--text`, `--light`), system font stack and `.btn` styles so the page belongs. Add only semantic tokens: `--src-saved` (indigo tint), `--src-env` (amber tint), `--src-file` (grey), `--danger-soft`. State is never colour-only: each source has a word, and locked rows also get a lock glyph drawn in CSS (no emoji, no icon font). Type: existing system sans; setting keys, env variable names and values in the existing `.mono`; tabular numerals for numbers. No all-caps labels, no eyebrows, no numbered markers; sentence case everywhere. One border-radius scale (4px controls, 8px panels); no gradients or shadows on the settings surface.
+
+**Layout** (desktop; at < 720px the group list becomes a single `<select>` above the form and the save bar docks to the bottom):
+```
+Settings                                             [ Search settings…          ]  [x] Only changed
++------------------+--------------------------------------------------------------+
+| Mail & alerts  3 | Mail & alerts                                                |
+| Security       2 | How Sitewright sends e-mail and who it alerts.               |
+| Integrations     |                                                              |
+| Crawling & jobs  | Postal address                                    [ Saved here ]|
+| Data & logging   | [ https://app.ghosties.email                         ]           |
+| SEO scoring      | Where mail is sent. Changing it clears the API key.  mail.postal_url |
+| Content AI       |                                                              |
+| …                | Postal API key                              [ Set · 3 days ago ]|
+|                  | ●●●●●●●● set by you, Nov 15            [Replace]  [Send test mail]   |
+| (count = values  |                                                              |
+|  changed from    | Session length when idle                         [ Config file ]|
+|  default)        | [ 30 ] minutes   Sign-out after this much inactivity.  session.idle |
+|                  |   Reset would use: built-in default (30)                      |
++------------------+--------------------------------------------------------------+
+| 2 unsaved changes  · Postal address, Session length when idle   [Review] [Discard] [Save changes] |
++-------------------------------------------------------------------------------------------------+
+```
+* Rows are labelled with **what the setting does in plain words** ("Session length when idle"), with the technical key and env variable as small mono text underneath, searchable but secondary.
+* Groups carry a count of values changed from default; "Only changed" filters to them. Search matches label, help, key and env name.
+* Units are part of the control ("minutes", "MB", "seconds") and long durations show a human reading ("= 8 hours").
+* Unsaved changes live in a sticky bar that names the settings; **Review** opens a `<dialog>` listing old → new (secrets as "changed"). Dangerous changes list their side effects in that same dialog ("Clears the stored Postal API key; you must enter it again") with a confirm button named for the action ("Change and clear key"), not "OK". Leaving the page with unsaved changes warns once (`beforeunload`).
+* Locked rows (environment variable) are read-only with "Set by SW_MAIL_FROM on the server; change it there." Read-only bootstrap settings (database, `app_key`, base URL…) sit in a collapsed "Set on the server" section per group.
+* Secrets: "Set" with who/when, **Replace** reveals an empty password field with an eye-less design (no reveal toggle; paste and save), **Remove** is a separate quiet action.
+* Test buttons report next to themselves with what happened and when ("Sent to you@example.com at 14:02" / "Postal rejected the key"), and the result is announced in an `aria-live` region.
+* Empty and failure states say what to do: no search hit → "No setting matches “x”. Try a word from its description."; save failure → inline message on the offending row plus an error summary at the top that moves focus there.
+* Copy rules (from the skill): verbs name the outcome ("Save changes" → toast "Changes saved"; "Reset" → "Reset to config-file value"); errors say what's wrong and the allowed range ("Must be between 60 and 86400 seconds"); no apologies, no jargon like "overlay" or "registry" in the UI.
+
+**Quality floor.** Visible focus rings; each group is a `fieldset` with a `legend`; every control has a real `<label>`; works with keyboard only (arrow-free: Tab order = reading order); `prefers-reduced-motion` respected (no animation beyond the dialog's native open); 4.5:1 contrast for badges; responsive down to 360px; no horizontal scroll.
+
+**Phase 2 touch points on other pages.** No "Tune" buttons sprinkled on headers. Instead a quiet, contextual note where the setting changes what the user sees, linking into the right group: SEO results ("Title length is judged against 30–60 characters. Change in Settings"), the 404 log ("3 ignore patterns active"), the dashboard ("Showing the last 30 days"), Content AI (the tone list notes disabled tones exist). Notes are plain text links, shown to admins only.
+
+**Out of scope here (offered separately):** a visual identity pass for the whole app. The current shell is the default dashboard look (violet gradient, emoji nav icons, uniform cards); changing it is a separate, optional piece of work.
+
 # Phase 1: framework and system settings
 
 ### Task 1: Registry, storage, and config overlay
@@ -74,15 +117,18 @@
 ### Task 3: Settings page (UI)
 
 **Files:**
-- Modify: `public/index.php` (admin view `settings`, nav icon), `public/assets/js/app.js` (render + actions; export `renderSettings`), `public/assets/css/style.css` (group list + sticky save bar)
-- Test: `tests/js/render.test.js`
+- Modify: `public/index.php` (admin view `settings`, a `<dialog id="settings-dialog">`), `public/assets/js/app.js` (render + actions; export `renderSettings`, `diffSettings`), `public/assets/css/style.css` (new `.settings-*` classes only; no edits to existing selectors, to avoid specificity clashes)
+- Test: `tests/js/render.test.js`, `tests/browser/app.spec.js`
 
 **Interfaces:**
-- Consumes: `GET /api/settings` shape from Task 2: `{groups:[{id,label,settings:[{key,label,help,type,value,source,locked,env,fallback,secret,danger,apply,enum,min,max,changed_by,changed_at}]}]}`.
-- Produces: `SW.renderSettings(container, data, handlers)`; actions `settings-save`, `settings-reset`, `settings-promote`, `settings-test`.
+- Consumes: `GET /api/settings` from Task 2: `{groups:[{id,label,description,changed_count,settings:[{key,label,help,unit,type,value,source,locked,env,fallback,secret,danger,danger_effects,apply,enum,min,max,changed_by,changed_at}],readonly:[{key,label,value,source}]}]}`.
+- Produces: `SW.renderSettings(container, data)`; `SW.diffSettings(data, edits): {changes:[{key,label,from,to,secret,effects:[string]}]}`; actions `settings-save`, `settings-review`, `settings-discard`, `settings-reset`, `settings-promote`, `settings-test`, `settings-replace-secret`.
 
-- [ ] **Step 1: Write failing jsdom tests**: hostile strings in label/help/value render as text only (extend the existing XSS payload loop with a `settings` case); secret rows show "set" and a Replace button and never an `<input value>` with the secret; locked rows disabled with the env var name; dirty tracking lists unsaved keys in the save bar; danger saves ask `confirm` before sending `confirm:true`.
-- [ ] **Step 2: Run** `cd tests/js && node --test` — FAIL. **Step 3: Implement** the page: left group list, search box filtering rows, per-row control by `type`, source badge, Reset, "last changed by/when". **Step 4:** PASS; add a Playwright test in `tests/browser/app.spec.js` (open Settings, change `limits.crawl_delay_ms`, save, reload shows value and source "saved", Reset returns to default, audit page shows `setting_changed`). **Step 5: Commit** `feat(settings): admin settings page`.
+- [ ] **Step 1: Write failing jsdom tests**: hostile strings in label/help/value/unit render as text only (add a `settings` case to the XSS payload loop); a secret row never contains an `<input>` holding the stored value and "Replace" reveals an empty password field; locked rows are disabled and name their env variable; `diffSettings` lists only changed keys, masks secrets, and attaches the danger effects text; the save bar names unsaved settings and disappears after Discard; search matches label, key and env name; "Only changed" hides default-valued rows; each group renders as `fieldset` with `legend` and every control has a label.
+- [ ] **Step 2: Run** `cd tests/js && node --test` — expect FAIL.
+- [ ] **Step 3: Implement** the page per the "UI Design" section above (layout, sticky bar, `<dialog>` review with named confirm button, `beforeunload` guard, inline test results in an `aria-live` region, error summary that takes focus, mobile select + bottom-docked bar via a single `@media (max-width: 720px)` block, `prefers-reduced-motion`).
+- [ ] **Step 4: Run** jsdom tests — PASS. Add a Playwright test: open Settings, search "crawl", change the delay, the save bar appears, Review shows old → new, Save, reload shows source "Saved here" and the group count, Reset returns the default and names the fallback, the Audit page lists `setting_changed`; a second test checks keyboard-only operation (Tab to the field, change, Enter on Save) and that a dangerous change cannot be saved without the dialog's named confirm button.
+- [ ] **Step 5: Commit** `feat(settings): settings page`.
 
 ### Task 4: Worker pickup, `sw-set-secrets` warning, docs
 
@@ -136,9 +182,9 @@ Decisions to record (defaults must reproduce today's behaviour exactly; existing
 **Files:** Modify `modules/ContentAi/ContentAiController.php`, `modules/ImageSeo/ImageSeoController.php`, `modules/Sitemap/SitemapController.php`, `modules/Redirections/RedirectionsController.php`, `modules/Monitor/MonitorController.php`, `core/SiteSync.php` (ignore patterns on pull); Test: `18_settings_phase2.php`, jsdom (content form only offers enabled tones/types: add `GET /api/content-ai/status` fields `tones`, `types`, `default_tone`).
 - [ ] Tests first for each (disabled tone => 400; `image.optimal_bytes` changes `is_optimized`; sitemap and redirect defaults applied when the field is omitted; ignore pattern `/wp-json/*` drops a manual add, an import row and a pulled site 404; patterns validated: must start with `/`, ≤ 200 chars, ≤ 100 entries). Implement; commit `feat(settings): content, image, sitemap, redirect and 404 tunables`.
 
-### Task 10: Dashboard, Users, Alerts event list, page shortcuts
-**Files:** Modify `modules/Analytics/AnalyticsController.php` (window days), `public/index.php` + `app.js` (cards from `dashboard.cards`, "Tune" link on each page header to `settings#<group>`), `core/UserController.php` (default role, invite days), `core/Accounts.php` (`RESET_TTL_MINUTES` from setting), `core/Alerts.php` (`events` filter); Test: `18_settings_phase2.php`, Playwright (change window to 7, dashboard note shows 7 days; Tune link opens the right group).
-- [ ] Tests first; implement; commit `feat(settings): dashboard, users, alert-event tunables and page shortcuts`.
+### Task 10: Dashboard, Users, Alerts event list, contextual notes
+**Files:** Modify `modules/Analytics/AnalyticsController.php` (window days), `public/index.php` + `app.js` (cards from `dashboard.cards`, contextual notes (see "UI Design", Phase 2 touch points) linking to `settings#<group>`), `core/UserController.php` (default role, invite days), `core/Accounts.php` (`RESET_TTL_MINUTES` from setting), `core/Alerts.php` (`events` filter); Test: `18_settings_phase2.php`, Playwright (change window to 7, the dashboard note reads "Showing the last 7 days"; the SEO results note links to the SEO scoring group and is hidden from non-admins).
+- [ ] Tests first; implement; commit `feat(settings): dashboard, users, alert-event tunables and contextual notes`.
 
 ### Task 11: Final verification, docs, deployment
 - [ ] Generate `docs/SETTINGS_REFERENCE.md` from the registry with `php bin/settings-doc.php` (new tiny CLI; a test asserts the committed file equals the generated output); run `tests/all.sh`; deploy Phase 2 to the VM in the documented order with a fresh backup; live-verify one setting from each page group; mark row 10 done in `docs/PRODUCTION_READINESS.md` and add report section 13. Commit. Key `claude-sitewright-setup` stays until the owner says otherwise.
