@@ -234,3 +234,43 @@ test('settings: keyboard only, and a dangerous change cannot be saved without th
   await page.fill('#settings-search', '');
   await expect(page.locator('#settings-root fieldset.settings-group legend').first()).toBeVisible();
 });
+
+test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
+  const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
+  async function enrol(who) {
+    await page.click('.nav-item[data-view=account]');
+    await page.fill('#mfa-setup-pw', who.pass); await page.click('#mfa-setup-form button[type=submit]');
+    await expect(page.locator('#mfa-secret-text')).toHaveText(/^[A-Z2-7]{32}$/);
+    const secret = (await page.locator('#mfa-secret-text').textContent()).trim();
+    await page.fill('#mfa-code', totp(secret)); await page.click('#mfa-enable-form button[type=submit]');
+    await expect(page.locator('#mfa-state')).toContainText('ON');
+  }
+  await login(page, ADMIN);
+  await page.click('.nav-item[data-view=users]');
+  await page.click('[data-target=user-create-form]');
+  await page.fill('#nu-username', ADA.user); await page.fill('#nu-email', ADA.email); await page.selectOption('#nu-role', 'admin'); await page.fill('#nu-password', ADA.pass);
+  await page.click('#user-create-form button[type=submit]');
+  await expect(page.locator('#users-list')).toContainText('ada');
+  // the administrator must have it first: turning it on without is refused
+  await page.click('.nav-item[data-view=settings]'); await page.fill('#settings-search', 'two-step');
+  await page.getByLabel('Require two-step verification for administrators').check();
+  await page.getByRole('button', { name: 'Save changes' }).first().click();
+  await page.getByRole('button', { name: 'Save and apply these effects' }).click();
+  await expect(page.locator('#settings-error')).toContainText('your own account');
+  await page.getByRole('button', { name: 'Discard' }).click();
+  await enrol(ADMIN);
+  await page.click('.nav-item[data-view=settings]'); await page.fill('#settings-search', 'two-step');
+  await page.getByLabel('Require two-step verification for administrators').check();
+  await page.getByRole('button', { name: 'Save changes' }).first().click();
+  await page.getByRole('button', { name: 'Save and apply these effects' }).click();
+  await expect(page.locator('#toast')).toContainText('Changes saved');
+  await signOut(page);
+  await login(page, ADA);
+  await expect(page.locator('#page-title')).toHaveText('My Account');
+  await expect(page.locator('#view-account .alert-error').first()).toContainText('Two-step verification is required');
+  expect(await page.$$eval('.nav-item', els => els.map(e => e.dataset.view))).toEqual(['account']);
+  expect((await page.goto('/users')).url()).toMatch(/\/account$/);
+  await enrol(ADA);
+  await page.reload();
+  expect((await page.$$eval('.nav-item', els => els.map(e => e.dataset.view))).length).toBeGreaterThan(5);
+});

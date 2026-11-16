@@ -36,6 +36,9 @@ final class SettingsController
         $in = Request::json();
         $changes = $in['changes'] ?? null;
         if (!is_array($changes) || $changes === [] || array_is_list($changes)) { Response::error('Send {"changes": {key: value}}', 400); }
+        if (($changes['security.require_mfa'] ?? false) === true && !(Auth::user()['mfa'] ?? false)) {
+            Response::error('Turn on two-step verification for your own account first (My Account), then require it for everyone.', 409);
+        }
         $p = Settings::prepare($changes, ($in['confirm'] ?? false) === true);
         if ($p['status'] !== 200) { Response::error($p['message'], $p['status'], $p['errors']); }
         $r = $p['values'] === [] ? ['changed' => [], 'cleared' => []] : Settings::commit($p, (int)Auth::user()['id']);

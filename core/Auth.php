@@ -63,7 +63,7 @@ final class Auth
             return null;
         }
         $_SESSION['last'] = $now;
-        return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name'], 'role' => $row['role']];
+        return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name'], 'role' => $row['role'], 'mfa' => ($row['totp_secret'] ?? '') !== ''];
     }
 
     /**
@@ -170,7 +170,7 @@ final class Auth
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
         self::$userChecked = true;
         Audit::log($auditAction, (int)$row['id'], $row['username']);
-        return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name'], 'role' => $row['role']];
+        return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name'], 'role' => $row['role'], 'mfa' => ($row['totp_secret'] ?? '') !== ''];
     }
 
     public static function logout(): void
@@ -185,6 +185,13 @@ final class Auth
         session_destroy();
         self::$user = null;
         self::$userChecked = true;
+    }
+
+    /** Administrators must have two-step verification when the setting is on; until they do, only the account/MFA routes work. */
+    public static function needsMfaEnrolment(): bool
+    {
+        $u = self::user();
+        return $u !== null && $u['role'] === 'admin' && !$u['mfa'] && (bool)Config::get('security.require_mfa');
     }
 
     /** True when the signed-in user has at least this role (viewer < editor < admin). */

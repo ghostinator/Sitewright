@@ -46,8 +46,9 @@ if ($user && in_array($view, $adminViews, true) && $user['role'] !== 'admin') {
     exit('Forbidden');
 }
 if ($user && $resetPage) { header('Location: ' . App::basePath() . '/'); exit; }
+if ($user && Auth::needsMfaEnrolment() && $view !== 'account') { header('Location: ' . App::basePath() . '/account'); exit; }
 $base = App::basePath();
-$config = ['basePath' => $base, 'csrfToken' => $csrf, 'view' => $resetPage ? 'reset' : $view, 'user' => $user ? ['username' => $user['username'], 'role' => $user['role']] : null];
+$config = ['basePath' => $base, 'csrfToken' => $csrf, 'view' => $resetPage ? 'reset' : $view, 'user' => $user ? ['username' => $user['username'], 'role' => $user['role']] : null, 'mfaRequired' => $user ? Auth::needsMfaEnrolment() : false];
 $configJson = json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
 $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔️', 'analytics' => '📈', 'content-ai' => '🤖', 'local-seo' => '📍', 'image-seo' => '🖼️', 'sitemaps' => '🗺️', '404-monitor' => '⚠️', 'redirections' => '↪️', 'account' => '👤', 'sites' => '🌐', 'users' => '👥', 'audit' => '📜', 'settings' => '⚙️'];
 ?><!DOCTYPE html>
@@ -97,7 +98,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
         <aside class="sidebar">
             <div class="logo"><h2>🚀 Sitewright</h2><p>SEO Toolkit</p></div>
             <nav class="nav-menu">
-<?php foreach ($views as $slugName => $title): if (in_array($slugName, $adminViews, true) && $user['role'] !== 'admin') { continue; } ?>
+<?php foreach ($views as $slugName => $title): if (in_array($slugName, $adminViews, true) && $user['role'] !== 'admin') { continue; } if (Auth::needsMfaEnrolment() && $slugName !== 'account') { continue; } ?>
                 <a href="<?= $h($base . ($slugName === 'dashboard' ? '/' : '/' . $slugName)) ?>" class="nav-item" data-view="<?= $h($slugName) ?>"><span class="icon"><?= $icons[$slugName] ?></span><?= $h($title) ?></a>
 <?php endforeach; ?>
             </nav>
@@ -247,6 +248,9 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
                 </div></div>
 
                 <div class="view" id="view-account">
+<?php if (Auth::needsMfaEnrolment()): ?>
+                    <div class="alert alert-error" role="alert"><strong>Two-step verification is required for administrators.</strong> Set it up below; the rest of the app opens as soon as it is on.</div>
+<?php endif; ?>
                     <div class="card">
                         <h3>Change password</h3>
                         <form id="password-form" class="form" autocomplete="off">

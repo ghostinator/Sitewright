@@ -33,6 +33,7 @@ final class Config
             'hsts'             => false,
             'trusted_proxies'  => [],
             'app_key'          => '',
+            'security'         => ['require_mfa' => false],
             'google'           => ['client_id' => '', 'client_secret' => '', 'redirect_uri' => ''],
             'sites'            => ['sync_minutes' => 10],
             'log' => ['file' => '', 'level' => 'info', 'requests' => true],
@@ -223,6 +224,7 @@ final class Config
         if (($v = $env('SW_ALERT_EMAIL_TO')) !== null) { $cfg['alerts']['email_to'] = $list($v); }
         foreach (['teams_webhook' => 'SW_ALERT_TEAMS_WEBHOOK', 'telegram_token' => 'SW_ALERT_TELEGRAM_TOKEN', 'telegram_chat_id' => 'SW_ALERT_TELEGRAM_CHAT_ID'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['alerts'][$k] = $v; } }
         foreach (['client_id' => 'SW_GOOGLE_CLIENT_ID', 'client_secret' => 'SW_GOOGLE_CLIENT_SECRET', 'redirect_uri' => 'SW_GOOGLE_REDIRECT_URI'] as $k => $e) { if (($v = $env($e)) !== null) { $cfg['google'][$k] = $v; } }
+        if (($v = $env('SW_REQUIRE_MFA')) !== null) { $cfg['security']['require_mfa'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }
         if (($v = $env('SW_APP_KEY')) !== null) { $cfg['app_key'] = $v; }
         if (($v = $env('SW_TRUSTED_PROXIES')) !== null) { $cfg['trusted_proxies'] = $list($v); }
         if (($v = $env('SW_HSTS')) !== null) { $cfg['hsts'] = filter_var($v, FILTER_VALIDATE_BOOLEAN); }

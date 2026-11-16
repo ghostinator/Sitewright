@@ -159,6 +159,13 @@ final class App
                 Audit::log('permission_denied', null, '', "$method $path");
                 Response::error('You do not have permission to do that', 403);
             }
+            // "Require two-step verification" is on and this administrator has none: only the way to fix that (and to sign out) is open.
+            if (Auth::needsMfaEnrolment() && !in_array($route['handler'], [
+                'Sitewright\\Core\\AuthController@logout', 'Sitewright\\Core\\AuthController@me', 'Sitewright\\Core\\AuthController@changePassword',
+                'Sitewright\\Core\\AuthController@mfaSetup', 'Sitewright\\Core\\AuthController@mfaEnable', 'Sitewright\\Core\\AuthController@mfaDisable',
+            ], true)) {
+                Response::error('Two-step verification is required for administrators. Set it up under My Account.', 403, ['code' => 'mfa_required']);
+            }
         } elseif (!empty($opts['session'])) {
             Auth::startSession();
         }

@@ -51,7 +51,7 @@ final class AuthController
         $u = Auth::user();
         $db = Database::getInstance();
         $mfa = $u ? ($db->fetchOne('SELECT totp_secret IS NOT NULL AS m FROM `' . $db->t('users') . '` WHERE id = :i', ['i' => $u['id']])['m'] ?? 0) : 0;
-        Response::success('ok', ['user' => $u, 'mfa_enabled' => (bool)$mfa, 'csrf_token' => Auth::csrfToken()]);
+        Response::success('ok', ['user' => $u, 'mfa_enabled' => (bool)$mfa, 'mfa_required' => Auth::needsMfaEnrolment(), 'csrf_token' => Auth::csrfToken()]);
     }
 
     // ---------------------------------------------------------------- password reset (public)

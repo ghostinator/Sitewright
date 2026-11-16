@@ -62,6 +62,7 @@ final class Settings
         // ---- Security
         $add('session.idle_timeout', 'security', 'Session length when idle', 'Sign out after this much inactivity.', 'int', ['min' => 300, 'max' => 86400, 'unit' => 'seconds']);
         $add('session.absolute_timeout', 'security', 'Longest session', 'Sign out after this long, however active.', 'int', ['min' => 900, 'max' => 2592000, 'unit' => 'seconds']);
+        $add('security.require_mfa', 'security', 'Require two-step verification for administrators', 'Administrators without it can only reach My Account until they set it up. You must have it on yourself first. Break-glass: SW_REQUIRE_MFA=false on the server.', 'bool', ['env' => 'SW_REQUIRE_MFA', 'danger' => true, 'danger_effects' => ['Other administrators without two-step verification are limited to My Account until they enrol.']]);
         $add('limits.login_attempts', 'security', 'Failed sign-ins per account', 'Wrong passwords allowed per account in the window below.', 'int', ['min' => 1, 'max' => 100]);
         $add('limits.login_ip_attempts', 'security', 'Failed sign-ins per address', 'Wrong passwords allowed from one IP address in the window below.', 'int', ['min' => 1, 'max' => 1000]);
         $add('limits.login_window', 'security', 'Sign-in limit window', 'How long failed sign-ins are counted.', 'int', ['min' => 60, 'max' => 86400, 'unit' => 'seconds']);

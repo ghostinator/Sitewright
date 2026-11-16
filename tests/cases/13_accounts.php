@@ -178,3 +178,41 @@ test('audit API: admin only, newest first, paged, filterable; role/MFA/account c
     foreach ($f['json']['data']['rows'] as $r) { eq($r['action'], 'user_created'); }
     eq($a->api('GET', '/api/audit?action=' . urlencode("x' OR 1=1 --"))['status'], 200, 'injection-shaped filter is ignored, not executed');
 });
+
+// ---- "Require two-step verification for administrators" ----------------------------------------------------------------------
+test('require MFA: an admin without it can only reach My Account, sign-out, password and MFA set-up; enrolling restores everything', function () use ($db) {
+    $db->query('TRUNCATE sw_rate_limits');
+    $db->update('users', ['role' => 'admin', 'totp_secret' => null], ['username' => 'second']);
+    $srv = startServer(['SW_REQUIRE_MFA' => 'true']); $b = $srv['base'];
+    $h = new TestHttp($b); eq($h->login('second', 'second admin passphrase')['status'], 200);
+    foreach (['/api/users', '/api/audit', '/api/settings', '/api/dashboard/stats'] as $p) {
+        $r = $h->api('GET', $p); eq($r['status'], 403, $p); eq($r['json']['errors']['code'] ?? null, 'mfa_required', $p); ok(str_contains($r['json']['message'], 'Two-step verification'));
+    }
+    eq($h->api('GET', '/api/auth/me')['status'], 200); eq($h->api('GET', '/api/auth/me')['json']['data']['mfa_required'], true);
+    $page = $h->req('GET', '/users'); eq($page['status'], 302); ok(str_ends_with($page['headers']['location'], '/account'));
+    eq($h->req('GET', '/account')['status'], 200);
+    $s = $h->api('POST', '/api/auth/mfa/setup', ['password' => 'second admin passphrase']); eq($s['status'], 200, $s['body']);
+    $code = Totp::code((string)Totp::base32Decode($s['json']['data']['secret']), intdiv(time(), 30));
+    $e = $h->api('POST', '/api/auth/mfa/enable', ['code' => $code]); eq($e['status'], 200, $e['body']); $h->csrf = $e['json']['data']['csrf_token'];
+    eq($h->api('GET', '/api/users')['status'], 200, 'after enrolling the admin is no longer limited');
+    $ed = new TestHttp($b); $ed->login('ed', 'editor passphrase long here'); eq($ed->api('GET', '/api/dashboard/stats')['status'], 200, 'editors are not affected');
+});
+test('require MFA (saved setting): cannot be switched on by an admin who has no MFA; once on, it applies live; env override is the break-glass', function () use ($db) {
+    $db->query('TRUNCATE sw_rate_limits'); $db->query('TRUNCATE sw_settings');
+    $db->update('users', ['totp_secret' => null], ['username' => 'second']); $db->update('users', ['role' => 'admin', 'totp_secret' => null], ['username' => 'root']);
+    $srv = startServer(['SW_APP_KEY' => Sitewright\Core\Crypto::generateKey()]); $b = $srv['base'];
+    $root = new TestHttp($b); $root->login('root', 'root passphrase long here');
+    $r = $root->api('PUT', '/api/settings', ['changes' => ['security.require_mfa' => true], 'confirm' => true]);
+    eq($r['status'], 409, $r['body']); ok(str_contains($r['json']['message'], 'your own account'));
+    $db->update('users', ['totp_secret' => Totp::generateSecret()], ['username' => 'root']);
+    $root = new TestHttp($b); $root->login('root', 'root passphrase long here');
+    $db->query("DELETE FROM sw_recovery_codes WHERE user_id = (SELECT id FROM sw_users WHERE username='root')");
+    // root now has a secret in the DB, so a fresh login asks for a code: use the pending flow with a valid code
+    $secret = $db->fetchOne("SELECT totp_secret FROM sw_users WHERE username='root'")['totp_secret'];
+    $h = new TestHttp($b); $l = $h->login('root', 'root passphrase long here'); eq($l['json']['data'], ['mfa_required' => true]);
+    $m = $h->api('POST', '/api/auth/mfa', ['code' => Totp::code((string)Totp::base32Decode($secret), intdiv(time(), 30))]); eq($m['status'], 200, $m['body']); $h->csrf = $m['json']['data']['csrf_token'];
+    eq($h->api('PUT', '/api/settings', ['changes' => ['security.require_mfa' => true], 'confirm' => true])['status'], 200);
+    $other = new TestHttp($b); $other->login('second', 'second admin passphrase');
+    eq($other->api('GET', '/api/users')['status'], 403, 'applies to the other admin immediately');
+    $db->update('users', ['totp_secret' => null], ['username' => 'root']);
+});
