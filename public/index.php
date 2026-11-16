@@ -18,9 +18,9 @@ foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 $views = [
     'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'analytics' => 'Analytics',
     'content-ai' => 'Content AI', 'local-seo' => 'Local SEO', 'image-seo' => 'Image SEO', 'sitemaps' => 'Sitemaps',
-    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'users' => 'Users', 'audit' => 'Audit Log',
+    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'users' => 'Users', 'audit' => 'Audit Log', 'settings' => 'Settings',
 ];
-$adminViews = ['sites', 'users', 'audit'];
+$adminViews = ['sites', 'users', 'audit', 'settings'];
 $slug = trim(App::relativePath(), '/');
 $view = $slug === '' ? 'dashboard' : $slug;
 $resetPage = $slug === 'reset';   // public: the page the password-reset e-mail links to
@@ -49,7 +49,7 @@ if ($user && $resetPage) { header('Location: ' . App::basePath() . '/'); exit; }
 $base = App::basePath();
 $config = ['basePath' => $base, 'csrfToken' => $csrf, 'view' => $resetPage ? 'reset' : $view, 'user' => $user ? ['username' => $user['username'], 'role' => $user['role']] : null];
 $configJson = json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
-$icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔️', 'analytics' => '📈', 'content-ai' => '🤖', 'local-seo' => '📍', 'image-seo' => '🖼️', 'sitemaps' => '🗺️', '404-monitor' => '⚠️', 'redirections' => '↪️', 'account' => '👤', 'sites' => '🌐', 'users' => '👥', 'audit' => '📜'];
+$icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔️', 'analytics' => '📈', 'content-ai' => '🤖', 'local-seo' => '📍', 'image-seo' => '🖼️', 'sitemaps' => '🗺️', '404-monitor' => '⚠️', 'redirections' => '↪️', 'account' => '👤', 'sites' => '🌐', 'users' => '👥', 'audit' => '📜', 'settings' => '⚙️'];
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -290,6 +290,18 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
                         <button type="submit" class="btn btn-primary">Add site</button></form>
                     <div id="site-secret" class="hidden"></div>
                     <div id="sites-list" class="list-area"></div>
+                </div></div>
+
+                <div class="view" id="view-settings"><div class="card">
+                    <h3>Settings</h3>
+                    <div class="settings-toolbar">
+                        <div class="form-group"><label for="settings-search">Search settings</label><input id="settings-search" type="search" autocomplete="off" placeholder="Name, key or environment variable"></div>
+                        <label class="settings-only"><input type="checkbox" id="settings-only"> Only changed from default</label>
+                    </div>
+                    <div id="settings-error" class="alert alert-error hidden" role="alert" tabindex="-1"></div>
+                    <div id="settings-root"></div>
+                    <div id="settings-bar" class="settings-bar hidden" role="region" aria-label="Unsaved changes"></div>
+                    <dialog id="settings-dialog" aria-labelledby="settings-dialog-title"></dialog>
                 </div></div>
 
                 <div class="view" id="view-users"><div class="card">

@@ -191,3 +191,71 @@ test('editing a location fills the form from data without parsing HTML, shows ho
   assert.equal(doc.getElementById('loc-form-title').textContent, 'Edit ' + p); assert.equal(doc.querySelectorAll('img').length, 0);
   assert.ok(!form.classList.contains('hidden'));
 });
+
+// ---- settings page ---------------------------------------------------------------------------------------------------------
+function settingsData(p) {
+  const row = (o) => Object.assign({ key: 'limits.crawl_seconds', label: 'Longest crawl', help: 'A crawl stops after this long.', unit: 'seconds', type: 'int', enum: null, min: 10, max: 900, value: 120, default: 120, source: 'default', locked: false, env: null, fallback: 'built-in default 120', secret: false, danger: false, danger_effects: [], apply: 'live', changed_by: null, changed_at: null }, o);
+  return { encryption_ready: true,
+    readonly: [{ key: 'db.pass', value: '(hidden)', source: 'file' }, { key: 'base_url', value: 'https://x.example', source: 'file' }],
+    groups: [
+      { id: 'mail', label: 'Mail & alerts', description: 'How mail works.', changed_count: 1, settings: [
+        row({ key: 'mail.postal_url', label: p || 'Postal address', help: p || 'Where mail goes', type: 'url', unit: '', value: 'https://app.example.test', default: '', source: 'saved', danger: true, danger_effects: ['Clears the stored Postal API key; enter it again.'], changed_by: 'root', changed_at: '2026-11-15 10:00:00', fallback: 'built-in default ""' }),
+        row({ key: 'mail.postal_key', label: 'Postal API key', type: 'secret', unit: '', value: { set: true }, default: null, secret: true, source: 'saved', fallback: 'built-in default (none)' }),
+        row({ key: 'mail.from', label: 'From address', type: 'email', unit: '', value: 'a@example.test', default: '', source: 'env', locked: true, env: 'SW_MAIL_FROM' }) ] },
+      { id: 'crawl', label: 'Crawling & jobs', description: '', changed_count: 0, settings: [ row({}), row({ key: 'enable_geocoding', label: 'Look up coordinates', type: 'bool', unit: '', value: false, default: false, min: null, max: null }) ] },
+    ] };
+}
+function settingsPage(data) {
+  const { SW, dom, box, doc } = (() => { const l = load(); return { SW: l.SW, dom: l.dom, box: l.box, doc: l.dom.window.document }; })();
+  const st = SW.newSettingsState(); SW.renderSettings(box, data, st);
+  return { SW, st, box, doc, data, redraw: () => SW.renderSettings(box, data, st) };
+}
+test('settings: hostile text in label/help/value/unit renders as text only', () => {
+  const p = '<img src=x onerror=alert(1)>';
+  const d = settingsData(p); d.groups[0].settings[0].unit = p; d.groups[0].settings[0].fallback = p; d.groups[0].settings[0].changed_by = p;
+  const { box } = settingsPage(d);
+  assert.equal(box.querySelectorAll('img,script,svg,iframe,style').length, 0);
+  assert.ok(box.textContent.includes(p));
+});
+test('settings: secret rows show set/not set and never an input holding the value; Replace reveals an EMPTY password field', () => {
+  const { box, redraw, st, SW } = settingsPage(settingsData());
+  const row = box.querySelector('[data-setting-row="mail.postal_key"]');
+  assert.ok(/set/i.test(row.textContent)); assert.equal(row.querySelector('input'), null);
+  st.replacing['mail.postal_key'] = true; redraw();
+  const inp = box.querySelector('[data-setting-row="mail.postal_key"] input'); assert.equal(inp.type, 'password'); assert.equal(inp.value, ''); assert.equal(inp.getAttribute('autocomplete'), 'new-password');
+});
+test('settings: locked rows are disabled and name their environment variable; saved rows offer Reset and say what it falls back to', () => {
+  const { box } = settingsPage(settingsData());
+  const locked = box.querySelector('[data-setting-row="mail.from"]');
+  assert.ok(locked.querySelector('input').disabled); assert.ok(locked.textContent.includes('SW_MAIL_FROM'));
+  const saved = box.querySelector('[data-setting-row="mail.postal_url"]');
+  assert.ok(saved.querySelector('[data-action="settings-reset"]')); assert.ok(saved.textContent.includes('built-in default'));
+  assert.equal(locked.querySelector('[data-action="settings-reset"]'), null);
+});
+test('settings: every group is a fieldset with a legend and every control has a label', () => {
+  const { box } = settingsPage(settingsData());
+  const fs = box.querySelectorAll('fieldset.settings-group'); assert.ok(fs.length >= 1); for (const f of fs) assert.ok(f.querySelector('legend'));
+  for (const c of box.querySelectorAll('input:not([type=hidden]), select, textarea')) { assert.ok(c.getAttribute('aria-label') || (c.id && box.querySelector(`label[for="${c.id}"]`)), 'unlabelled control ' + (c.name || c.id)); }
+});
+test('settings: diffSettings lists only real changes, masks secrets, attaches danger effects', () => {
+  const { SW, data } = settingsPage(settingsData());
+  const d = SW.diffSettings(data, { 'limits.crawl_seconds': 120, 'mail.postal_url': 'https://other.example.test', 'mail.postal_key': 'NEW-SECRET-VALUE', 'enable_geocoding': true });
+  const keys = d.changes.map(c => c.key).sort(); assert.equal(JSON.stringify(keys), JSON.stringify(['enable_geocoding', 'mail.postal_key', 'mail.postal_url']));
+  const sec = d.changes.find(c => c.key === 'mail.postal_key'); assert.equal(sec.to, '(new value)'); assert.ok(!JSON.stringify(d).includes('NEW-SECRET-VALUE'));
+  assert.equal(d.changes.find(c => c.key === 'mail.postal_url').effects.length, 1); assert.equal(d.changes.find(c => c.key === 'mail.postal_url').from, 'https://app.example.test');
+});
+test('settings: search matches label, key and env name; "only changed" hides defaults; group counts shown', () => {
+  const { box, st, redraw } = settingsPage(settingsData());
+  st.q = 'SW_MAIL_FROM'; redraw(); assert.ok(box.querySelector('[data-setting-row="mail.from"]')); assert.equal(box.querySelector('[data-setting-row="mail.postal_url"]'), null);
+  st.q = 'crawl'; redraw(); assert.ok(box.querySelector('[data-setting-row="limits.crawl_seconds"]'));
+  st.q = 'zzzz-nothing'; redraw(); assert.ok(/No setting matches/.test(box.textContent));
+  st.q = ''; st.only = true; st.group = 'crawl'; redraw(); assert.ok(/Nothing here differs|No setting/.test(box.textContent));
+  st.only = false; redraw(); assert.ok(box.querySelector('.settings-nav').textContent.includes('Mail & alerts'));
+});
+test('settings: the save bar names unsaved settings and clears after discard', () => {
+  const { SW, st, data, doc } = settingsPage(settingsData());
+  const bar = doc.createElement('div'); doc.body.append(bar);
+  st.edits['limits.crawl_seconds'] = 60; SW.renderSettingsBar(bar, data, st);
+  assert.ok(bar.textContent.includes('Longest crawl')); assert.ok(!bar.classList.contains('hidden'));
+  st.edits = {}; SW.renderSettingsBar(bar, data, st); assert.ok(bar.classList.contains('hidden'));
+});

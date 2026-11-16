@@ -53,7 +53,7 @@ test('every view loads without error alerts or console errors (admin sees all, i
     await page.click(`.nav-item[data-view="${v}"]`);
     await expect(page.locator(`#view-${v}`)).toHaveClass(/active/);
     await page.waitForTimeout(250);
-    await expect(page.locator(`#view-${v} .alert-error`)).toHaveCount(0);
+    await expect(page.locator(`#view-${v} .alert-error:not(.hidden)`)).toHaveCount(0);
   }
 });
 
@@ -176,4 +176,61 @@ test('audit log shows what happened, newest first', async ({ page }) => {
   await expect(page.locator('#audit-list')).toContainText('user_created');
   await expect(page.locator('#audit-list')).toContainText('mfa_enabled');
   await expect(page.locator('#audit-list')).not.toContainText('definitely wrong');       // typed passwords are never recorded
+});
+
+test('settings: search, change, review old → new, save, see "Saved here", reset to the default', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.click('.nav-item[data-view=settings]');
+  await expect(page.locator('#page-title')).toHaveText('Settings');
+  await page.fill('#settings-search', 'pause between');
+  const row = page.locator('[data-setting-row="limits.crawl_delay_ms"]');
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Built-in default');
+  await row.getByLabel('Pause between pages').fill('450');
+  await expect(page.locator('#settings-bar')).toContainText('1 unsaved change');
+  await expect(page.locator('#settings-bar')).toContainText('Pause between pages');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page.locator('#settings-dialog')).toContainText('200 milliseconds');
+  await expect(page.locator('#settings-dialog')).toContainText('450 milliseconds');
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
+  await expect(page.locator('#toast')).toContainText('Changes saved');
+  await page.reload(); await page.click('.nav-item[data-view=settings]');
+  await page.fill('#settings-search', 'pause between');
+  await expect(page.locator('[data-setting-row="limits.crawl_delay_ms"]')).toContainText('Saved here');
+  await expect(page.locator('[data-setting-row="limits.crawl_delay_ms"] input')).toHaveValue('450');
+  page.once('dialog', d => d.accept());
+  await page.locator('[data-setting-row="limits.crawl_delay_ms"]').getByRole('button', { name: 'Reset' }).click();
+  await expect(page.locator('[data-setting-row="limits.crawl_delay_ms"]')).toContainText('Built-in default');
+  await expect(page.locator('[data-setting-row="limits.crawl_delay_ms"] input')).toHaveValue('200');
+  await page.fill('#settings-search', 'zzzz-nothing');
+  await expect(page.locator('#settings-root')).toContainText('No setting matches');
+  await page.click('.nav-item[data-view=audit]');
+  await expect(page.locator('#audit-list')).toContainText('setting_changed');
+  await expect(page.locator('#audit-list')).toContainText('limits.crawl_delay_ms: 200 -> 450');
+});
+
+test('settings: keyboard only, and a dangerous change cannot be saved without the dialog', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.click('.nav-item[data-view=settings]');
+  await page.fill('#settings-search', 'postal address');
+  const field = page.getByLabel('Postal address');
+  await field.focus(); await page.keyboard.type('https://postal.example.test');
+  const save = page.getByRole('button', { name: 'Save changes' });
+  await save.focus(); await page.keyboard.press('Enter');
+  const dlg = page.locator('#settings-dialog');
+  await expect(dlg).toBeVisible(); await expect(dlg).toContainText('Clears the stored Postal API key');
+  expect(await page.evaluate(async () => (await (await fetch('/api/settings', { credentials: 'same-origin' })).json()).data.groups[0].settings.find(s => s.key === 'mail.postal_url').source)).toBe('default');   // nothing saved yet
+  await page.getByRole('button', { name: 'Keep editing' }).click();
+  await expect(dlg).toBeHidden();
+  await expect(page.locator('#settings-bar')).toContainText('1 unsaved change');
+  await save.focus(); await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Save and apply these effects' }).click();
+  await expect(page.locator('#toast')).toContainText('Changes saved');
+  page.once('dialog', d => d.accept());
+  await page.fill('#settings-search', 'postal address');
+  await page.locator('[data-setting-row="mail.postal_url"]').getByRole('button', { name: 'Reset' }).click();
+  await expect(page.locator('[data-setting-row="mail.postal_url"]')).toContainText('Built-in default');
+  await page.fill('#settings-search', 'smtp server');
+  await page.fill('#settings-search', '');
+  await expect(page.locator('#settings-root fieldset.settings-group legend').first()).toBeVisible();
 });

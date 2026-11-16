@@ -254,9 +254,137 @@
         return Object.keys(out).length ? out : null;
     }
 
+    // ------------------------------------------------------------------ settings page (pure renderers; wiring is further down)
+
+    const SETTING_SOURCES = { default: 'Built-in default', file: 'Config file', saved: 'Saved here', env: 'Locked by server' };
+    const newSettingsState = () => ({ group: 'mail', q: '', only: false, edits: {}, replacing: {}, errors: {}, testResult: {} });
+    const settingId = key => 'set-' + key.replace(/[^a-z0-9]+/gi, '-');
+    const allSettings = data => data.groups.flatMap(g => g.settings.map(s => Object.assign({ group: g.id }, s)));
+
+    function settingValueText(s, v) {
+        if (s.secret) return v ? '(new value)' : (s.value && s.value.set ? '(set)' : '(not set)');
+        if (Array.isArray(v)) return v.length ? v.join(', ') : '(empty)';
+        if (typeof v === 'boolean') return v ? 'On' : 'Off';
+        return v === null || v === undefined || v === '' ? '(empty)' : String(v) + (s.unit ? ' ' + s.unit : '');
+    }
+
+    /** Changes the user has made but not saved: [{key,label,from,to,secret,effects}]. Equal-to-current edits are not changes. */
+    function diffSettings(data, edits) {
+        const changes = [];
+        for (const s of allSettings(data)) {
+            if (!(s.key in edits) || s.locked) continue;
+            const v = edits[s.key];
+            if (s.secret) { if (v === '' || v === undefined) continue; changes.push({ key: s.key, label: s.label, from: s.value && s.value.set ? '(set)' : '(not set)', to: '(new value)', secret: true, effects: s.danger ? s.danger_effects : [] }); continue; }
+            if (JSON.stringify(v) === JSON.stringify(s.value)) continue;
+            changes.push({ key: s.key, label: s.label, from: settingValueText(s, s.value), to: settingValueText(s, v), secret: false, effects: s.danger ? s.danger_effects : [] });
+        }
+        return { changes };
+    }
+
+    function settingMatches(s, q) {
+        if (!q) return true;
+        const hay = [s.label, s.help, s.key, s.env || ''].join(' ').toLowerCase();
+        return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+    }
+
+    function settingControl(s, st) {
+        const id = settingId(s.key), cur = s.key in st.edits ? st.edits[s.key] : s.value;
+        const common = { data: { setting: s.key, type: s.type }, attrs: { id, name: s.key } };
+        let c;
+        if (s.secret) {
+            if (!st.replacing[s.key]) return null;
+            c = el('input', { data: common.data, attrs: Object.assign({ type: 'password', autocomplete: 'new-password', placeholder: 'Paste the new value', spellcheck: 'false' }, common.attrs) });
+            c.value = '';
+        } else if (s.type === 'bool') {
+            c = el('input', { data: common.data, attrs: Object.assign({ type: 'checkbox' }, common.attrs) }); c.checked = !!cur;
+        } else if (s.type === 'enum') {
+            c = el('select', { data: common.data, attrs: common.attrs }, ...s.enum.map(o => { const op = el('option', { text: o, attrs: { value: o } }); if (o === cur) op.selected = true; return op; }));
+        } else if (s.type === 'list' || s.type === 'email_list') {
+            c = el('textarea', { data: common.data, attrs: Object.assign({ rows: '3', spellcheck: 'false' }, common.attrs) }); c.value = (cur || []).join('\n');
+        } else if (s.type === 'int' || s.type === 'float') {
+            c = el('input', { data: common.data, attrs: Object.assign({ type: 'number', step: s.type === 'int' ? '1' : 'any' }, s.min !== null && s.min !== undefined ? { min: String(s.min) } : {}, s.max !== null && s.max !== undefined ? { max: String(s.max) } : {}, common.attrs) }); c.value = cur === null || cur === undefined ? '' : String(cur);
+        } else {
+            c = el('input', { data: common.data, attrs: Object.assign({ type: s.type === 'email' ? 'email' : 'text', autocomplete: 'off', spellcheck: 'false' }, common.attrs) }); c.value = cur === null || cur === undefined ? '' : String(cur);
+        }
+        if (s.locked) c.disabled = true;
+        return c;
+    }
+
+    function settingRow(s, st) {
+        const id = settingId(s.key), ctl = settingControl(s, st), err = st.errors[s.key];
+        const dirty = s.key in st.edits && !s.locked;
+        const badge = el('span', { class: 'badge settings-src settings-src-' + s.source, text: (s.locked ? 'Locked · ' : '') + (SETTING_SOURCES[s.source] || s.source) });
+        const head = el('div', { class: 'settings-row-head' }, el('label', { text: s.label, attrs: { for: ctl ? id : id + '-none' } }), badge, dirty ? el('span', { class: 'badge', text: 'Unsaved' }) : null);
+        const body = [];
+        if (s.secret) {
+            const isSet = s.value && s.value.set;
+            body.push(el('span', { class: 'settings-secret-state', text: isSet ? 'Set' + (s.changed_by ? ' by ' + s.changed_by : '') + (s.changed_at ? ', ' + s.changed_at : '') : 'Not set' }));
+            if (ctl) body.push(ctl); else if (!s.locked) body.push(el('button', { class: 'btn btn-secondary btn-sm', text: isSet ? 'Replace' : 'Set a value', attrs: { type: 'button' }, data: { action: 'settings-replace-secret', key: s.key } }));
+            if (isSet && s.source === 'saved') body.push(el('button', { class: 'btn btn-secondary btn-sm', text: 'Remove', attrs: { type: 'button' }, data: { action: 'settings-reset', key: s.key } }));
+        } else {
+            body.push(ctl);
+            if (s.unit) body.push(el('span', { class: 'settings-unit', text: s.unit }));
+        }
+        const meta = [el('span', { class: 'mono', text: s.key + (s.env ? ' · ' + s.env : '') })];
+        if (s.locked) meta.push(el('span', { text: 'Set by ' + s.env + ' on the server; change it there.' }));
+        else if (s.source === 'saved') {
+            meta.push(el('span', { text: 'Reset would use the ' + s.fallback + '.' }));
+            if (!s.secret) meta.push(el('button', { class: 'btn btn-link btn-sm', text: 'Reset', attrs: { type: 'button' }, data: { action: 'settings-reset', key: s.key } }));
+            if (!s.secret && s.changed_by) meta.push(el('span', { text: 'Saved by ' + s.changed_by + (s.changed_at ? ', ' + s.changed_at : '') }));
+        } else if (s.source === 'file') {
+            meta.push(el('button', { class: 'btn btn-link btn-sm', text: 'Move to encrypted storage', attrs: { type: 'button' }, data: { action: 'settings-promote', key: s.key } }));
+        }
+        if (s.danger) meta.push(el('span', { class: 'settings-danger', text: 'Needs confirmation: ' + s.danger_effects.join(' ') }));
+        return el('div', { class: 'settings-row' + (dirty ? ' settings-row-dirty' : '') + (err ? ' settings-row-error' : ''), data: { settingRow: s.key } },
+            head, el('div', { class: 'settings-row-body' }, ...body), s.help ? el('p', { class: 'settings-help', text: s.help }) : null,
+            err ? el('p', { class: 'settings-error', text: err, attrs: { role: 'alert' } }) : null, el('div', { class: 'settings-meta' }, ...meta));
+    }
+
+    function renderSettings(container, data, st) {
+        const shown = (st.q ? data.groups : data.groups.filter(g => g.id === st.group));
+        const nav = el('nav', { class: 'settings-nav', attrs: { 'aria-label': 'Settings groups' } },
+            ...data.groups.map(g => {
+                const n = g.changed_count + g.settings.filter(s => s.key in st.edits).length;
+                return el('button', { class: 'settings-nav-item' + (g.id === st.group && !st.q ? ' active' : ''), attrs: { type: 'button', 'aria-current': g.id === st.group && !st.q ? 'true' : 'false' }, data: { action: 'settings-group', id: g.id } },
+                    el('span', { text: g.label }), n ? el('span', { class: 'badge', text: String(n), attrs: { title: 'Changed from the default' } }) : null);
+            }));
+        const sel = el('select', { class: 'settings-nav-select', attrs: { 'aria-label': 'Settings group', id: 'settings-group-select' }, data: { change: 'settings-group-select' } },
+            ...data.groups.map(g => { const o = el('option', { text: g.label, attrs: { value: g.id } }); if (g.id === st.group) o.selected = true; return o; }));
+        const panels = [];
+        for (const g of shown) {
+            const rows = g.settings.filter(s => settingMatches(s, st.q) && (!st.only || s.source === 'saved' || s.key in st.edits));
+            if (!rows.length) continue;
+            const kids = [el('legend', { text: g.label }), g.description && !st.q ? el('p', { class: 'text-muted', text: g.description }) : null];
+            if (g.id === 'mail' && !st.q) kids.push(el('p', {}, el('button', { class: 'btn btn-secondary btn-sm', text: 'Send test mail to me', attrs: { type: 'button' }, data: { action: 'settings-test', name: 'mail' } }), ' ',
+                el('span', { class: 'settings-test-result', text: st.testResult.mail || '', attrs: { role: 'status', 'aria-live': 'polite' } })));
+            kids.push(...rows.map(s => settingRow(s, st)));
+            panels.push(el('fieldset', { class: 'settings-group' }, ...kids));
+        }
+        if (!panels.length) panels.push(muted(st.q ? 'No setting matches “' + st.q + '”. Try a word from its description.' : 'Nothing here differs from its default.'));
+        const ro = !st.q && data.readonly.length ? el('details', { class: 'settings-readonly' }, el('summary', { text: 'Set on the server (read-only)' }),
+            ...data.readonly.map(r => el('div', { class: 'settings-row settings-row-ro' }, el('span', { class: 'mono', text: r.key }), ' ', el('span', { class: 'mono', text: Array.isArray(r.value) ? r.value.join(', ') : String(r.value === null ? '' : r.value) }), ' ', el('span', { class: 'badge', text: SETTING_SOURCES[r.source] || r.source })))) : null;
+        setContent(container, data.encryption_ready ? null : el('div', { class: 'alert settings-note', text: 'app_key is not set, so secrets cannot be saved yet. Run php bin/gen-key.php and put the result in the config file as app_key.' }),
+            el('div', { class: 'settings-layout' }, el('div', { class: 'settings-side' }, sel, nav), el('div', { class: 'settings-main' }, ...panels, ro)));
+    }
+
+    function renderSettingsBar(bar, data, st) {
+        const { changes } = diffSettings(data, st.edits);
+        bar.classList.toggle('hidden', !changes.length);
+        // Do not rebuild the bar when nothing in it changed: a blur-triggered re-render would swap the button out from under a click.
+        const sig = JSON.stringify(changes.map(c => c.key + '=' + c.to));
+        if (bar.dataset.sig === sig) return;
+        bar.dataset.sig = sig;
+        if (!changes.length) { setContent(bar); return; }
+        setContent(bar, el('span', { class: 'settings-bar-text' }, el('strong', { text: changes.length + (changes.length === 1 ? ' unsaved change' : ' unsaved changes') }), ': ' + changes.map(c => c.label).join(', ')),
+            el('span', { class: 'settings-bar-actions' },
+                el('button', { class: 'btn btn-secondary btn-sm', text: 'Review', attrs: { type: 'button' }, data: { action: 'settings-review' } }), ' ',
+                el('button', { class: 'btn btn-secondary btn-sm', text: 'Discard', attrs: { type: 'button' }, data: { action: 'settings-discard' } }), ' ',
+                el('button', { class: 'btn btn-primary btn-sm', text: 'Save changes', attrs: { type: 'button' }, data: { action: 'settings-save' } })));
+    }
+
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation };
+    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -268,7 +396,7 @@
     // ------------------------------------------------------------------ API
 
     class ApiError extends Error {
-        constructor(message, status) { super(message); this.status = status; }
+        constructor(message, status, errors) { super(message); this.status = status; this.errors = errors || {}; }
     }
 
     async function apiRequest(method, path, body) {
@@ -283,7 +411,7 @@
         let payload = null;
         try { payload = await res.json(); } catch (e) { /* non-JSON error page */ }
         if (res.status === 401 && path !== '/auth/login' && path !== '/auth/mfa' && path !== '/auth/reset' && path !== '/auth/forgot') { window.location.reload(); throw new ApiError('Session expired', 401); }
-        if (!res.ok || !payload || payload.success !== true) throw new ApiError((payload && payload.message) || ('Request failed (HTTP ' + res.status + ')'), res.status);
+        if (!res.ok || !payload || payload.success !== true) throw new ApiError((payload && payload.message) || ('Request failed (HTTP ' + res.status + ')'), res.status, payload && payload.errors);
         return payload.data;
     }
 
@@ -376,7 +504,7 @@
 
     const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', analytics: 'Analytics', 'content-ai': 'Content AI',
         'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules',
-        account: 'My Account', sites: 'Sites', users: 'Users', audit: 'Audit Log' };
+        account: 'My Account', sites: 'Sites', users: 'Users', audit: 'Audit Log', settings: 'Settings' };
     const viewUrl = v => BASE + (v === 'dashboard' ? '/' : '/' + v);
 
     function viewFromLocation() {
@@ -391,7 +519,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false) };
+        const loaders = { dashboard: loadDashboard, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
         if (loaders[view]) loaders[view]();
     }
 
@@ -624,6 +752,83 @@
         try { await apiRequest('PATCH', '/users/' + encodeURIComponent(t.dataset.id), { role: t.value }); showToast('Role updated'); } catch (err) { showToast(err.message, 'error'); loadUsers(); }
     });
 
+    // ------------------------------------------------------------------ settings page wiring
+
+    let settingsData = null;
+    const settingsState = newSettingsState();
+
+    function drawSettings() {
+        renderSettings(document.getElementById('settings-root'), settingsData, settingsState);
+        renderSettingsBar(document.getElementById('settings-bar'), settingsData, settingsState);
+    }
+    async function loadSettings() {
+        const box = document.getElementById('settings-root');
+        try {
+            settingsData = await apiRequest('GET', '/settings');
+            const g = window.location.hash.replace('#', '');
+            if (settingsData.groups.some(x => x.id === g)) settingsState.group = g;
+            drawSettings();
+        } catch (e) { showError(box, 'Could not load settings: ' + e.message); }
+    }
+    function settingFromControl(node) {
+        const s = allSettings(settingsData).find(x => x.key === node.dataset.setting);
+        if (!s) return;
+        let v;
+        if (s.type === 'bool') v = node.checked;
+        else if (s.type === 'int' || s.type === 'float') v = node.value.trim() === '' ? null : Number(node.value);
+        else if (s.type === 'list' || s.type === 'email_list') v = node.value.split(/[\n,]+/).map(x => x.trim()).filter(Boolean);
+        else v = node.value;
+        if (!s.secret && JSON.stringify(v) === JSON.stringify(s.value)) delete settingsState.edits[s.key]; else if (s.secret && v === '') delete settingsState.edits[s.key]; else settingsState.edits[s.key] = v;
+        delete settingsState.errors[s.key];
+        renderSettingsBar(document.getElementById('settings-bar'), settingsData, settingsState);
+        const row = node.closest('.settings-row'); if (row) row.classList.toggle('settings-row-dirty', s.key in settingsState.edits);
+    }
+    function openSettingsDialog() {
+        const { changes } = diffSettings(settingsData, settingsState.edits);
+        if (!changes.length) return;
+        const effects = [...new Set(changes.flatMap(c => c.effects))];
+        const dlg = document.getElementById('settings-dialog');
+        setContent(dlg, el('h3', { text: 'Review changes', attrs: { id: 'settings-dialog-title' } }),
+            el('ul', { class: 'settings-review' }, ...changes.map(c => el('li', {}, el('strong', { text: c.label }), ': ', el('span', { class: 'mono', text: c.from }), ' → ', el('span', { class: 'mono', text: c.to })))),
+            effects.length ? el('div', { class: 'alert alert-error' }, el('strong', { text: 'Side effects' }), el('ul', {}, ...effects.map(e => el('li', { text: e })))) : null,
+            el('div', { class: 'settings-dialog-actions' },
+                el('button', { class: 'btn btn-secondary', text: 'Keep editing', attrs: { type: 'button' }, data: { action: 'settings-dialog-cancel' } }), ' ',
+                el('button', { class: 'btn ' + (effects.length ? 'btn-danger' : 'btn-primary'), text: effects.length ? 'Save and apply these effects' : 'Save changes', attrs: { type: 'button' }, data: { action: 'settings-confirm' } })));
+        if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    }
+    function closeSettingsDialog() { const dlg = document.getElementById('settings-dialog'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+    async function saveSettings(confirmed) {
+        const { changes } = diffSettings(settingsData, settingsState.edits);
+        if (!changes.length) return;
+        const payload = {}; for (const c of changes) payload[c.key] = settingsState.edits[c.key];
+        const box = document.getElementById('settings-error'); box.classList.add('hidden');
+        try {
+            const r = await apiRequest('PUT', '/settings', { changes: payload, confirm: confirmed });
+            closeSettingsDialog();
+            settingsState.edits = {}; settingsState.replacing = {}; settingsState.errors = {};
+            showToast(r.changed.length ? 'Changes saved' + (r.cleared.length ? '; cleared ' + r.cleared.join(', ') : '') : 'Nothing changed');
+            await loadSettings();
+        } catch (e) {
+            closeSettingsDialog();
+            const errs = e.errors && typeof e.errors === 'object' ? e.errors : {};
+            if (e.status === 409 && errs.code === 'confirm_required') { openSettingsDialog(); return; }
+            for (const k of Object.keys(errs)) if (typeof errs[k] === 'string') settingsState.errors[k] = errs[k];
+            drawSettings();
+            box.textContent = e.message + (Object.keys(settingsState.errors).length ? ' Fix the highlighted settings.' : '');
+            box.classList.remove('hidden'); box.focus();
+        }
+    }
+    window.addEventListener('beforeunload', e => { if (settingsData && Object.keys(settingsState.edits).length) { e.preventDefault(); e.returnValue = ''; } });
+    document.addEventListener('input', e => {
+        if (e.target.id === 'settings-search') { settingsState.q = e.target.value.trim(); if (settingsData) drawSettings(); return; }
+        if (e.target.matches && e.target.matches('[data-setting]')) settingFromControl(e.target);
+    });
+    document.addEventListener('change', e => {
+        if (e.target.id === 'settings-only') { settingsState.only = e.target.checked; if (settingsData) drawSettings(); return; }
+        if (e.target.dataset && e.target.dataset.change === 'settings-group-select') { settingsState.group = e.target.value; settingsState.q = ''; document.getElementById('settings-search').value = ''; drawSettings(); return; }
+        if (e.target.matches && e.target.matches('[data-setting]')) settingFromControl(e.target);
+    });
+
     // ------------------------------------------------------------------ delegated clicks
 
     const clickActions = {
@@ -648,6 +853,16 @@
         'gsc-set-property': async t => { const v = document.getElementById('gsc-prop-' + t.dataset.id).value; await apiRequest('POST', '/gsc/' + encodeURIComponent(t.dataset.id) + '/property', { site_url: v }); delete gscProps[t.dataset.id]; showToast('Property saved'); loadGsc(); },
         'gsc-sync': async t => { await apiRequest('POST', '/gsc/' + encodeURIComponent(t.dataset.id) + '/sync', {}); showToast('Sync started; refresh in a minute'); },
         'gsc-disconnect': async t => { if (confirm('Disconnect Google Search Console? Imported keyword data is kept.')) { await apiRequest('DELETE', '/gsc/' + encodeURIComponent(t.dataset.id)); showToast('Disconnected'); loadGsc(); } },
+        'settings-group': t => { settingsState.group = t.dataset.id; settingsState.q = ''; document.getElementById('settings-search').value = ''; drawSettings(); },
+        'settings-replace-secret': t => { settingsState.replacing[t.dataset.key] = true; drawSettings(); const c = document.getElementById(settingId(t.dataset.key)); if (c) c.focus(); },
+        'settings-reset': async t => { if (confirm('Reset this setting? It falls back to the config file or built-in default.')) { const d = await apiRequest('DELETE', '/settings/' + encodeURIComponent(t.dataset.key)); delete settingsState.edits[t.dataset.key]; showToast('Reset to the ' + d.fallback); await loadSettings(); } },
+        'settings-promote': async t => { await apiRequest('POST', '/settings/' + encodeURIComponent(t.dataset.key) + '/promote', {}); showToast('Moved to encrypted storage'); await loadSettings(); },
+        'settings-test': async t => { settingsState.testResult[t.dataset.name] = 'Sending…'; drawSettings(); const d = await apiRequest('POST', '/settings/test/' + encodeURIComponent(t.dataset.name), {}); settingsState.testResult[t.dataset.name] = (d.ok ? 'Worked: ' : 'Failed: ') + d.message; drawSettings(); },
+        'settings-discard': () => { settingsState.edits = {}; settingsState.replacing = {}; settingsState.errors = {}; drawSettings(); },
+        'settings-review': () => openSettingsDialog(),
+        'settings-save': async () => { const { changes } = diffSettings(settingsData, settingsState.edits); if (changes.some(c => c.effects.length)) openSettingsDialog(); else await saveSettings(false); },
+        'settings-confirm': async () => { await saveSettings(true); },
+        'settings-dialog-cancel': () => closeSettingsDialog(),
         'delete-user': async t => { if (confirm('Delete this user permanently?')) { await apiRequest('DELETE', '/users/' + encodeURIComponent(t.dataset.id)); showToast('User deleted'); loadUsers(); } },
         'user-toggle': async t => { const disabling = t.textContent === 'Disable'; if (!disabling || confirm('Disable this account? Their sessions end immediately.')) { await apiRequest('PATCH', '/users/' + encodeURIComponent(t.dataset.id), { disabled: disabling }); showToast(disabling ? 'Disabled' : 'Enabled'); loadUsers(); } },
         'user-reset-mfa': async t => { if (confirm('Remove two-step verification from this account?')) { await apiRequest('POST', '/users/' + encodeURIComponent(t.dataset.id) + '/reset-mfa', {}); showToast('Two-step verification removed'); loadUsers(); } },
