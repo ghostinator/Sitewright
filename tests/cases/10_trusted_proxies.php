@@ -48,6 +48,6 @@ test('proxies: configuration is validated at boot; trusting everything is refuse
     eq(Config::get('trusted_proxies'), ['10.0.0.0/8', '192.0.2.1', 'fd00::/8']);
     putenv('SW_TRUSTED_PROXIES=172.16.0.0/12, 192.0.2.9'); Config::useFile($f);
     eq(Config::get('trusted_proxies'), ['172.16.0.0/12', '192.0.2.9'], 'env overrides file');
-    putenv('SW_TRUSTED_PROXIES'); unlink($f); Config::useFile(null);
+    putenv('SW_TRUSTED_PROXIES'); unlink($f); Config::useFile('/nonexistent/config.php');   // never useFile(null): that would load the machine's real config
     Request::reset();
 });

@@ -12,7 +12,10 @@ set_error_handler(static function (int $no, string $str, string $file, int $line
 require __DIR__ . '/../core/autoload.php';
 require __DIR__ . '/lib.php';
 
-putenv('SW_BASE_URL'); putenv('SW_ALLOWED_HOSTS'); // deterministic config
+// Hermetic: a test run must never see the machine's real configuration or secrets (on a configured server it would otherwise send real
+// e-mail / alerts). Remove every SW_* variable except the test database settings, and pin the config file to a path that does not exist.
+foreach (array_keys(getenv()) as $name) { if (str_starts_with((string)$name, 'SW_') && !str_starts_with((string)$name, 'SW_TEST_')) { putenv((string)$name); } }
+putenv('SW_CONFIG_FILE=/nonexistent/config.php');
 Sitewright\Core\Config::useFile('/nonexistent/config.php');
 Sitewright\Core\Config::set('log.file', '/dev/null'); // keep test output readable (tests that check logging set their own file)
 
