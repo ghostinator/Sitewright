@@ -94,6 +94,8 @@ Layout: `public/` (only web-exposed directory) · `core/` framework · `modules/
 
 Features beyond the original tools: user accounts with roles, e-mail password reset, TOTP two-step sign-in, audit log, background worker (crawl, images, mail, alerts), alerts to e-mail/Teams/Telegram, connected WordPress sites (404 capture and redirect enforcement through a plugin), Google Search Console import. Test everything locally with `tests/all.sh`.
 
+**Documentation:** [User guide](docs/USER_GUIDE.md) (every page, roles, what leaves the server) · [Administrator guide](docs/ADMIN_GUIDE.md) (install, operate, upgrade, security model, troubleshooting) · [Settings reference](docs/SETTINGS_REFERENCE.md) (every setting, generated from the code) · [Deployment](docs/DEPLOYMENT_GUIDE.md) · [Alerts and logging](docs/ALERTS_AND_LOGGING.md) · [Network and privacy](docs/NETWORK_AND_PRIVACY.md).
+
 See [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) for what is done and what remains before production use.
 
 ## License
