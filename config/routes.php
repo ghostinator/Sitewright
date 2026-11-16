@@ -43,6 +43,11 @@ return [
     ['POST',   '/api/gsc/{id}/property',        $C . 'GscController@setProperty', ['role' => 'admin']],
     ['POST',   '/api/gsc/{id}/sync',            $C . 'GscController@sync',        ['role' => 'admin']],
     ['DELETE', '/api/gsc/{id}',                 $C . 'GscController@disconnect',  ['role' => 'admin']],
+    ['GET',    '/api/settings',                         $C . 'SettingsController@list',    ['role' => 'admin']],
+    ['PUT',    '/api/settings',                         $C . 'SettingsController@save',    ['role' => 'admin']],
+    ['POST',   '/api/settings/test/{name}',             $C . 'SettingsController@test',    ['role' => 'admin']],
+    ['POST',   '/api/settings/{key}/promote',           $C . 'SettingsController@promote', ['role' => 'admin']],
+    ['DELETE', '/api/settings/{key}',                   $C . 'SettingsController@reset',   ['role' => 'admin']],
     ['GET',    '/api/audit',                    $C . 'AuditController@list',     ['role' => 'admin']],
 
     // SEO analysis (outbound fetch of the analysed URL)

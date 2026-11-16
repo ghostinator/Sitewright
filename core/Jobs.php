@@ -64,6 +64,7 @@ final class Jobs
     /** Claim and run one job. @return bool false when the queue was empty */
     public static function runNext(): bool
     {
+        Config::refreshSettings();   // pick up changes saved on the Settings page since the last job
         $job = self::claim();
         if ($job === null) {
             return false;

@@ -39,6 +39,12 @@ final class Mailer
         Jobs::enqueue('mail', ['to' => $to, 'subject' => $subject, 'text' => $text], null, 0, 4);
     }
 
+    /** Send a visible test message right now (not queued). @throws MailException */
+    public static function sendTest(string $to): void
+    {
+        self::send($to, 'Sitewright test message', "This is a test message from Sitewright, sent " . gmdate('c') . " UTC.\nIf you can read it, mail is working.\n");
+    }
+
     /** @throws MailException */
     public static function send(string $to, string $subject, string $text): void
     {

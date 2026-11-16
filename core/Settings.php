@@ -221,4 +221,105 @@ final class Settings
             : 'built-in default ' . ($d['secret'] ? '(none)' : json_encode($d['default'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         return ['value' => $value, 'source' => $source, 'locked' => $locked, 'fallback' => $fallback];
     }
+
+    // ------------------------------------------------------------------ saving
+
+    /** Saving these changes also removes the stored secret(s) of the same integration (unless a new one arrives together). */
+    private const DANGER_CLEARS = [
+        'mail.postal_url' => ['mail.postal_key'], 'mail.host' => ['mail.password'], 'mail.port' => ['mail.password'],
+        'mail.encryption' => ['mail.password'], 'google.redirect_uri' => ['google.client_secret'],
+    ];
+
+    /**
+     * Validate a batch without writing anything.
+     * @param array<string,mixed> $changes
+     * @return array{status:int,message:string,errors:array<string,mixed>,values:array<string,mixed>,effects:string[],clears:string[],secrets:string[]}
+     *         status 200 means "ready to commit"
+     */
+    public static function prepare(array $changes, bool $confirm): array
+    {
+        $fail = static fn (int $status, string $message, array $errors = []): array => ['status' => $status, 'message' => $message, 'errors' => $errors, 'values' => [], 'effects' => [], 'clears' => [], 'secrets' => []];
+        if ($changes === []) { return $fail(400, 'Nothing to save'); }
+        $errors = []; $locked = []; $values = [];
+        foreach ($changes as $key => $raw) {
+            $key = (string)$key;
+            if (self::def($key) === null) { $errors[$key] = 'Unknown or read-only setting'; continue; }
+            if (self::envLocked($key)) { $locked[] = $key . ' (set by ' . self::def($key)['env'] . ' on the server)'; continue; }
+            try { $values[$key] = self::coerce($key, $raw); } catch (\InvalidArgumentException $e) { $errors[$key] = $e->getMessage(); }
+        }
+        if ($errors) { return $fail(400, 'Some values are not valid; nothing was saved.', $errors); }
+        if ($locked) { return $fail(409, 'These settings are locked by the server: ' . implode(', ', $locked) . '. Change them there.'); }
+        $secrets = array_keys(array_filter($values, static fn ($v, $k) => self::def($k)['secret'], ARRAY_FILTER_USE_BOTH));
+        if ($secrets && !Crypto::configured()) { return $fail(409, 'Secrets can only be saved after app_key is set (php bin/gen-key.php, then app_key in the config file).'); }
+        // drop no-ops (non-secrets equal to the current value) so they are neither written nor audited
+        foreach ($values as $k => $v) { if (!self::def($k)['secret'] && Config::get($k) === $v) { unset($values[$k]); } }
+        // cross-field rules, evaluated on the values that WOULD be in effect
+        $now = static fn (string $k): mixed => array_key_exists($k, $values) ? $values[$k] : Config::get($k);
+        $xerr = [];
+        if ($now('session.idle_timeout') > $now('session.absolute_timeout')) { $xerr[array_key_exists('session.absolute_timeout', $values) ? 'session.absolute_timeout' : 'session.idle_timeout'] = 'The idle timeout cannot be longer than the longest session.'; }
+        if ($now('fetch.connect_timeout') > $now('fetch.timeout')) { $xerr[array_key_exists('fetch.timeout', $values) ? 'fetch.timeout' : 'fetch.connect_timeout'] = 'The connect timeout cannot be longer than the request timeout.'; }
+        if ($now('alerts.email_to') !== [] && !self::mailReady($now)) { $xerr['alerts.email_to'] = 'Set up mail first: alert e-mails need a working mail method and a From address.'; }
+        if ($xerr) { return $fail(400, 'Some values conflict; nothing was saved.', $xerr); }
+        $effects = []; $clears = [];
+        foreach (array_keys($values) as $k) {
+            if (!self::def($k)['danger']) { continue; }
+            foreach (self::def($k)['danger_effects'] as $e) { $effects[] = $e; }
+            foreach (self::DANGER_CLEARS[$k] ?? [] as $c) { if (!array_key_exists($c, $values)) { $clears[] = $c; } }
+        }
+        $effects = array_values(array_unique($effects)); $clears = array_values(array_unique($clears));
+        if ($effects && !$confirm) { return $fail(409, 'This change has side effects and needs confirmation.', ['code' => 'confirm_required', 'effects' => $effects]); }
+        return ['status' => 200, 'message' => 'ok', 'errors' => [], 'values' => $values, 'effects' => $effects, 'clears' => $clears, 'secrets' => $secrets];
+    }
+
+    private static function mailReady(callable $now): bool
+    {
+        if ((string)$now('mail.from') === '') { return false; }
+        return $now('mail.driver') === 'postal' ? ((string)$now('mail.postal_url') !== '' && (string)$now('mail.postal_key') !== '') : (string)$now('mail.host') !== '';
+    }
+
+    /** Write a prepared batch in one transaction, audit it, and make it effective. @return array{changed:string[],cleared:string[]} */
+    public static function commit(array $prepared, int $userId): array
+    {
+        $db = Database::getInstance(); $t = $db->t('settings');
+        $old = []; foreach ($prepared['values'] as $k => $_) { $old[$k] = Config::get($k); }
+        $cleared = [];
+        $db->transaction(function (Database $db) use ($prepared, $userId, $t, &$cleared): void {
+            foreach ($prepared['values'] as $k => $v) {
+                $secret = self::def($k)['secret'];
+                $db->query("INSERT INTO `$t` (skey, svalue, is_secret, updated_by) VALUES (:k, :v, :s, :u) ON DUPLICATE KEY UPDATE svalue = VALUES(svalue), is_secret = VALUES(is_secret), updated_by = VALUES(updated_by)",
+                    ['k' => $k, 'v' => $secret ? Crypto::encrypt((string)$v, "setting:$k") : json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 's' => $secret ? 1 : 0, 'u' => $userId]);
+            }
+            foreach ($prepared['clears'] as $c) { if ($db->query("DELETE FROM `$t` WHERE skey = :k", ['k' => $c])->rowCount() > 0) { $cleared[] = $c; } }
+        });
+        Config::refreshSettings();
+        $fmt = static fn (mixed $v): string => mb_substr(is_string($v) ? $v : (string)json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0, 120);
+        foreach ($prepared['values'] as $k => $v) {
+            Audit::log('setting_changed', $userId, '', self::def($k)['secret'] ? "$k: changed" : "$k: " . $fmt($old[$k]) . ' -> ' . $fmt($v));
+            if (self::def($k)['danger'] || self::def($k)['group'] === 'security') { Alerts::notify('setting_changed', "Setting $k was changed by an administrator.", 'warning', $k); }
+        }
+        foreach ($cleared as $c) { Audit::log('setting_cleared', $userId, '', "$c: removed (integration address changed)"); }
+        return ['changed' => array_keys($prepared['values']), 'cleared' => $cleared];
+    }
+
+    /** Remove a saved value (the setting falls back to the config file, then the built-in default). */
+    public static function reset(string $key, int $userId): bool
+    {
+        if (self::def($key) === null) { return false; }
+        $db = Database::getInstance();
+        $n = $db->query('DELETE FROM `' . $db->t('settings') . '` WHERE skey = :k', ['k' => $key])->rowCount();
+        Config::refreshSettings();
+        if ($n > 0) { Audit::log('setting_reset', $userId, '', $key); }
+        return true;
+    }
+
+    /** Copy the config-file value of $key into saved (encrypted if secret) storage. @throws \RuntimeException when there is nothing to copy */
+    public static function promote(string $key, int $userId): void
+    {
+        $d = self::def($key) ?? throw new \RuntimeException('Unknown setting');
+        if (!Config::fileHas($key) || in_array($key, Config::savedKeys(), true)) { throw new \RuntimeException('There is no config-file value to move.'); }
+        if ($d['secret'] && !Crypto::configured()) { throw new \RuntimeException('Set app_key first.'); }
+        $p = ['status' => 200, 'message' => 'ok', 'errors' => [], 'values' => [$key => self::coerce($key, Config::fileValue($key))], 'effects' => [], 'clears' => [], 'secrets' => []];
+        self::commit($p, $userId);
+    }
 }
+
