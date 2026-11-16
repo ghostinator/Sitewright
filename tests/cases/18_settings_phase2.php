@@ -106,3 +106,50 @@ test('404 ignore patterns drop matching paths: manual add and pulls from a conne
     eq(array_column($db->fetchAll("SELECT uri FROM sw_404_monitor WHERE project_id = $id"), 'uri'), ['/lost-page']);
     Config::set('monitor.ignore_patterns', []);
 });
+
+// ---- dashboard, users, alert events ---------------------------------------------------------------------------------------
+use Sitewright\Modules\Analytics\AnalyticsController as An;
+use Sitewright\Core\{Accounts, Alerts, Jobs};
+test('dashboard settings: the window decides what counts, and the response carries window and cards', function () use ($db) {
+    $db->query('TRUNCATE sw_analytics_keywords');
+    $db->query("INSERT INTO sw_analytics_keywords (project_id, keyword, impressions, clicks, position, ctr, `date`) VALUES (0,'recent',100,10,3,1,CURDATE() - INTERVAL 3 DAY),(0,'older',1000,100,3,1,CURDATE() - INTERVAL 20 DAY)");
+    $d = call(An::class, 'getDashboardStats', [])['json']['data']; eq($d['impressions'], 1100); eq($d['window_days'], 30); eq($d['cards'], ['seo', 'keywords', 'impressions', 'clicks']);
+    Config::set('dashboard.window_days', 7); Config::set('dashboard.cards', ['clicks', 'seo']);
+    $d = call(An::class, 'getDashboardStats', [])['json']['data']; eq($d['impressions'], 100, 'the 20-day-old row is outside a 7-day window'); eq($d['window_days'], 7); eq($d['cards'], ['clicks', 'seo'], 'the configured order, known cards only');
+    Config::set('dashboard.window_days', 30); Config::set('dashboard.cards', ['seo', 'keywords', 'impressions', 'clicks']);
+});
+test('users settings: invite/reset lifetimes and their wording follow the settings', function () use ($db) {
+    $db->query('TRUNCATE sw_password_resets');
+    Config::set('users.invite_days', 3); Config::set('users.reset_minutes', 15);
+    eq(Accounts::ttlMinutes('invite'), 3 * 1440); eq(Accounts::ttlMinutes('reset'), 15);
+    Accounts::createToken(1, 'reset'); $m = (int)$db->fetchOne('SELECT TIMESTAMPDIFF(MINUTE, NOW(), expires_at) m FROM sw_password_resets ORDER BY id DESC LIMIT 1')['m']; ok($m >= 14 && $m <= 15, "minutes $m");
+    Accounts::createToken(1, 'invite'); $m = (int)$db->fetchOne('SELECT TIMESTAMPDIFF(MINUTE, NOW(), expires_at) m FROM sw_password_resets ORDER BY id DESC LIMIT 1')['m']; ok($m >= 4318 && $m <= 4320, "minutes $m");
+    Config::set('users.invite_days', 7); Config::set('users.reset_minutes', 60);
+});
+test('alert events: an event that is not listed is never queued; listed ones are', function () use ($db) {
+    $db->query('TRUNCATE sw_jobs'); $db->query('TRUNCATE sw_rate_limits');
+    Config::set('alerts.teams_webhook', 'https://example.webhook.office.com/x');
+    Config::set('alerts.events', ['job_failed']);
+    Alerts::notify('user_created', 'x'); eq((int)$db->fetchOne("SELECT COUNT(*) n FROM sw_jobs WHERE type='alert'")['n'], 0);
+    Alerts::notify('job_failed', 'x'); eq((int)$db->fetchOne("SELECT COUNT(*) n FROM sw_jobs WHERE type='alert'")['n'], 1);
+    Config::set('alerts.events', Config::defaults()['alerts']['events']); Config::set('alerts.teams_webhook', '');
+    ok(in_array('server_error', Config::defaults()['alerts']['events'], true));
+});
+
+seedAdmin('root', 'root passphrase long here', 'admin');
+$srvP2 = startServer(['SW_APP_KEY' => Crypto::generateKey()]);
+test('users settings over HTTP: a user created without a role gets the saved default role', function () use ($srvP2) {
+    $a = new TestHttp($srvP2['base']); $a->login('root', 'root passphrase long here');
+    eq($a->api('PUT', '/api/settings', ['changes' => ['users.default_role' => 'editor']])['status'], 200);
+    $r = $a->api('POST', '/api/users', ['username' => 'norole', 'email' => 'norole@example.test', 'password' => 'a long enough passphrase']); eq($r['status'], 201, $r['body']);
+    $u = array_values(array_filter($a->api('GET', '/api/users')['json']['data'], fn ($x) => $x['username'] === 'norole'))[0]; eq($u['role'], 'editor');
+    eq($a->api('PUT', '/api/settings', ['changes' => ['dashboard.cards' => []]])['status'], 400, 'at least one card');
+});
+test('contextual notes: admins see the scoring/ignore notes with the real values; viewers do not', function () use ($srvP2, $db) {
+    $a = new TestHttp($srvP2['base']); $a->login('root', 'root passphrase long here');
+    $page = $a->req('GET', '/seo-analysis')['body']; ok(str_contains($page, 'judged against 30–60 characters') && str_contains($page, '/settings#seo'));
+    $db->query("INSERT INTO sw_settings (skey, svalue) VALUES ('monitor.ignore_patterns', '[\"/a\",\"/b*\"]') ON DUPLICATE KEY UPDATE svalue = VALUES(svalue)");
+    ok(str_contains($a->req('GET', '/404-monitor')['body'], '2 ignore pattern(s) active'));
+    seedAdmin('look', 'viewer passphrase long here', 'viewer'); $v = new TestHttp($srvP2['base']); $v->login('look', 'viewer passphrase long here');
+    ok(!str_contains($v->req('GET', '/seo-analysis')['body'], 'Change in Settings'));
+});

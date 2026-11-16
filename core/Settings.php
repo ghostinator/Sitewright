@@ -24,6 +24,8 @@ final class Settings
         'data' => ['Data & logging', 'How long records are kept and how much is logged.'],
         'content' => ['Content AI', 'Which tones and content types are offered, and how the model is asked to write.'],
         'site' => ['Images, sitemaps & redirects', 'Defaults for new sitemap rows, redirect rules and the image size check, and which 404 paths to ignore.'],
+        'dashboard' => ['Dashboard & analytics', 'The date window and the cards shown on the dashboard.'],
+        'accounts' => ['Users & alerts', 'Defaults for new accounts and which events send an alert.'],
         'seo' => ['SEO scoring', 'What counts as a good title, description, speed and content, and how many points each check is worth. The score is the sum of the points, capped at 100.'],
     ];
 
@@ -114,6 +116,14 @@ final class Settings
         $add('sitemap.default_max_pages', 'site', 'Pages per crawl by default', 'A crawl can ask for fewer or more; the server limit under Crawling & jobs still applies.', 'int', ['min' => 1, 'max' => 5000]);
         $add('redirects.default_type', 'site', 'Default redirect type', 'For rules added without one.', 'enum', ['enum' => ['301', '302', '307', '308', '410', '451']]);
         $add('monitor.ignore_patterns', 'site', 'Ignore these 404 paths', 'One per line. Start with / and use * as a wildcard (for example /wp-json/*). Matching 404s are not recorded, whether added by hand or pulled from a site.', 'list', ['item_pattern' => '#^/[^\s]{0,199}$#D', 'max_items' => 100]);
+
+        // ---- Dashboard, users, alert events (Phase 2)
+        $add('dashboard.window_days', 'dashboard', 'Dashboard date window', 'The dashboard and analytics look back this many days.', 'int', ['min' => 7, 'max' => 365, 'unit' => 'days']);
+        $add('dashboard.cards', 'dashboard', 'Cards shown, in order', 'One per line: seo, keywords, impressions, clicks. At least one.', 'list', ['enum' => ['seo', 'keywords', 'impressions', 'clicks'], 'min' => 1]);
+        $add('users.default_role', 'accounts', 'Default role for new users', 'Used when an administrator creates a user without choosing a role.', 'enum', ['enum' => ['viewer', 'editor', 'admin']]);
+        $add('users.invite_days', 'accounts', 'Invitation link lifetime', 'How long an invitation e-mail link works.', 'int', ['min' => 1, 'max' => 30, 'unit' => 'days']);
+        $add('users.reset_minutes', 'accounts', 'Password reset link lifetime', 'How long a reset e-mail link works.', 'int', ['min' => 5, 'max' => 1440, 'unit' => 'minutes']);
+        $add('alerts.events', 'accounts', 'Events that send an alert', 'One per line. An event that is not listed is never sent (it is still audited).', 'list', ['enum' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created']]);
 
         // ---- SEO scoring (Phase 2)
         $seo = [

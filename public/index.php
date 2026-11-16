@@ -113,10 +113,10 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
             <div class="content-area" id="content-area">
                 <div class="view" id="view-dashboard">
                     <div class="stats-grid">
-                        <div class="stat-card"><div class="stat-icon">🔍</div><div class="stat-info"><h3>SEO Score (your site)</h3><p class="stat-value" id="stat-seo">--</p></div></div>
-                        <div class="stat-card"><div class="stat-icon">📊</div><div class="stat-info"><h3>Tracked Keywords</h3><p class="stat-value" id="stat-keywords">--</p></div></div>
-                        <div class="stat-card"><div class="stat-icon">👁️</div><div class="stat-info"><h3>Impressions (30d)</h3><p class="stat-value" id="stat-impressions">--</p></div></div>
-                        <div class="stat-card"><div class="stat-icon">🖱️</div><div class="stat-info"><h3>Clicks (30d)</h3><p class="stat-value" id="stat-clicks">--</p></div></div>
+                        <div class="stat-card" data-card="seo"><div class="stat-icon">🔍</div><div class="stat-info"><h3>SEO Score (your site)</h3><p class="stat-value" id="stat-seo">--</p></div></div>
+                        <div class="stat-card" data-card="keywords"><div class="stat-icon">📊</div><div class="stat-info"><h3>Tracked Keywords</h3><p class="stat-value" id="stat-keywords">--</p></div></div>
+                        <div class="stat-card" data-card="impressions"><div class="stat-icon">👁️</div><div class="stat-info"><h3>Impressions (30d)</h3><p class="stat-value" id="stat-impressions">--</p></div></div>
+                        <div class="stat-card" data-card="clicks"><div class="stat-icon">🖱️</div><div class="stat-info"><h3>Clicks (30d)</h3><p class="stat-value" id="stat-clicks">--</p></div></div>
                     </div>
                     <p id="dashboard-note" class="text-muted"></p>
                     <div class="dashboard-grid">
@@ -133,12 +133,14 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
                 <div class="view" id="view-seo-analysis"><div class="card">
                     <h3>Website SEO Analysis</h3>
                     <p class="text-muted">Fetches the page once from this server and runs heuristic on-page checks. Not a substitute for Lighthouse or Search Console.</p>
+                    <?php if ($user && $user['role'] === 'admin'): ?><p class="text-muted settings-link-note"><small>Titles are judged against <?= (int)Config::get('seo.title_min') ?>–<?= (int)Config::get('seo.title_max') ?> characters and descriptions against <?= (int)Config::get('seo.meta_min') ?>–<?= (int)Config::get('seo.meta_max') ?>. <a href="<?= $h($base) ?>/settings#seo">Change in Settings</a></small></p><?php endif; ?>
                     <form id="seo-analysis-form" class="form"><div class="form-group"><label for="seo-url">Website URL</label><input type="url" id="seo-url" placeholder="https://example.com" required maxlength="2048"></div><button type="submit" class="btn btn-primary">Analyze Website</button></form>
                     <div id="seo-results" class="results-area"></div>
                 </div></div>
 
                 <div class="view" id="view-competitor"><div class="card">
                     <h3>Competitor Analysis</h3>
+                    <?php if ($user && $user['role'] === 'admin'): ?><p class="text-muted settings-link-note"><small>Titles are judged against <?= (int)Config::get('seo.title_min') ?>–<?= (int)Config::get('seo.title_max') ?> characters and descriptions against <?= (int)Config::get('seo.meta_min') ?>–<?= (int)Config::get('seo.meta_max') ?>. <a href="<?= $h($base) ?>/settings#seo">Change in Settings</a></small></p><?php endif; ?>
                     <form id="competitor-form" class="form"><div class="form-group"><label for="competitor-url">Competitor URL</label><input type="url" id="competitor-url" placeholder="https://competitor.com" required maxlength="2048"></div><button type="submit" class="btn btn-primary">Analyze Competitor</button></form>
                     <div id="competitor-results" class="results-area"></div>
                 </div></div>
@@ -220,6 +222,7 @@ $icons = ['dashboard' => '📊', 'seo-analysis' => '🔍', 'competitor' => '⚔�
                 <div class="view" id="view-404-monitor"><div class="card">
                     <h3>404 Log</h3>
                     <p class="text-muted">This app does not detect 404s on your site. Add entries here or import them from your server logs.</p>
+                    <?php if ($user && $user['role'] === 'admin'): ?><p class="text-muted settings-link-note"><small><?= count((array)Config::get('monitor.ignore_patterns')) ?> ignore pattern(s) active. <a href="<?= $h($base) ?>/settings#site">Change in Settings</a></small></p><?php endif; ?>
                     <button type="button" class="btn btn-secondary" data-action="refresh-404">Refresh</button>
                     <label class="inline-label" for="site-select-404">Site</label> <select id="site-select-404" class="site-select" data-site-select="404"><option value="0">All sites</option></select>
                     <a class="btn btn-secondary" id="export-404" href="<?= $h($base) ?>/api/404-monitor/export">Export CSV</a>

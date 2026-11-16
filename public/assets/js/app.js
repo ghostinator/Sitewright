@@ -214,7 +214,15 @@
         set('stat-keywords', fmtInt(stats.total_keywords));
         set('stat-impressions', fmtInt(stats.impressions));
         set('stat-clicks', fmtInt(stats.clicks));
-        set('dashboard-note', stats.includes_sample_data ? 'Includes generated SAMPLE data.' : '');
+        const win = stats.window_days || 30;
+        set('dashboard-note', 'Showing the last ' + win + ' days.' + (stats.includes_sample_data ? ' Includes generated SAMPLE data.' : ''));
+        document.querySelectorAll('[data-card="impressions"] h3').forEach(h => { h.textContent = 'Impressions (' + win + 'd)'; });
+        document.querySelectorAll('[data-card="clicks"] h3').forEach(h => { h.textContent = 'Clicks (' + win + 'd)'; });
+        if (Array.isArray(stats.cards) && stats.cards.length) {
+            const grid = document.querySelector('#view-dashboard .stats-grid');
+            if (grid) { stats.cards.forEach(id => { const c = grid.querySelector('[data-card="' + id + '"]'); if (c) { c.classList.remove('hidden'); grid.append(c); } });
+                grid.querySelectorAll('.stat-card').forEach(c => c.classList.toggle('hidden', !stats.cards.includes(c.dataset.card))); }
+        }
         const box = document.getElementById('recent-activity');
         if (!box) return;
         const items = (stats.recent_activity || []).map(a => el('p', { class: 'text-muted break-all', text:

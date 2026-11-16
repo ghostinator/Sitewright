@@ -7,7 +7,17 @@ namespace Sitewright\Core;
 final class Accounts
 {
     public const ROLES = ['viewer' => 1, 'editor' => 2, 'admin' => 3];
-    private const RESET_TTL_MINUTES = 60;
+
+    public static function ttlMinutes(string $purpose): int
+    {
+        return $purpose === 'invite' ? max(1, (int)Config::get('users.invite_days')) * 24 * 60 : max(5, (int)Config::get('users.reset_minutes'));
+    }
+
+    private static function ttlText(string $purpose): string
+    {
+        $m = self::ttlMinutes($purpose);
+        return $m % 1440 === 0 ? ($m / 1440) . ' day' . ($m === 1440 ? '' : 's') : ($m % 60 === 0 ? ($m / 60) . ' hour' . ($m === 60 ? '' : 's') : $m . ' minutes');
+    }
 
     public static function validRole(string $r): bool
     {
@@ -33,7 +43,7 @@ final class Accounts
         $t = $db->t('password_resets');
         $db->query("UPDATE `$t` SET used_at = NOW() WHERE user_id = :u AND used_at IS NULL", ['u' => $userId]);
         $token = bin2hex(random_bytes(32));
-        $ttl = $purpose === 'invite' ? 7 * 24 * 60 : self::RESET_TTL_MINUTES;
+        $ttl = self::ttlMinutes($purpose);
         $db->query("INSERT INTO `$t` (user_id, token_hash, purpose, expires_at) VALUES (:u, :h, :p, NOW() + INTERVAL :m MINUTE)", ['u' => $userId, 'h' => hash('sha256', $token), 'p' => $purpose, 'm' => $ttl]);
         return $token;
     }
@@ -54,7 +64,7 @@ final class Accounts
             Logger::warn('reset_mail_unavailable', ['purpose' => $purpose, 'base_url_set' => $link !== null, 'mail_configured' => Mailer::configured()]);
             return false;
         }
-        $minutes = $purpose === 'invite' ? '7 days' : '60 minutes';
+        $minutes = self::ttlText($purpose);
         $lead = $purpose === 'invite' ? 'An account was created for you on Sitewright. Choose your password here' : 'Someone (hopefully you) asked to reset your Sitewright password. Choose a new one here';
         Mailer::queue((string)$user['email'], $purpose === 'invite' ? 'Your Sitewright account' : 'Reset your Sitewright password',
             "$lead:\n\n$link\n\nThe link works once and expires in $minutes. If you did not ask for this, ignore this message; your password stays unchanged.\n");

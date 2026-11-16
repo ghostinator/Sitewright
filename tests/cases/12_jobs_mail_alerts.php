@@ -153,7 +153,7 @@ test('postal: queued mail is delivered by the worker through the API', function 
 });
 
 // ---- alerts ----------------------------------------------------------------------------------------------------------------
-$alertCfg = function (array $o = []) { Config::set('alerts', $o + ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 3]); Config::set('mail.host', ''); };
+$alertCfg = function (array $o = []) { Config::set('alerts', $o + ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 3, 'events' => array_merge(Config::defaults()['alerts']['events'], ['e', 'burst', 'x', 'login_failures'])]); Config::set('mail.host', ''); };
 $TG = 'https://api.telegram.org/bot123456:SECRET-TOKEN/sendMessage';
 test('alerts: no channel configured => nothing is queued', function () use ($wipe, $alertCfg, $db) {
     $wipe(); $alertCfg(); Alerts::notify('x', 'm'); eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_jobs')['n'], 0); eq(Alerts::channels(), []);

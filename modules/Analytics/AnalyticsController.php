@@ -20,15 +20,16 @@ class AnalyticsController
 
     public function getDashboardStats(array $params): never
     {
+        $win = max(7, (int)Config::get('dashboard.window_days'));
         $k = $this->db->t('analytics_keywords');
         $kw = $this->db->fetchOne(
             "SELECT SUM(impressions) AS impressions, SUM(clicks) AS clicks, COUNT(DISTINCT keyword_hash) AS keywords, AVG(position) AS pos,
-                    MAX(is_sample) AS sample FROM `$k` WHERE `date` BETWEEN (CURDATE() - INTERVAL 30 DAY) AND CURDATE()"
+                    MAX(is_sample) AS sample FROM `$k` WHERE `date` BETWEEN (CURDATE() - INTERVAL $win DAY) AND CURDATE()"
         ) ?? [];
         // Score of YOUR site only: competitor analyses are excluded.
         $seo = $this->db->fetchOne(
             'SELECT AVG(score) AS avg_score, COUNT(*) AS n, MAX(is_sample) AS sample FROM `' . $this->db->t('seo_analysis')
-            . "` WHERE analysis_type = 'site' AND analyzed_at >= (NOW() - INTERVAL 30 DAY)"
+            . "` WHERE analysis_type = 'site' AND analyzed_at >= (NOW() - INTERVAL $win DAY)"
         ) ?? [];
         $recent = $this->db->fetchAll(
             'SELECT analysis_type AS type, url, score, analyzed_at AS date, is_sample FROM `' . $this->db->t('seo_analysis') . '` ORDER BY analyzed_at DESC, id DESC LIMIT 5'
@@ -41,13 +42,14 @@ class AnalyticsController
             'clicks' => (int)($kw['clicks'] ?? 0),
             'avg_position' => $kw['pos'] !== null ? round((float)$kw['pos'], 1) : null,
             'includes_sample_data' => (bool)($kw['sample'] ?? false) || (bool)($seo['sample'] ?? false),
-            'recent_activity' => $recent,
+            'recent_activity' => $recent, 'window_days' => $win,
+            'cards' => array_values(array_intersect((array)Config::get('dashboard.cards'), ['seo', 'keywords', 'impressions', 'clicks'])),
         ]);
     }
 
     public function getDashboard(array $params): never
     {
-        $start = Validator::date(['d' => Request::query('start_date')], 'd') ?? gmdate('Y-m-d', strtotime('-30 days'));
+        $start = Validator::date(['d' => Request::query('start_date')], 'd') ?? gmdate('Y-m-d', strtotime('-' . max(7, (int)Config::get('dashboard.window_days')) . ' days'));
         $end = Validator::date(['d' => Request::query('end_date')], 'd') ?? gmdate('Y-m-d');
         $projectId = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);
         $k = $this->db->t('analytics_keywords');

@@ -34,6 +34,8 @@ final class Config
             'trusted_proxies'  => [],
             'app_key'          => '',
             'security'         => ['require_mfa' => false],
+            'dashboard' => ['window_days' => 30, 'cards' => ['seo', 'keywords', 'impressions', 'clicks']],
+            'users' => ['default_role' => 'viewer', 'invite_days' => 7, 'reset_minutes' => 60],
             'content_ai' => ['default_tone' => 'professional', 'tones_enabled' => ['professional', 'casual', 'friendly', 'formal'],
                 'types_enabled' => ['paragraph', 'title', 'meta_description', 'heading', 'conclusion'], 'temperature' => 0.7, 'max_tokens' => 2048],
             'image' => ['optimal_bytes' => 200000, 'alt_max_length' => 125],
@@ -55,7 +57,8 @@ final class Config
                 'host' => '', 'port' => 587, 'encryption' => 'starttls', 'username' => '', 'password' => '',
                 'from' => '', 'from_name' => 'Sitewright', 'verify_tls' => true, 'timeout' => 10,
             ],
-            'alerts' => ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 10],
+            'alerts' => ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 10,
+                'events' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created']],
             'retention_days_audit' => 365,
             'db' => [
                 'host' => '127.0.0.1', 'port' => 3306, 'name' => 'sitewright_webapp',

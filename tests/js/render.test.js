@@ -259,3 +259,17 @@ test('settings: the save bar names unsaved settings and clears after discard', (
   assert.ok(bar.textContent.includes('Longest crawl')); assert.ok(!bar.classList.contains('hidden'));
   st.edits = {}; SW.renderSettingsBar(bar, data, st); assert.ok(bar.classList.contains('hidden'));
 });
+
+test('dashboard: window text, card titles, order and hidden cards follow the stats response', () => {
+  const dom = new JSDOM('<!doctype html><body><div id="view-dashboard"><div class="stats-grid">'
+    + ['seo', 'keywords', 'impressions', 'clicks'].map(c => `<div class="stat-card" data-card="${c}"><h3>${c}</h3><p id="stat-${c === 'seo' ? 'seo' : c}"></p></div>`).join('')
+    + '</div><p id="dashboard-note"></p></div></body>', { runScripts: 'outside-only', url: 'http://localhost/' });
+  dom.window.eval(SRC);
+  dom.window.SW.renderDashboard({ seo_score: 80, total_keywords: 1, impressions: 2, clicks: 3, includes_sample_data: false, recent_activity: [], window_days: 7, cards: ['clicks', 'seo'] });
+  const d = dom.window.document;
+  assert.equal(d.getElementById('dashboard-note').textContent, 'Showing the last 7 days.');
+  assert.equal(d.querySelector('[data-card=clicks] h3').textContent, 'Clicks (7d)');
+  const order = [...d.querySelectorAll('.stat-card')].filter(c => !c.classList.contains('hidden')).map(c => c.dataset.card);
+  assert.equal(JSON.stringify(order), JSON.stringify(['clicks', 'seo']));
+  assert.ok(d.querySelector('[data-card=keywords]').classList.contains('hidden'));
+});

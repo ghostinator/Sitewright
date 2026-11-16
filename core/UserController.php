@@ -27,7 +27,7 @@ final class UserController
         if (!preg_match('/^[A-Za-z0-9_.\-]{3,60}$/D', $username)) { Validator::fail('username', 'must be 3-60 characters: letters, digits, . _ -'); }
         $email = strtolower(Validator::str($in, 'email', 100, true));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { Validator::fail('email', 'must be a valid address'); }
-        $role = Validator::enum($in, 'role', array_keys(Accounts::ROLES), 'viewer');
+        $role = Validator::enum($in, 'role', array_keys(Accounts::ROLES), (string)Config::get('users.default_role'));
         $password = $in['password'] ?? null;
         $invite = $password === null || $password === '';
         if (!$invite) {

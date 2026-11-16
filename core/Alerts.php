@@ -27,7 +27,7 @@ final class Alerts
     {
         try {
             $channels = self::channels();
-            if ($channels === []) { return; }
+            if ($channels === [] || !in_array($event, (array)Config::get('alerts.events'), true)) { return; }
             $r = RateLimiter::hit('alert:' . $event . ':' . $dedupe, 1, (int)Config::get('alerts.cooldown'));
             if (!$r['allowed']) { return; }
             foreach ($channels as $ch) {

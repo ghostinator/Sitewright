@@ -235,6 +235,29 @@ test('settings: keyboard only, and a dangerous change cannot be saved without th
   await expect(page.locator('#settings-root fieldset.settings-group legend').first()).toBeVisible();
 });
 
+test('page settings: a dashboard window change shows on the dashboard; the SEO page links its scoring note to Settings', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.click('.nav-item[data-view=dashboard]');
+  await expect(page.locator('#dashboard-note')).toContainText('Showing the last 30 days');
+  await page.click('.nav-item[data-view=settings]');
+  await page.fill('#settings-search', 'dashboard date window');
+  await page.getByLabel('Dashboard date window').fill('7');
+  await page.getByRole('button', { name: 'Save changes' }).first().click();
+  await expect(page.locator('#toast')).toContainText('Changes saved');
+  await page.click('.nav-item[data-view=dashboard]');
+  await expect(page.locator('#dashboard-note')).toContainText('Showing the last 7 days');
+  await expect(page.locator('[data-card=clicks] h3')).toContainText('Clicks (7d)');
+  page.once('dialog', d => d.accept());
+  await page.click('.nav-item[data-view=settings]'); await page.fill('#settings-search', 'dashboard date window');
+  await page.locator('[data-setting-row="dashboard.window_days"]').getByRole('button', { name: 'Reset' }).click();
+  await page.click('.nav-item[data-view=seo-analysis]');
+  const note = page.locator('#view-seo-analysis .settings-link-note');
+  await expect(note).toContainText('Titles are judged against 30–60 characters');
+  await expect(note.locator('a')).toHaveAttribute('href', /\/settings#seo$/);
+  await page.goto('/settings#seo');
+  await expect(page.locator('#settings-root legend').first()).toHaveText('SEO scoring');
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {
