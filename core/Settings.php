@@ -22,6 +22,8 @@ final class Settings
         'integrations' => ['Integrations', 'Gemini, Google, geocoding and what the server may fetch.'],
         'crawl' => ['Crawling & jobs', 'How much a crawl or image batch may do, and how often sites sync.'],
         'data' => ['Data & logging', 'How long records are kept and how much is logged.'],
+        'content' => ['Content AI', 'Which tones and content types are offered, and how the model is asked to write.'],
+        'site' => ['Images, sitemaps & redirects', 'Defaults for new sitemap rows, redirect rules and the image size check, and which 404 paths to ignore.'],
         'seo' => ['SEO scoring', 'What counts as a good title, description, speed and content, and how many points each check is worth. The score is the sum of the points, capped at 100.'],
     ];
 
@@ -99,6 +101,20 @@ final class Settings
         $add('limits.job_retention_days', 'data', 'Keep finished jobs', 'Finished and failed jobs older than this are deleted.', 'int', ['min' => 1, 'max' => 365, 'unit' => 'days']);
         $add('log.level', 'data', 'Log detail', 'debug, info, warn or error.', 'enum', ['enum' => ['debug', 'info', 'warn', 'error'], 'env' => 'SW_LOG_LEVEL']);
         $add('log.requests', 'data', 'Log every request', 'One line per request (path without query string).', 'bool');
+        // ---- Content AI, images, sitemaps, redirects, 404 log (Phase 2)
+        $add('content_ai.default_tone', 'content', 'Default tone', 'Used when a request does not name a tone. Must be one of the enabled tones.', 'enum', ['enum' => ['professional', 'casual', 'friendly', 'formal']]);
+        $add('content_ai.tones_enabled', 'content', 'Tones offered', 'One per line: professional, casual, friendly, formal. At least one.', 'list', ['enum' => ['professional', 'casual', 'friendly', 'formal'], 'min' => 1]);
+        $add('content_ai.types_enabled', 'content', 'Content types offered', 'One per line: paragraph, title, meta_description, heading, conclusion. At least one.', 'list', ['enum' => ['paragraph', 'title', 'meta_description', 'heading', 'conclusion'], 'min' => 1]);
+        $add('content_ai.temperature', 'content', 'Creativity (temperature)', 'Higher is more varied, lower is more predictable. 0 to 2.', 'float', ['min' => 0, 'max' => 2]);
+        $add('content_ai.max_tokens', 'content', 'Longest answer', 'Upper limit on the length of a generated text.', 'int', ['min' => 256, 'max' => 8192, 'unit' => 'tokens']);
+        $add('image.optimal_bytes', 'site', 'Image size that counts as optimized', 'Images smaller than this are marked optimized.', 'int', ['min' => 10000, 'max' => 10000000, 'unit' => 'bytes']);
+        $add('image.alt_max_length', 'site', 'Longest good alt text', 'Shown in the image tips.', 'int', ['min' => 20, 'max' => 500, 'unit' => 'characters']);
+        $add('sitemap.default_priority', 'site', 'Default sitemap priority', 'For rows added without one (0 to 1).', 'float', ['min' => 0, 'max' => 1]);
+        $add('sitemap.default_changefreq', 'site', 'Default sitemap change frequency', 'For rows added without one.', 'enum', ['enum' => ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never']]);
+        $add('sitemap.default_max_pages', 'site', 'Pages per crawl by default', 'A crawl can ask for fewer or more; the server limit under Crawling & jobs still applies.', 'int', ['min' => 1, 'max' => 5000]);
+        $add('redirects.default_type', 'site', 'Default redirect type', 'For rules added without one.', 'enum', ['enum' => ['301', '302', '307', '308', '410', '451']]);
+        $add('monitor.ignore_patterns', 'site', 'Ignore these 404 paths', 'One per line. Start with / and use * as a wildcard (for example /wp-json/*). Matching 404s are not recorded, whether added by hand or pulled from a site.', 'list', ['item_pattern' => '#^/[^\s]{0,199}$#D', 'max_items' => 100]);
+
         // ---- SEO scoring (Phase 2)
         $seo = [
             'title_min' => ['Shortest good title', 'characters', 1, 200, 'A title shorter than this is not judged optimal.'], 'title_max' => ['Longest good title', 'characters', 1, 300, 'A title longer than this is not judged optimal.'],
@@ -186,14 +202,19 @@ final class Settings
                 return $v;
             case 'list':
             case 'email_list':
-                if (!is_array($raw) || ($raw !== [] && array_keys($raw) !== range(0, count($raw) - 1)) || count($raw) > 200) { throw $bad('must be a list (at most 200 entries)'); }
+                $cap = (int)($d['max_items'] ?? 200);
+                if (!is_array($raw) || ($raw !== [] && array_keys($raw) !== range(0, count($raw) - 1)) || count($raw) > $cap) { throw $bad("must be a list (at most $cap entries)"); }
                 $out = [];
                 foreach ($raw as $item) {
                     $v = trim($text($item, 200));
                     if ($d['type'] === 'email_list' && !filter_var($v, FILTER_VALIDATE_EMAIL)) { throw $bad("“{$v}” is not an e-mail address"); }
+                    if ($v !== '' && ($d['enum'] ?? null) !== null && !in_array($v, $d['enum'], true)) { throw $bad("“{$v}” is not one of " . implode(', ', $d['enum'])); }
+                    if ($v !== '' && ($d['item_pattern'] ?? null) !== null && !preg_match($d['item_pattern'], $v)) { throw $bad("“{$v}” has an unexpected format"); }
                     if ($v !== '') { $out[] = $v; }
                 }
-                return array_values(array_unique($out));
+                $out = array_values(array_unique($out));
+                if ($d['min'] !== null && count($out) < $d['min']) { throw $bad('needs at least ' . $d['min'] . ' entr' . ($d['min'] === 1 ? 'y' : 'ies')); }
+                return $out;
             default:
                 throw $bad('has an unsupported type');
         }
@@ -287,6 +308,7 @@ final class Settings
                   ['seo.load_fast', 'seo.load_ok', 'The fast limit cannot be slower than the acceptable limit.']] as [$lo, $hi, $why]) {
             if ($now($lo) > $now($hi)) { $xerr[array_key_exists($hi, $values) ? $hi : $lo] = $why; }
         }
+        if (!in_array($now('content_ai.default_tone'), (array)$now('content_ai.tones_enabled'), true)) { $xerr[array_key_exists('content_ai.tones_enabled', $values) ? 'content_ai.tones_enabled' : 'content_ai.default_tone'] = 'The default tone must be one of the enabled tones.'; }
         if ($xerr) { return $fail(400, 'Some values conflict; nothing was saved.', $xerr); }
         $effects = []; $clears = [];
         foreach (array_keys($values) as $k) {

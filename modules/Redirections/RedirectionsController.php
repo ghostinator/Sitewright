@@ -129,7 +129,7 @@ class RedirectionsController
             if ($n > $max) { Response::error("Too many rows (max $max)", 413); }
             if (count($row) < 2 || trim((string)$row[0]) === '') { continue; }
             try {
-                $rows[] = $this->validated(['source_url' => trim($row[0]), 'target_url' => trim($row[1]), 'redirect_type' => trim($row[2] ?? '301') ?: '301'], true, true);
+                $rows[] = $this->validated(['source_url' => trim($row[0]), 'target_url' => trim($row[1]), 'redirect_type' => trim($row[2] ?? '') ?: (string)Config::get('redirects.default_type')], true, true);
             } catch (\Sitewright\Core\ResponseException) {
                 if (count($errors) < 50) { $errors[] = "Row " . ($n + 1) . ': invalid values'; }
             }
@@ -156,7 +156,7 @@ class RedirectionsController
     private function validated(array $in, bool $full, bool $quiet = false): array
     {
         $out = [];
-        $type = Validator::enum($in, 'redirect_type', self::TYPES, $full ? '301' : null);
+        $type = Validator::enum($in, 'redirect_type', self::TYPES, $full ? (string)Config::get('redirects.default_type') : null);
         if ($type !== null) { $out['redirect_type'] = $type; }
 
         if ($full || isset($in['source_url'])) {

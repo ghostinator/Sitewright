@@ -34,8 +34,8 @@ class SitemapController
             'project_id' => Validator::projectId($in),
             'type' => 'general',
             'url' => Validator::url($in, 'url', 1000),
-            'priority' => round((float)Validator::float($in, 'priority', 0, 1, 0.5), 1),
-            'changefreq' => Validator::enum($in, 'changefreq', self::CHANGEFREQ, 'weekly'),
+            'priority' => round((float)Validator::float($in, 'priority', 0, 1, (float)Config::get('sitemap.default_priority')), 1),
+            'changefreq' => Validator::enum($in, 'changefreq', self::CHANGEFREQ, (string)Config::get('sitemap.default_changefreq')),
             'last_modified' => Validator::datetime($in, 'last_modified') ?? gmdate('Y-m-d H:i:s'),
         ];
         if (isset($in['type']) && $in['type'] !== 'general') { Validator::fail('type', 'only "general" sitemaps are supported'); }
@@ -83,7 +83,7 @@ class SitemapController
         $base = Validator::url($in, 'base_url');
         $projectId = Validator::projectId($in);
         $hardMax = (int)Config::get('limits.max_pages');
-        $maxPages = Validator::int($in, 'max_pages', 1, PHP_INT_MAX, 100);
+        $maxPages = Validator::int($in, 'max_pages', 1, PHP_INT_MAX, (int)Config::get('sitemap.default_max_pages'));
         $maxPages = min($maxPages, $hardMax); // client value can never exceed the server cap
         $budget = (int)Config::get('limits.crawl_seconds');
         set_time_limit($budget + 30);
@@ -93,7 +93,7 @@ class SitemapController
             Response::error('Could not crawl that site: ' . $result['error'], 502);
         }
         $rows = array_map(static fn (string $u): array => [
-            'project_id' => $projectId, 'type' => 'general', 'url' => $u, 'priority' => 0.5, 'changefreq' => 'weekly', 'last_modified' => gmdate('Y-m-d H:i:s'),
+            'project_id' => $projectId, 'type' => 'general', 'url' => $u, 'priority' => (float)Config::get('sitemap.default_priority'), 'changefreq' => (string)Config::get('sitemap.default_changefreq'), 'last_modified' => gmdate('Y-m-d H:i:s'),
         ], $result['pages']);
         $added = $this->upsert($rows);
 

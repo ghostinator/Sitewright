@@ -50,7 +50,7 @@ final class SiteSync
             foreach ($items as $it) {
                 if (!is_array($it)) { continue; }
                 $uri = self::cleanText($it['uri'] ?? '', 1000);
-                if ($uri === '' || $uri[0] !== '/') { continue; }                         // plugin data is untrusted: only paths
+                if ($uri === '' || $uri[0] !== '/' || \Sitewright\Modules\Monitor\MonitorController::ignored($uri)) { continue; }   // plugin data is untrusted: only paths, minus ignored ones
                 $ref = self::cleanText($it['referer'] ?? '', 1000);
                 $ref = preg_match('#^https?://#i', $ref) ? $ref : null;
                 $seen = strtotime((string)($it['last_seen'] ?? '')) ?: time();

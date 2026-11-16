@@ -23,6 +23,20 @@ class ContentAiController
         $this->db = Database::getInstance();
     }
 
+    /** @return string[] the enabled subset (never empty) of the built-in values */
+    private static function enabled(string $setting, array $builtin): array
+    {
+        $on = array_values(array_intersect($builtin, (array)Config::get("content_ai.$setting")));
+        return $on === [] ? $builtin : $on;
+    }
+
+    private static function defaultTone(): string
+    {
+        $tones = self::enabled('tones_enabled', array_keys(self::TONES));
+        $d = (string)Config::get('content_ai.default_tone');
+        return in_array($d, $tones, true) ? $d : $tones[0];
+    }
+
     /** No network call: reports whether a key is configured. */
     public function status(array $params): never
     {
@@ -30,6 +44,7 @@ class ContentAiController
         Response::success('Content AI status', [
             'ai_configured' => $configured, 'provider' => $configured ? 'Google Gemini' : null,
             'model' => $configured ? (string)Config::get('gemini.model') : null, 'templates_available' => true,
+            'tones' => self::enabled('tones_enabled', array_keys(self::TONES)), 'types' => self::enabled('types_enabled', self::TYPES), 'default_tone' => self::defaultTone(),
         ]);
     }
 
@@ -37,8 +52,9 @@ class ContentAiController
     {
         $in = Request::json();
         $keyword = self::cleanKeyword(Validator::str($in, 'keyword', 200, true));
-        $type = Validator::enum($in, 'content_type', self::TYPES, 'paragraph');
-        $tone = Validator::enum($in, 'tone', array_keys(self::TONES), 'professional');
+        $types = self::enabled('types_enabled', self::TYPES);
+        $type = Validator::enum($in, 'content_type', $types, in_array('paragraph', $types, true) ? 'paragraph' : $types[0]);
+        $tone = Validator::enum($in, 'tone', self::enabled('tones_enabled', array_keys(self::TONES)), self::defaultTone());
         $projectId = Validator::projectId($in);
 
         $source = 'template'; $aiError = null; $text = null;
@@ -151,7 +167,7 @@ class ContentAiController
         try {
             $res = SafeHttpClient::default()->request('POST', $url, [
                 'headers' => ['Content-Type: application/json', 'x-goog-api-key: ' . Config::get('gemini.api_key')], // key in a header, never the URL
-                'body' => json_encode(['contents' => [['parts' => [['text' => $prompt]]]], 'generationConfig' => ['temperature' => 0.7, 'maxOutputTokens' => 2048, 'thinkingConfig' => ['thinkingBudget' => 0]]]),
+                'body' => json_encode(['contents' => [['parts' => [['text' => $prompt]]]], 'generationConfig' => ['temperature' => (float)Config::get('content_ai.temperature'), 'maxOutputTokens' => (int)Config::get('content_ai.max_tokens'), 'thinkingConfig' => ['thinkingBudget' => 0]]]),
                 'max_bytes' => 1048576, 'timeout' => 30, 'accept' => 'application/json', 'follow' => false,
             ]);
         } catch (FetchException $e) {

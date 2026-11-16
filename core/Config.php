@@ -34,6 +34,12 @@ final class Config
             'trusted_proxies'  => [],
             'app_key'          => '',
             'security'         => ['require_mfa' => false],
+            'content_ai' => ['default_tone' => 'professional', 'tones_enabled' => ['professional', 'casual', 'friendly', 'formal'],
+                'types_enabled' => ['paragraph', 'title', 'meta_description', 'heading', 'conclusion'], 'temperature' => 0.7, 'max_tokens' => 2048],
+            'image' => ['optimal_bytes' => 200000, 'alt_max_length' => 125],
+            'sitemap' => ['default_priority' => 0.5, 'default_changefreq' => 'weekly', 'default_max_pages' => 100],
+            'redirects' => ['default_type' => '301'],
+            'monitor' => ['ignore_patterns' => []],
             'seo' => [
                 'title_min' => 30, 'title_max' => 60, 'meta_min' => 120, 'meta_max' => 160, 'words_good' => 300, 'words_great' => 1000,
                 'alt_high' => 90, 'alt_mid' => 50, 'load_fast' => 3, 'load_ok' => 5, 'internal_min' => 5,

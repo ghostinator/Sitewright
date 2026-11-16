@@ -12,7 +12,7 @@ final class JobController
         $payload = [
             'base_url' => Validator::url($in, 'base_url'),
             'project_id' => Validator::projectId($in),
-            'max_pages' => Validator::int($in, 'max_pages', 1, PHP_INT_MAX, 100),
+            'max_pages' => Validator::int($in, 'max_pages', 1, PHP_INT_MAX, (int)Config::get('sitemap.default_max_pages')),
         ];
         Response::success('Crawl queued', ['job_id' => Jobs::enqueue('crawl', $payload, self::uid())], 202);
     }

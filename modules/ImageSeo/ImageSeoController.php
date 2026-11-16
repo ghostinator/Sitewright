@@ -12,7 +12,11 @@ use Sitewright\Core\{Config, Database, FetchException, Html, Request, Response, 
  */
 class ImageSeoController
 {
-    private const OPTIMAL_BYTES = 200000;
+    private static function optimalBytes(): int
+    {
+        return (int)Config::get('image.optimal_bytes');
+    }
+
     private Database $db;
 
     public function __construct()
@@ -43,7 +47,7 @@ class ImageSeoController
         $id = $this->save($projectId, $info['url'], null, null, $info);
         Response::success('Image analyzed', [
             'id' => $id, 'image_url' => $info['url'], 'file_size' => $info['size'], 'dimensions' => $info['dimensions'],
-            'is_optimized' => $info['size'] === null ? null : $info['size'] < self::OPTIMAL_BYTES,
+            'is_optimized' => $info['size'] === null ? null : $info['size'] < self::optimalBytes(),
             'recommendations' => self::recommendations($info['size']),
         ]);
     }
@@ -118,7 +122,7 @@ class ImageSeoController
         Response::success('Alt text suggestion generated', [
             'suggestion' => ucwords(trim(preg_replace('/[\s_\-]+/', ' ', $file) ?? '')),
             'source' => 'filename_heuristic',
-            'tips' => ['Describe what is in the image', 'Include relevant keywords naturally', 'Keep it under 125 characters', 'Avoid "image of" or "picture of"'],
+            'tips' => ['Describe what is in the image', 'Include relevant keywords naturally', 'Keep it under ' . (int)Config::get('image.alt_max_length') . ' characters', 'Avoid "image of" or "picture of"'],
         ]);
     }
 
@@ -129,7 +133,7 @@ class ImageSeoController
         if (empty($img['alt_text'])) { $tips[] = ['type' => 'error', 'message' => 'Missing alt text - add descriptive alt text for accessibility and SEO']; }
         if (empty($img['title'])) { $tips[] = ['type' => 'warning', 'message' => 'Missing title attribute (optional, minor)']; }
         if ($img['file_size'] === null) { $tips[] = ['type' => 'warning', 'message' => 'File size is unknown']; }
-        elseif ($img['file_size'] > self::OPTIMAL_BYTES) { $tips[] = ['type' => 'error', 'message' => 'Large file - consider compressing below 200 KB']; }
+        elseif ($img['file_size'] > self::optimalBytes()) { $tips[] = ['type' => 'error', 'message' => 'Large file - consider compressing below ' . (int)round(self::optimalBytes() / 1000) . ' KB']; }
         elseif ($img['file_size'] > 100000) { $tips[] = ['type' => 'warning', 'message' => 'Could be smaller - consider compressing below 100 KB']; }
         if (!$tips) { $tips[] = ['type' => 'success', 'message' => 'No issues found by these checks']; }
         Response::success('Optimization tips generated', $tips);
@@ -153,13 +157,13 @@ class ImageSeoController
 
     private function optimized(string $alt, ?int $size): ?bool
     {
-        return $size === null ? null : ($alt !== '' && $size < self::OPTIMAL_BYTES); // unknown size => unknown, never "optimized"
+        return $size === null ? null : ($alt !== '' && $size < self::optimalBytes()); // unknown size => unknown, never "optimized"
     }
 
     private function save(int $projectId, string $url, ?string $alt, ?string $title, array $info): int
     {
         $t = $this->db->t('image_seo');
-        $opt = $alt === null ? ($info['size'] === null ? null : (int)($info['size'] < self::OPTIMAL_BYTES)) : ($this->optimized($alt, $info['size']) === null ? null : (int)$this->optimized($alt, $info['size']));
+        $opt = $alt === null ? ($info['size'] === null ? null : (int)($info['size'] < self::optimalBytes())) : ($this->optimized($alt, $info['size']) === null ? null : (int)$this->optimized($alt, $info['size']));
         $this->db->query(
             "INSERT INTO `$t` (project_id, image_url, alt_text, title, file_size, dimensions, optimized) VALUES (:p, :u, :a, :t, :s, :d, :o)
              ON DUPLICATE KEY UPDATE file_size = VALUES(file_size), dimensions = VALUES(dimensions), optimized = VALUES(optimized),
@@ -172,7 +176,7 @@ class ImageSeoController
     private static function recommendations(?int $size): array
     {
         $r = [];
-        if ($size !== null && $size > self::OPTIMAL_BYTES) { $r[] = 'Compress the image to reduce file size below 200 KB'; }
+        if ($size !== null && $size > self::optimalBytes()) { $r[] = 'Compress the image to reduce file size below ' . (int)round(self::optimalBytes() / 1000) . ' KB'; }
         $r[] = 'Add descriptive alt text where the image is used';
         $r[] = 'Use a descriptive file name';
         return $r;

@@ -573,6 +573,12 @@
             const s = await apiRequest('GET', '/content-ai/status');
             box.className = 'alert ' + (s.ai_configured ? 'alert-info' : 'alert-warn');
             box.textContent = s.ai_configured ? 'AI: Google Gemini (' + s.model + ') is configured. Prompts you enter are sent to Google.' : 'No AI is configured: output is simple fixed templates, not AI-generated.';
+            // only offer what Settings allows
+            const TYPE_LABELS = { paragraph: 'Paragraph', title: 'Title', meta_description: 'Meta Description', heading: 'Heading', conclusion: 'Conclusion' };
+            const fill = (id, values, label, current) => { const sel = document.getElementById(id); if (!sel || !Array.isArray(values) || !values.length) return; const keep = sel.value;
+                sel.replaceChildren(...values.map(v => { const o = el('option', { text: label(v), attrs: { value: v } }); if (v === (values.includes(keep) ? keep : current)) o.selected = true; return o; })); };
+            fill('ai-content-type', s.types, v => TYPE_LABELS[v] || v, s.types && s.types[0]);
+            fill('ai-tone', s.tones, v => v.charAt(0).toUpperCase() + v.slice(1), s.default_tone);
         } catch (e) { box.className = 'alert hidden'; }
     }
 

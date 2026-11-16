@@ -41,3 +41,68 @@ test('SEO settings: registry rules (ranges, weights 0-100, cross-field) through 
     eq(Settings::prepare(['seo.title_min' => 25, 'seo.title_max' => 70, 'seo.load_fast' => 2.5], true)['status'], 200);
     ok(count(array_filter(array_keys(Settings::registry()), fn ($k) => str_starts_with($k, 'seo.w.'))) === 18);
 });
+
+// ---- Content AI, images, sitemaps, redirects, 404 ignore patterns -----------------------------------------------------------
+use Sitewright\Modules\ContentAi\ContentAiController as Ai;
+use Sitewright\Modules\ImageSeo\ImageSeoController as Img;
+use Sitewright\Modules\Sitemap\SitemapController as Sm;
+use Sitewright\Modules\Redirections\RedirectionsController as Rd;
+use Sitewright\Modules\Monitor\MonitorController as Mon;
+use Sitewright\Core\{Crypto, SiteSync};
+
+test('content AI settings: status lists what is offered; disabled tones and types are refused with 400; default tone applies', function () {
+    $st = call(Ai::class, 'status', [])['json']['data']; eq($st['tones'], ['professional', 'casual', 'friendly', 'formal']); eq($st['default_tone'], 'professional'); eq(count($st['types']), 5);
+    Config::set('content_ai.tones_enabled', ['casual', 'friendly']); Config::set('content_ai.default_tone', 'casual'); Config::set('content_ai.types_enabled', ['title', 'heading']); Config::set('gemini.api_key', '');
+    $st = call(Ai::class, 'status', [])['json']['data']; eq($st['tones'], ['casual', 'friendly']); eq($st['types'], ['title', 'heading']); eq($st['default_tone'], 'casual');
+    eq(call(Ai::class, 'generateContent', ['method' => 'POST', 'body' => ['keyword' => 'tea', 'tone' => 'formal']])['status'], 400);
+    eq(call(Ai::class, 'generateContent', ['method' => 'POST', 'body' => ['keyword' => 'tea', 'content_type' => 'paragraph']])['status'], 400);
+    $ok = call(Ai::class, 'generateContent', ['method' => 'POST', 'body' => ['keyword' => 'tea']]); eq($ok['status'], 200, $ok['body']); eq($ok['json']['data']['content_type'], 'title', 'first enabled type when paragraph is off');
+    Config::set('content_ai.tones_enabled', ['professional', 'casual', 'friendly', 'formal']); Config::set('content_ai.default_tone', 'professional'); Config::set('content_ai.types_enabled', ['paragraph', 'title', 'meta_description', 'heading', 'conclusion']);
+});
+test('content AI settings: temperature and token limit reach the model request', function () {
+    Config::set('gemini.api_key', 'TEST_KEY_123'); Config::set('content_ai.temperature', 1.2); Config::set('content_ai.max_tokens', 900);
+    fakeWeb(['https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent' => [200, [], json_encode(['candidates' => [['finishReason' => 'STOP', 'content' => ['parts' => [['text' => 'ok']]]]]])]]);
+    call(Ai::class, 'generateContent', ['method' => 'POST', 'body' => ['keyword' => 'tea']]);
+    $cfg = json_decode($GLOBALS['__calls'][0]['body'], true)['generationConfig']; eq($cfg['temperature'], 1.2); eq($cfg['maxOutputTokens'], 900);
+    Config::set('gemini.api_key', ''); Config::set('content_ai.temperature', 0.7); Config::set('content_ai.max_tokens', 2048);
+});
+test('Settings rules: default tone must be enabled; lists must name known values and keep at least one', function () {
+    eq(Settings::prepare(['content_ai.tones_enabled' => ['casual']], true)['status'], 400, 'default tone professional would be disabled');
+    eq(Settings::prepare(['content_ai.tones_enabled' => ['casual'], 'content_ai.default_tone' => 'casual'], true)['status'], 200);
+    eq(Settings::prepare(['content_ai.tones_enabled' => []], true)['status'], 400); eq(Settings::prepare(['content_ai.tones_enabled' => ['shouty']], true)['status'], 400);
+    eq(Settings::prepare(['monitor.ignore_patterns' => ['no-slash']], true)['status'], 400); eq(Settings::prepare(['monitor.ignore_patterns' => ['/wp-json/*', '/feed']], true)['status'], 200);
+    eq(Settings::prepare(['content_ai.temperature' => 3], true)['status'], 400); eq(Settings::prepare(['sitemap.default_priority' => 1.5], true)['status'], 400);
+});
+test('image settings: the optimized size cut-off and alt-length tip follow the settings', function () {
+    $m = new ReflectionMethod(Img::class, 'optimized'); $img = new Img();
+    eq($m->invoke($img, 'alt', 150000), true); Config::set('image.optimal_bytes', 100000); eq($m->invoke($img, 'alt', 150000), false); Config::set('image.optimal_bytes', 200000);
+    Config::set('image.alt_max_length', 90); $tips = call(Img::class, 'suggestAltText', ['query' => ['image_url' => 'https://x.example/red-shoes.jpg']])['json']['data']['tips'];
+    ok(in_array('Keep it under 90 characters', $tips, true), json_encode($tips)); Config::set('image.alt_max_length', 125);
+});
+test('sitemap and redirect defaults apply when the request leaves the field out', function () use ($db) {
+    Config::set('sitemap.default_priority', 0.8); Config::set('sitemap.default_changefreq', 'daily'); Config::set('redirects.default_type', '302');
+    $r = call(Sm::class, 'add', ['method' => 'POST', 'body' => ['url' => 'https://d.example/a']]); eq($r['status'], 201, $r['body']);
+    $row = $db->fetchOne("SELECT priority, changefreq FROM sw_sitemaps WHERE url = 'https://d.example/a'"); eq((float)$row['priority'], 0.8); eq($row['changefreq'], 'daily');
+    eq(call(Rd::class, 'add', ['method' => 'POST', 'body' => ['source_url' => '/dflt', 'target_url' => '/x']])['status'], 201);
+    eq($db->fetchOne("SELECT redirect_type FROM sw_redirections WHERE source_url = '/dflt'")['redirect_type'], '302');
+    Config::set('sitemap.default_max_pages', 42);
+    $j = call(Sitewright\Core\JobController::class, 'crawl', ['method' => 'POST', 'body' => ['base_url' => 'https://d.example/']]); eq($j['status'], 202);
+    eq(json_decode($db->fetchOne('SELECT payload FROM sw_jobs ORDER BY id DESC LIMIT 1')['payload'], true)['max_pages'], 42);
+    Config::set('sitemap.default_priority', 0.5); Config::set('sitemap.default_changefreq', 'weekly'); Config::set('redirects.default_type', '301'); Config::set('sitemap.default_max_pages', 100);
+});
+test('404 ignore patterns drop matching paths: manual add and pulls from a connected site', function () use ($db) {
+    Config::set('monitor.ignore_patterns', ['/wp-json/*', '/favicon.ico']);
+    ok(Mon::ignored('/wp-json/wp/v2/posts')); ok(Mon::ignored('/favicon.ico')); ok(!Mon::ignored('/favicon.icon')); ok(!Mon::ignored('/blog/wp-json/x')); ok(!Mon::ignored('/real-page'));
+    $r = call(Mon::class, 'log404', ['method' => 'POST', 'body' => ['uri' => '/wp-json/x']]); eq($r['json']['data']['ignored'], true);
+    eq((int)$db->fetchOne("SELECT COUNT(*) n FROM sw_404_monitor WHERE uri = '/wp-json/x'")['n'], 0);
+    eq(call(Mon::class, 'log404', ['method' => 'POST', 'body' => ['uri' => '/real-page']])['json']['data']['ignored'] ?? false, false);
+    // pulled from a connected site
+    Config::set('app_key', Crypto::generateKey()); $db->query('TRUNCATE sw_sites');
+    $id = (int)$db->insert('sites', ['name' => 'S', 'base_url' => 'https://s.example', 'secret_enc' => 'x']); $db->update('sites', ['secret_enc' => Crypto::encrypt('a-secret', "site:$id")], ['id' => $id]);
+    fakeWeb(['https://s.example/?rest_route=/sitewright/v1/status' => [200, [], '{"plugin_version":"1.0.0"}'],
+             'https://s.example/?rest_route=/sitewright/v1/404s&since_seq=0&limit=500' => [200, [], json_encode(['items' => [['seq' => 1, 'uri' => '/wp-json/a', 'hits' => 3, 'last_seen' => '2026-01-01 00:00:00 UTC'], ['seq' => 2, 'uri' => '/lost-page', 'hits' => 2, 'last_seen' => '2026-01-01 00:00:00 UTC']], 'max_seq' => 2])],
+             'https://s.example/?rest_route=/sitewright/v1/redirects' => [200, [], '{"accepted":0}']]);
+    SiteSync::handleJob(['site_id' => $id]);
+    eq(array_column($db->fetchAll("SELECT uri FROM sw_404_monitor WHERE project_id = $id"), 'uri'), ['/lost-page']);
+    Config::set('monitor.ignore_patterns', []);
+});

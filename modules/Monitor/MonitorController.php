@@ -44,6 +44,15 @@ class MonitorController
         ]);
     }
 
+    /** True when $path matches an "ignore" pattern from Settings (exact, or with * as a wildcard). */
+    public static function ignored(string $path): bool
+    {
+        foreach ((array)Config::get('monitor.ignore_patterns') as $p) {
+            if (is_string($p) && $p !== '' && preg_match('#^' . str_replace('\\*', '.*', preg_quote($p, '#')) . '$#D', $path)) { return true; }
+        }
+        return false;
+    }
+
     public function log404(array $params): never
     {
         $in = Request::json();
@@ -51,6 +60,7 @@ class MonitorController
         if ($uri[0] !== '/') { Validator::fail('uri', 'must start with "/"'); }
         $ip = Validator::str($in, 'ip_address', 45);
         if ($ip !== null && !filter_var($ip, FILTER_VALIDATE_IP)) { Validator::fail('ip_address', 'must be an IP address'); }
+        if (self::ignored($uri)) { Response::success('Ignored by a 404 ignore pattern', ['id' => 0, 'ignored' => true]); }
         $projectId = Validator::projectId($in);
         $t = $this->db->t('404_monitor');
 
