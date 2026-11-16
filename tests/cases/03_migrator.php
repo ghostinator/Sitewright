@@ -13,7 +13,9 @@ test('schema: unused tables dropped, auth/rate-limit tables present', function (
     $db = freshDb();
     $tables = array_column($db->fetchAll('SHOW TABLES'), 'Tables_in_sw_test');
     foreach (['sw_users', 'sw_rate_limits', 'sw_schema_migrations', 'sw_404_monitor', 'sw_redirections', 'sw_sitemaps', 'sw_audit_log', 'sw_recovery_codes'] as $t) { ok(in_array($t, $tables, true), "missing $t"); }
-    foreach (['sw_projects', 'sw_schema', 'sw_settings', 'sw_analytics_pages'] as $t) { ok(!in_array($t, $tables, true), "$t should be dropped"); }
+    foreach (['sw_projects', 'sw_schema', 'sw_analytics_pages'] as $t) { ok(!in_array($t, $tables, true), "$t should be dropped"); }
+    // 003 drops the legacy `settings` table; 009 creates the new one (key/value) under the same name
+    ok(in_array('sw_settings', $tables, true) && in_array('skey', array_column($db->fetchAll('SHOW COLUMNS FROM sw_settings'), 'Field'), true), 'new settings table has the skey column');
 });
 test('unique keys enforce one row per natural key (DB-001)', function () {
     $db = freshDb();

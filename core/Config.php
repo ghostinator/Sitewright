@@ -14,6 +14,11 @@ final class Config
 
     private static ?array $data = null;
     private static ?string $file = null;
+    /** @var array<string,mixed> the config FILE layer as read (for "where does this value come from") */
+    private static array $fileData = [];
+    /** @var array<string,mixed> original values of keys currently overridden by saved settings */
+    private static array $shadow = [];
+    private static bool $overlaying = false;
 
     /** @return array<string,mixed> */
     public static function defaults(): array
@@ -75,6 +80,7 @@ final class Config
     public static function reset(): void
     {
         self::$data = null;
+        self::$shadow = [];
     }
 
     /** @return array<string,mixed> */
@@ -82,6 +88,8 @@ final class Config
     {
         if (self::$data === null) {
             self::$data = self::build();
+            self::$shadow = [];
+            self::refreshSettings();
         }
         return self::$data;
     }
@@ -114,6 +122,65 @@ final class Config
         self::$data = $data;
     }
 
+    /**
+     * Apply saved settings (table `settings`) on top of the file layer, below environment variables. Best effort: with no database
+     * configured, an unreachable database or a missing table the app simply runs on file + env + defaults. Idempotent: values that are no
+     * longer saved are restored; other runtime overrides (Config::set) are left alone.
+     */
+    public static function refreshSettings(): void
+    {
+        if (self::$overlaying || self::$data === null || (string)(self::$data['db']['user'] ?? '') === '') { return; }
+        self::$overlaying = true;
+        try {
+            $saved = Settings::saved();
+        } catch (\Throwable) {
+            $saved = null;
+        } finally {
+            self::$overlaying = false;
+        }
+        if ($saved === null) { return; }
+        foreach (array_keys(self::$shadow) as $key) {
+            if (!array_key_exists($key, $saved)) { self::putPath(self::$data, $key, self::$shadow[$key]); unset(self::$shadow[$key]); }
+        }
+        foreach ($saved as $key => $value) {
+            if (Settings::envLocked($key)) { continue; }
+            if (!array_key_exists($key, self::$shadow)) { self::$shadow[$key] = self::getPath(self::$data, $key); }
+            self::putPath(self::$data, $key, $value);
+        }
+    }
+
+    /** @return string[] keys whose current value comes from a saved setting */
+    public static function savedKeys(): array
+    {
+        self::all();
+        return array_values(array_filter(array_keys(self::$shadow), static fn (string $k): bool => !Settings::envLocked($k)));
+    }
+
+    public static function fileHas(string $path): bool
+    {
+        $n = self::$fileData;
+        foreach (explode('.', $path) as $p) { if (!is_array($n) || !array_key_exists($p, $n)) { return false; } $n = $n[$p]; }
+        return true;
+    }
+
+    public static function fileValue(string $path): mixed
+    {
+        return self::getPath(self::$fileData, $path);
+    }
+
+    private static function getPath(array $a, string $path): mixed
+    {
+        foreach (explode('.', $path) as $p) { if (!is_array($a) || !array_key_exists($p, $a)) { return null; } $a = $a[$p]; }
+        return $a;
+    }
+
+    private static function putPath(array &$a, string $path, mixed $value): void
+    {
+        $ref = &$a;
+        foreach (explode('.', $path) as $p) { if (!isset($ref[$p]) || !is_array($ref[$p])) { $ref[$p] = $ref[$p] ?? []; } $ref = &$ref[$p]; }
+        $ref = $value;
+    }
+
     public static function root(): string
     {
         return dirname(__DIR__);
@@ -127,8 +194,11 @@ final class Config
         if (is_file($file)) {
             $loaded = (static function (string $f) { return require $f; })($file);
             if (is_array($loaded)) {
+                self::$fileData = $loaded;
                 $cfg = array_replace_recursive($cfg, $loaded);
             }
+        } else {
+            self::$fileData = [];
         }
 
         $env = static fn (string $k): ?string => (($v = getenv($k)) === false || $v === '') ? null : $v;
