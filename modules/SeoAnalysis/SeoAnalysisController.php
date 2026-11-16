@@ -133,12 +133,12 @@ class SeoAnalysisController
                 'content_type' => (string)($res['content_type'] ?? ''),
             ],
             'basic' => [
-                'title' => $title, 'title_length' => $titleLen, 'title_optimal' => $titleLen >= 30 && $titleLen <= 60,
+                'title' => $title, 'title_length' => $titleLen, 'title_optimal' => $titleLen >= (int)Config::get('seo.title_min') && $titleLen <= (int)Config::get('seo.title_max'),
                 'html_size' => $res['bytes'], 'word_count' => Html::wordCount($text),
                 'canonical' => $canonical, 'lang' => $lang, 'noindex' => str_contains($robots, 'noindex'),
             ],
             'meta' => [
-                'description' => $desc, 'description_length' => $descLen, 'description_optimal' => $descLen >= 120 && $descLen <= 160,
+                'description' => $desc, 'description_length' => $descLen, 'description_optimal' => $descLen >= (int)Config::get('seo.meta_min') && $descLen <= (int)Config::get('seo.meta_max'),
                 'keywords' => $meta['keywords'] ?? '', 'robots' => $meta['robots'] ?? '',
                 'og_title' => $meta['og:title'] ?? '', 'og_description' => $meta['og:description'] ?? '',
                 'og_image' => $meta['og:image'] ?? '', 'twitter_card' => $meta['twitter:card'] ?? '',
@@ -152,7 +152,7 @@ class SeoAnalysisController
             ],
             'links' => ['total_links' => $internal + $external, 'internal_links' => $internal, 'external_links' => $external, 'nofollow_links' => $nofollow],
             'performance' => [
-                'load_time' => $loadTime, 'load_time_optimal' => $loadTime < 3, 'page_size' => $res['bytes'],
+                'load_time' => $loadTime, 'load_time_optimal' => $loadTime < (float)Config::get('seo.load_fast'), 'page_size' => $res['bytes'],
                 'note' => 'Server-side fetch time of the HTML document only; not a Core Web Vitals measurement.',
             ],
             'viewport' => ['has_viewport' => $viewport !== null, 'viewport_content' => $viewport ? $viewport->getAttribute('content') : ''],
@@ -164,20 +164,21 @@ class SeoAnalysisController
 
     public static function calculateScore(array $r): int
     {
+        $w = static fn (string $k): int => (int)Config::get("seo.w.$k");
         $s = 0;
-        if ($r['basic']['title'] !== '') { $s += 5 + ($r['basic']['title_optimal'] ? 5 : 0); }
-        if ($r['meta']['description'] !== '') { $s += 5 + ($r['meta']['description_optimal'] ? 5 : 0); }
-        if ($r['headings']['h1_optimal']) { $s += 10; }
+        if ($r['basic']['title'] !== '') { $s += $w('title_present') + ($r['basic']['title_optimal'] ? $w('title_ok') : 0); }
+        if ($r['meta']['description'] !== '') { $s += $w('meta_present') + ($r['meta']['description_optimal'] ? $w('meta_ok') : 0); }
+        if ($r['headings']['h1_optimal']) { $s += $w('h1'); }
         $alt = $r['images']['alt_ratio'];
-        $s += $alt >= 90 ? 15 : ($alt >= 50 ? 10 : ($alt > 0 ? 5 : 0));
-        $s += $r['performance']['load_time_optimal'] ? 15 : ($r['performance']['load_time'] < 5 ? 10 : 5);
-        if ($r['viewport']['has_viewport']) { $s += 10; }
-        if ($r['security']['uses_https']) { $s += 10; }
-        if ($r['structured_data']['has_schema']) { $s += 10; }
-        if ($r['links']['internal_links'] > 5) { $s += 5; }
-        if ($r['links']['external_links'] > 0) { $s += 5; }
-        $w = $r['basic']['word_count'];
-        $s += ($w >= 300 ? 5 : 0) + ($w >= 1000 ? 5 : 0);
+        $s += $alt >= (float)Config::get('seo.alt_high') ? $w('alt_high') : ($alt >= (float)Config::get('seo.alt_mid') ? $w('alt_mid') : ($alt > 0 ? $w('alt_low') : 0));
+        $s += $r['performance']['load_time_optimal'] ? $w('load_fast') : ($r['performance']['load_time'] < (float)Config::get('seo.load_ok') ? $w('load_ok') : $w('load_slow'));
+        if ($r['viewport']['has_viewport']) { $s += $w('viewport'); }
+        if ($r['security']['uses_https']) { $s += $w('https'); }
+        if ($r['structured_data']['has_schema']) { $s += $w('schema'); }
+        if ($r['links']['internal_links'] > (int)Config::get('seo.internal_min')) { $s += $w('internal'); }
+        if ($r['links']['external_links'] > 0) { $s += $w('external'); }
+        $wc = $r['basic']['word_count'];
+        $s += ($wc >= (int)Config::get('seo.words_good') ? $w('words_good') : 0) + ($wc >= (int)Config::get('seo.words_great') ? $w('words_great') : 0);
         return min(100, $s);
     }
 }

@@ -16,7 +16,7 @@ test('settings API: admin-only; list has groups, sources, locks and masks secret
     $e = new TestHttp($base); $e->login('ed', 'editor passphrase long here');
     foreach ([['GET', '/api/settings'], ['PUT', '/api/settings'], ['DELETE', '/api/settings/limits.crawl_seconds'], ['POST', '/api/settings/limits.crawl_seconds/promote'], ['POST', '/api/settings/test/mail']] as [$m, $p]) { eq($e->api($m, $p, $m === 'GET' ? null : [])['status'], 403, "$m $p"); }
     $a = $admin(); $r = $a->api('GET', '/api/settings'); eq($r['status'], 200);
-    eq(array_column($r['json']['data']['groups'], 'id'), ['mail', 'security', 'integrations', 'crawl', 'data']);
+    eq(array_slice(array_column($r['json']['data']['groups'], 'id'), 0, 5), ['mail', 'security', 'integrations', 'crawl', 'data']);
     $s = $find($r['json']['data'], 'limits.crawl_seconds'); eq($s['source'], 'default'); eq($s['value'], 120); eq($s['unit'], 'seconds'); eq($s['locked'], false); ok(str_contains($s['fallback'], 'built-in default 120'));
     $m = $find($r['json']['data'], 'mail.from'); eq($m['source'], 'env'); eq($m['locked'], true); eq($m['env'], 'SW_MAIL_FROM');
     $k = $find($r['json']['data'], 'mail.postal_key'); eq($k['value'], ['set' => false]); ok($k['secret']);

@@ -34,6 +34,13 @@ final class Config
             'trusted_proxies'  => [],
             'app_key'          => '',
             'security'         => ['require_mfa' => false],
+            'seo' => [
+                'title_min' => 30, 'title_max' => 60, 'meta_min' => 120, 'meta_max' => 160, 'words_good' => 300, 'words_great' => 1000,
+                'alt_high' => 90, 'alt_mid' => 50, 'load_fast' => 3, 'load_ok' => 5, 'internal_min' => 5,
+                'w' => ['title_present' => 5, 'title_ok' => 5, 'meta_present' => 5, 'meta_ok' => 5, 'h1' => 10, 'alt_high' => 15, 'alt_mid' => 10, 'alt_low' => 5,
+                        'load_fast' => 15, 'load_ok' => 10, 'load_slow' => 5, 'viewport' => 10, 'https' => 10, 'schema' => 10, 'internal' => 5, 'external' => 5,
+                        'words_good' => 5, 'words_great' => 5],
+            ],
             'google'           => ['client_id' => '', 'client_secret' => '', 'redirect_uri' => ''],
             'sites'            => ['sync_minutes' => 10],
             'log' => ['file' => '', 'level' => 'info', 'requests' => true],

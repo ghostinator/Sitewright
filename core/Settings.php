@@ -22,6 +22,7 @@ final class Settings
         'integrations' => ['Integrations', 'Gemini, Google, geocoding and what the server may fetch.'],
         'crawl' => ['Crawling & jobs', 'How much a crawl or image batch may do, and how often sites sync.'],
         'data' => ['Data & logging', 'How long records are kept and how much is logged.'],
+        'seo' => ['SEO scoring', 'What counts as a good title, description, speed and content, and how many points each check is worth. The score is the sum of the points, capped at 100.'],
     ];
 
     /** Keys shown read-only: file/environment only. */
@@ -98,6 +99,27 @@ final class Settings
         $add('limits.job_retention_days', 'data', 'Keep finished jobs', 'Finished and failed jobs older than this are deleted.', 'int', ['min' => 1, 'max' => 365, 'unit' => 'days']);
         $add('log.level', 'data', 'Log detail', 'debug, info, warn or error.', 'enum', ['enum' => ['debug', 'info', 'warn', 'error'], 'env' => 'SW_LOG_LEVEL']);
         $add('log.requests', 'data', 'Log every request', 'One line per request (path without query string).', 'bool');
+        // ---- SEO scoring (Phase 2)
+        $seo = [
+            'title_min' => ['Shortest good title', 'characters', 1, 200, 'A title shorter than this is not judged optimal.'], 'title_max' => ['Longest good title', 'characters', 1, 300, 'A title longer than this is not judged optimal.'],
+            'meta_min' => ['Shortest good description', 'characters', 1, 400, 'Meta description lower bound.'], 'meta_max' => ['Longest good description', 'characters', 1, 600, 'Meta description upper bound.'],
+            'words_good' => ['Words for a "good" page', 'words', 1, 20000, 'Pages with at least this many words earn the first content points.'], 'words_great' => ['Words for a "great" page', 'words', 1, 50000, 'Pages with at least this many words earn the second content points.'],
+            'alt_high' => ['Images with alt text: high', 'percent', 1, 100, 'At or above this share of images with alt text earns the most image points.'], 'alt_mid' => ['Images with alt text: medium', 'percent', 1, 100, 'At or above this share earns the middle image points.'],
+            'load_fast' => ['Fast page fetch', 'seconds', 0, 60, 'Faster than this earns the most speed points.'], 'load_ok' => ['Acceptable page fetch', 'seconds', 0, 120, 'Faster than this earns the middle speed points.'],
+            'internal_min' => ['Internal links needed', 'links', 0, 1000, 'A page needs MORE than this many internal links to earn the link points.'],
+        ];
+        foreach ($seo as $k => [$label, $unit, $min, $max, $help]) {
+            $r["seo.$k"] = ['group' => 'seo', 'label' => $label, 'help' => $help, 'type' => in_array($k, ['load_fast', 'load_ok'], true) ? 'float' : 'int', 'default' => self::defaultOf("seo.$k"),
+                'min' => $min, 'max' => $max, 'enum' => null, 'pattern' => null, 'unit' => $unit, 'secret' => false, 'env' => null, 'apply' => 'live', 'danger' => false, 'danger_effects' => []];
+        }
+        $weights = ['title_present' => 'Title present', 'title_ok' => 'Title length good', 'meta_present' => 'Description present', 'meta_ok' => 'Description length good', 'h1' => 'Exactly one main heading',
+            'alt_high' => 'Alt text on most images', 'alt_mid' => 'Alt text on many images', 'alt_low' => 'Alt text on some images', 'load_fast' => 'Fast page fetch', 'load_ok' => 'Acceptable page fetch',
+            'load_slow' => 'Slow page fetch', 'viewport' => 'Mobile viewport tag', 'https' => 'Served over HTTPS', 'schema' => 'Structured data present', 'internal' => 'Enough internal links',
+            'external' => 'Has external links', 'words_good' => 'Enough words', 'words_great' => 'Plenty of words'];
+        foreach ($weights as $k => $label) {
+            $r["seo.w.$k"] = ['group' => 'seo', 'label' => 'Points: ' . $label, 'help' => 'Points added to the score when this check passes.', 'type' => 'int', 'default' => self::defaultOf("seo.w.$k"),
+                'min' => 0, 'max' => 100, 'enum' => null, 'pattern' => null, 'unit' => 'points', 'secret' => false, 'env' => null, 'apply' => 'live', 'danger' => false, 'danger_effects' => []];
+        }
         return self::$registry = $r;
     }
 
@@ -260,6 +282,11 @@ final class Settings
         if ($now('session.idle_timeout') > $now('session.absolute_timeout')) { $xerr[array_key_exists('session.absolute_timeout', $values) ? 'session.absolute_timeout' : 'session.idle_timeout'] = 'The idle timeout cannot be longer than the longest session.'; }
         if ($now('fetch.connect_timeout') > $now('fetch.timeout')) { $xerr[array_key_exists('fetch.timeout', $values) ? 'fetch.timeout' : 'fetch.connect_timeout'] = 'The connect timeout cannot be longer than the request timeout.'; }
         if ($now('alerts.email_to') !== [] && !self::mailReady($now)) { $xerr['alerts.email_to'] = 'Set up mail first: alert e-mails need a working mail method and a From address.'; }
+        foreach ([['seo.title_min', 'seo.title_max', 'The shortest good title cannot be longer than the longest.'], ['seo.meta_min', 'seo.meta_max', 'The shortest good description cannot be longer than the longest.'],
+                  ['seo.words_good', 'seo.words_great', 'The "good" word count cannot be above the "great" one.'], ['seo.alt_mid', 'seo.alt_high', 'The medium alt-text share cannot be above the high one.'],
+                  ['seo.load_fast', 'seo.load_ok', 'The fast limit cannot be slower than the acceptable limit.']] as [$lo, $hi, $why]) {
+            if ($now($lo) > $now($hi)) { $xerr[array_key_exists($hi, $values) ? $hi : $lo] = $why; }
+        }
         if ($xerr) { return $fail(400, 'Some values conflict; nothing was saved.', $xerr); }
         $effects = []; $clears = [];
         foreach (array_keys($values) as $k) {
