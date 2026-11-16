@@ -1,1 +1,15 @@
 old/
+node_modules/
+/config/config.php
+/config/database.php
+/config/api-keys.php
+.env
+.env.*
+*.log
+/storage/*
+!/storage/.gitkeep
+.playwright-mcp/
+
+tests/browser/node_modules/
+tests/browser/test-results/
+.superpowers/

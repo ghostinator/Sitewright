@@ -1,0 +1,3 @@
+# Add INSIDE the www-data egress chain of /etc/nftables.d-sitewright.nft, BEFORE the reject rules for private ranges.
+# Lets the PHP/worker user reach ONLY your mail server (replace address and port; Postal SMTP is usually 25 or 587).
+meta skuid "www-data" ip daddr 192.168.0.50 tcp dport { 25, 587 } accept

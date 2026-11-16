@@ -1,183 +1,128 @@
 <?php
+declare(strict_types=1);
+
+namespace Sitewright\Modules\Monitor;
+
+use Sitewright\Core\{Audit, Config, Database, Request, Response, Validator};
+
 /**
- * 404 Monitor Controller
- * Track and manage 404 errors
+ * 404 log. This application does NOT detect 404s on your site by itself: entries are added manually
+ * (POST /api/404-monitor/log) or imported from your server logs. Stored data: URI, referer, user agent, IP.
  */
+class MonitorController
+{
+    private const ORDER_COLUMNS = ['last_accessed', 'hits', 'created_at', 'uri', 'id'];
+    private Database $db;
 
-namespace RankMathWebapp\Modules\Monitor;
-
-use RankMathWebapp\Core\Database;
-use RankMathWebapp\Core\Response;
-
-class MonitorController {
-    
-    private $db;
-    
-    public function __construct() {
+    public function __construct()
+    {
         $this->db = Database::getInstance();
     }
-    
-    /**
-     * Get 404 logs
-     */
-    public function getLogs($params) {
-        $projectId = $_GET['project_id'] ?? null;
-        $page = $_GET['page'] ?? 1;
-        $perPage = $_GET['per_page'] ?? 20;
-        $orderBy = $_GET['order_by'] ?? 'last_accessed';
-        $order = $_GET['order'] ?? 'DESC';
-        
-        $offset = ($page - 1) * $perPage;
-        
-        $prefix = $this->db->getPrefix();
-        $sql = "SELECT * FROM {$prefix}404_monitor WHERE 1=1";
-        $params = [];
-        
-        if ($projectId) {
-            $sql .= " AND project_id = :project_id";
-            $params['project_id'] = $projectId;
-        }
-        
-        $sql .= " ORDER BY $orderBy $order LIMIT $perPage OFFSET $offset";
-        
-        $logs = $this->db->fetchAll($sql, $params);
-        
-        // Get total count
-        $countSql = "SELECT COUNT(*) as total FROM {$prefix}404_monitor WHERE 1=1";
-        if ($projectId) {
-            $countSql .= " AND project_id = :project_id";
-        }
-        $totalRow = $this->db->fetchOne($countSql, $params);
-        $total = $totalRow['total'];
-        
+
+    public function getLogs(array $params): never
+    {
+        $orderBy = in_array(Request::query('order_by'), self::ORDER_COLUMNS, true) ? Request::query('order_by') : 'last_accessed';
+        $order = strtoupper((string)Request::query('order', 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
+        $page = Request::queryInt('page', 1, 1, 1000000);
+        $perPage = Request::queryInt('per_page', 20, 1, 100);
+        $projectId = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);
+
+        $t = $this->db->t('404_monitor');
+        $where = $projectId > 0 ? ' WHERE project_id = :project_id' : '';
+        $q = $projectId > 0 ? ['project_id' => $projectId] : [];
+
+        $total = (int)($this->db->fetchOne("SELECT COUNT(*) AS c FROM `$t`$where", $q)['c'] ?? 0);
+        $logs = $this->db->fetchAll(
+            "SELECT id, project_id, uri, referer, user_agent, ip_address, hits, last_accessed, created_at, is_sample
+             FROM `$t`$where ORDER BY `$orderBy` $order, id DESC LIMIT :limit OFFSET :offset",
+            $q + ['limit' => $perPage, 'offset' => ($page - 1) * $perPage]
+        );
+
         Response::success('404 logs retrieved', [
             'logs' => $logs,
-            'pagination' => [
-                'current_page' => (int)$page,
-                'per_page' => (int)$perPage,
-                'total' => (int)$total,
-                'total_pages' => ceil($total / $perPage),
-            ]
+            'pagination' => ['current_page' => $page, 'per_page' => $perPage, 'total' => $total, 'total_pages' => max(1, (int)ceil($total / $perPage))],
         ]);
     }
-    
-    /**
-     * Log a 404 error
-     */
-    public function log404($params) {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
-        $uri = $data['uri'] ?? '';
-        $projectId = $data['project_id'] ?? null;
-        
-        if (empty($uri)) {
-            Response::error('URI is required');
+
+    /** True when $path matches an "ignore" pattern from Settings (exact, or with * as a wildcard). */
+    public static function ignored(string $path): bool
+    {
+        foreach ((array)Config::get('monitor.ignore_patterns') as $p) {
+            if (is_string($p) && $p !== '' && preg_match('#^' . str_replace('\\*', '.*', preg_quote($p, '#')) . '$#D', $path)) { return true; }
         }
-        
-        $prefix = $this->db->getPrefix();
-        
-        // Check if URI already exists
-        $existing = $this->db->fetchOne(
-            "SELECT id, hits FROM {$prefix}404_monitor 
-             WHERE uri = :uri AND project_id = :project_id",
-            ['uri' => $uri, 'project_id' => $projectId]
+        return false;
+    }
+
+    public function log404(array $params): never
+    {
+        $in = Request::json();
+        $uri = Validator::str($in, 'uri', 1000, true);
+        if ($uri[0] !== '/') { Validator::fail('uri', 'must start with "/"'); }
+        $ip = Validator::str($in, 'ip_address', 45);
+        if ($ip !== null && !filter_var($ip, FILTER_VALIDATE_IP)) { Validator::fail('ip_address', 'must be an IP address'); }
+        if (self::ignored($uri)) { Response::success('Ignored by a 404 ignore pattern', ['id' => 0, 'ignored' => true]); }
+        $projectId = Validator::projectId($in);
+        $t = $this->db->t('404_monitor');
+
+        $this->db->query(
+            "INSERT INTO `$t` (project_id, uri, referer, user_agent, ip_address, hits, last_accessed)
+             VALUES (:p, :uri, :ref, :ua, :ip, 1, NOW())
+             ON DUPLICATE KEY UPDATE hits = hits + 1, last_accessed = NOW()",
+            ['p' => $projectId, 'uri' => $uri, 'ref' => Validator::str($in, 'referer', 1000), 'ua' => Validator::str($in, 'user_agent', 500), 'ip' => $ip]
         );
-        
-        if ($existing) {
-            // Update hits and last accessed
-            $this->db->update('404_monitor', 
-                ['hits' => $existing['hits'] + 1, 'last_accessed' => date('Y-m-d H:i:s')],
-                'id = :id',
-                ['id' => $existing['id']]
-            );
-            $id = $existing['id'];
-        } else {
-            // Insert new record
-            $id = $this->db->insert('404_monitor', [
-                'project_id' => $projectId,
-                'uri' => $uri,
-                'referer' => $data['referer'] ?? null,
-                'user_agent' => $data['user_agent'] ?? null,
-                'ip_address' => $data['ip_address'] ?? null,
-                'hits' => 1,
-                'last_accessed' => date('Y-m-d H:i:s'),
-            ]);
-        }
-        
-        Response::success('404 logged', ['id' => $id]);
+        $this->purgeExpired();
+        $row = $this->db->fetchOne("SELECT id FROM `$t` WHERE project_id = :p AND uri_hash = SHA2(:uri, 256)", ['p' => $projectId, 'uri' => $uri]);
+        Response::success('404 logged', ['id' => (int)($row['id'] ?? 0)]);
     }
-    
-    /**
-     * Delete 404 log
-     */
-    public function deleteLog($params) {
-        $id = $params['id'] ?? null;
-        
-        if (!$id) {
-            Response::error('Log ID is required');
-        }
-        
-        $this->db->delete('404_monitor', 'id = :id', ['id' => $id]);
-        
-        Response::success('404 log deleted');
+
+    public function deleteLog(array $params): never
+    {
+        $id = Validator::id($params['id'] ?? null);
+        $n = $this->db->delete('404_monitor', ['id' => $id]);
+        if ($n) { Audit::log('404_entry_deleted', null, '', "id $id"); }
+        $n ? Response::success('404 log deleted') : Response::notFound('Log entry not found');
     }
-    
-    /**
-     * Clear all 404 logs
-     */
-    public function clearLogs($params) {
-        $projectId = $_POST['project_id'] ?? null;
-        
-        if ($projectId) {
-            $this->db->delete('404_monitor', 'project_id = :project_id', ['project_id' => $projectId]);
-        } else {
-            $prefix = $this->db->getPrefix();
-            $this->db->query("TRUNCATE TABLE {$prefix}404_monitor");
+
+    public function clearLogs(array $params): never
+    {
+        $in = Request::json();
+        if (($in['confirm'] ?? false) !== true) {
+            Response::error('Confirmation required: send {"confirm": true}', 400);
         }
-        
-        Response::success('404 logs cleared');
+        $projectId = Validator::projectId($in);
+        $t = $this->db->t('404_monitor');
+        // DELETE (not TRUNCATE): works with a least-privilege DB account and honours project_id.
+        $n = $projectId > 0
+            ? $this->db->query("DELETE FROM `$t` WHERE project_id = :p", ['p' => $projectId])->rowCount()
+            : $this->db->query("DELETE FROM `$t`")->rowCount();
+        Audit::log('404_log_cleared', null, '', "$n rows" . ($projectId > 0 ? ", project $projectId" : ''));
+        Response::success('404 logs cleared', ['deleted' => $n]);
     }
-    
-    /**
-     * Export 404 logs as CSV
-     */
-    public function exportCSV($params) {
-        $projectId = $_GET['project_id'] ?? null;
-        
-        $prefix = $this->db->getPrefix();
-        $sql = "SELECT * FROM {$prefix}404_monitor";
-        $queryParams = [];
-        
-        if ($projectId) {
-            $sql .= " WHERE project_id = :project_id";
-            $queryParams['project_id'] = $projectId;
+
+    public function exportCSV(array $params): never
+    {
+        $projectId = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);
+        $t = $this->db->t('404_monitor');
+        $rows = $this->db->fetchAll(
+            "SELECT id, uri, referer, hits, last_accessed, created_at FROM `$t`" . ($projectId > 0 ? ' WHERE project_id = :p' : '') . ' ORDER BY last_accessed DESC LIMIT 100000',
+            $projectId > 0 ? ['p' => $projectId] : []
+        );
+        $out = fopen('php://temp', 'w+');
+        fputcsv($out, ['ID', 'URI', 'Referer', 'Hits', 'Last Accessed', 'Created At'], ',', '"', '');
+        foreach ($rows as $r) {
+            fputcsv($out, [$r['id'], Validator::csvCell($r['uri']), Validator::csvCell($r['referer']), $r['hits'], $r['last_accessed'], $r['created_at']], ',', '"', '');
         }
-        
-        $sql .= " ORDER BY last_accessed DESC";
-        
-        $logs = $this->db->fetchAll($sql, $queryParams);
-        
-        header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="404-logs-' . date('Y-m-d') . '.csv"');
-        
-        $output = fopen('php://output', 'w');
-        
-        // Headers
-        fputcsv($output, ['ID', 'URI', 'Referer', 'Hits', 'Last Accessed', 'Created At']);
-        
-        // Data
-        foreach ($logs as $log) {
-            fputcsv($output, [
-                $log['id'],
-                $log['uri'],
-                $log['referer'],
-                $log['hits'],
-                $log['last_accessed'],
-                $log['created_at'],
-            ]);
-        }
-        
-        fclose($output);
-        exit;
+        rewind($out);
+        Response::raw((string)stream_get_contents($out), 'text/csv; charset=utf-8', [
+            'Content-Disposition' => 'attachment; filename="404-logs-' . gmdate('Y-m-d') . '.csv"',
+        ]);
+    }
+
+    /** Retention (PRIV-003): drop entries older than retention_days_404 (0 = keep). Also callable from bin/purge-404.php. */
+    public function purgeExpired(): int
+    {
+        $days = (int)Config::get('retention_days_404', 90);
+        if ($days <= 0) { return 0; }
+        return $this->db->query('DELETE FROM `' . $this->db->t('404_monitor') . '` WHERE last_accessed < (NOW() - INTERVAL :d DAY)', ['d' => $days])->rowCount();
     }
 }

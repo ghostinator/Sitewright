@@ -1,211 +1,181 @@
 <?php
+declare(strict_types=1);
+
+namespace Sitewright\Modules\Redirections;
+
+use Sitewright\Core\{Audit, Config, Database, DatabaseException, Request, Response, Validator};
+
 /**
- * Redirections Controller
- * Manage URL redirections
+ * Redirect RULE MANAGER. Rules are stored and can be exported for Apache, nginx or as CSV.
+ * This application is not in front of your website, so it does NOT perform redirects itself.
  */
+class RedirectionsController
+{
+    private const TYPES = ['301', '302', '307', '308', '410', '451'];
+    /** Characters that would be unsafe inside generated server config. */
+    private const BAD_CHARS = '/[\s"\'\\\\<>{}|^`;$]/';
+    private Database $db;
 
-namespace RankMathWebapp\Modules\Redirections;
-
-use RankMathWebapp\Core\Database;
-use RankMathWebapp\Core\Response;
-
-class RedirectionsController {
-    
-    private $db;
-    
-    public function __construct() {
+    public function __construct()
+    {
         $this->db = Database::getInstance();
     }
-    
-    /**
-     * Get all redirections
-     */
-    public function getAll($params) {
-        $projectId = $_GET['project_id'] ?? null;
-        $status = $_GET['status'] ?? 'active';
-        
-        $prefix = $this->db->getPrefix();
-        $sql = "SELECT * FROM {$prefix}redirections WHERE status = :status";
-        $queryParams = ['status' => $status];
-        
-        if ($projectId) {
-            $sql .= " AND project_id = :project_id";
-            $queryParams['project_id'] = $projectId;
-        }
-        
-        $sql .= " ORDER BY created_at DESC";
-        
-        $redirections = $this->db->fetchAll($sql, $queryParams);
-        
-        Response::success('Redirections retrieved', $redirections);
+
+    public function getAll(array $params): never
+    {
+        $status = Validator::enum(['s' => Request::query('status')], 's', ['active', 'inactive'], 'active');
+        $projectId = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);
+        $sql = 'SELECT id, project_id, source_url, target_url, redirect_type, status, created_at, updated_at, is_sample FROM `' . $this->db->t('redirections') . '` WHERE status = :status';
+        $q = ['status' => $status];
+        if ($projectId > 0) { $sql .= ' AND project_id = :p'; $q['p'] = $projectId; }
+        Response::success('Redirections retrieved', $this->db->fetchAll($sql . ' ORDER BY created_at DESC, id DESC LIMIT 1000', $q));
     }
-    
-    /**
-     * Add redirection
-     */
-    public function add($params) {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
-        $required = ['source_url', 'target_url'];
-        foreach ($required as $field) {
-            if (empty($data[$field])) {
-                Response::error("Field '$field' is required");
-            }
+
+    public function add(array $params): never
+    {
+        $in = Request::json();
+        $rule = $this->validated($in, true);
+        $rule['project_id'] = Validator::projectId($in);
+        try {
+            $id = $this->db->insert('redirections', $rule);
+        } catch (DatabaseException $e) {
+            Database::isDuplicate($e) ? Response::error('A redirection for this source URL already exists', 409) : throw $e;
         }
-        
-        // Check if source URL already exists
-        $prefix = $this->db->getPrefix();
-        $existing = $this->db->fetchOne(
-            "SELECT id FROM {$prefix}redirections WHERE source_url = :source_url",
-            ['source_url' => $data['source_url']]
-        );
-        
-        if ($existing) {
-            Response::error('Redirection for this source URL already exists');
-        }
-        
-        $redirectionId = $this->db->insert('redirections', [
-            'project_id' => $data['project_id'] ?? null,
-            'source_url' => $data['source_url'],
-            'target_url' => $data['target_url'],
-            'redirect_type' => $data['redirect_type'] ?? '301',
-            'status' => $data['status'] ?? 'active',
-        ]);
-        
-        Response::success('Redirection added', ['id' => $redirectionId]);
+        \Sitewright\Core\SiteSync::markDirty();
+        Response::success('Redirection added', ['id' => (int)$id], 201);
     }
-    
-    /**
-     * Update redirection
-     */
-    public function update($params) {
-        $id = $params['id'] ?? null;
-        
-        if (!$id) {
-            Response::error('Redirection ID is required');
+
+    public function update(array $params): never
+    {
+        $id = Validator::id($params['id'] ?? null);
+        $in = Request::json();
+        $data = $this->validated($in, false);
+        if (!$data) { Response::error('No data to update', 400); }
+        try {
+            $this->db->update('redirections', $data, ['id' => $id]);
+        } catch (DatabaseException $e) {
+            Database::isDuplicate($e) ? Response::error('A redirection for this source URL already exists', 409) : throw $e;
         }
-        
-        $data = json_decode(file_get_contents('php://input'), true);
-        
-        $updateData = [];
-        $allowedFields = ['source_url', 'target_url', 'redirect_type', 'status'];
-        
-        foreach ($allowedFields as $field) {
-            if (isset($data[$field])) {
-                $updateData[$field] = $data[$field];
-            }
-        }
-        
-        if (empty($updateData)) {
-            Response::error('No data to update');
-        }
-        
-        $this->db->update('redirections', $updateData, 'id = :id', ['id' => $id]);
-        
+        \Sitewright\Core\SiteSync::markDirty();
         Response::success('Redirection updated');
     }
-    
-    /**
-     * Delete redirection
-     */
-    public function delete($params) {
-        $id = $params['id'] ?? null;
-        
-        if (!$id) {
-            Response::error('Redirection ID is required');
-        }
-        
-        $this->db->delete('redirections', 'id = :id', ['id' => $id]);
-        
-        Response::success('Redirection deleted');
+
+    public function delete(array $params): never
+    {
+        $id = Validator::id($params['id'] ?? null);
+        $n = $this->db->delete('redirections', ['id' => $id]);
+        if ($n) { Audit::log('redirect_deleted', null, '', "id $id"); \Sitewright\Core\SiteSync::markDirty(); }
+        $n ? Response::success('Redirection deleted') : Response::notFound('Redirection not found');
     }
-    
-    /**
-     * Check if a URL should be redirected
-     */
-    public function checkRedirect($params) {
-        $url = $_GET['url'] ?? '';
-        
-        if (empty($url)) {
-            Response::error('URL is required');
-        }
-        
-        $prefix = $this->db->getPrefix();
-        $redirection = $this->db->fetchOne(
-            "SELECT * FROM {$prefix}redirections 
-             WHERE source_url = :url AND status = 'active'",
-            ['url' => $url]
+
+    /** Read-only lookup: is there an active rule for this path? (No hit counting: this app never sees live traffic.) */
+    public function checkRedirect(array $params): never
+    {
+        $raw = Validator::str(['u' => Request::query('url')], 'u', 1000, true);
+        $path = $raw[0] === '/' ? $raw : ((string)parse_url($raw, PHP_URL_PATH) ?: '/');
+        $row = $this->db->fetchOne(
+            'SELECT id, source_url, target_url, redirect_type FROM `' . $this->db->t('redirections') . "` WHERE source_hash = SHA2(:u, 256) AND status = 'active' ORDER BY project_id LIMIT 1",
+            ['u' => $path]
         );
-        
-        if ($redirection) {
-            // Update hits and last accessed
-            $this->db->update('redirections',
-                ['hits' => $redirection['hits'] + 1, 'last_accessed' => date('Y-m-d H:i:s')],
-                'id = :id',
-                ['id' => $redirection['id']]
-            );
-            
-            Response::success('Redirect found', $redirection);
-        } else {
-            Response::error('No redirect found', 404);
-        }
+        $row ? Response::success('Redirect rule found', $row) : Response::error('No redirect rule found', 404);
     }
-    
-    /**
-     * Import redirections from CSV
-     */
-    public function importCSV($params) {
-        if (!isset($_FILES['file'])) {
-            Response::error('No file uploaded');
+
+    /** GET /api/redirections/export?format=apache|nginx|csv[&project_id=N] */
+    public function export(array $params): never
+    {
+        $format = Validator::enum(['f' => Request::query('format')], 'f', ['apache', 'nginx', 'csv'], 'apache');
+        $projectId = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);   // one connected site's rules, or everything
+        $rules = $this->db->fetchAll('SELECT source_url, target_url, redirect_type FROM `' . $this->db->t('redirections') . "` WHERE status = 'active'" . ($projectId > 0 ? ' AND project_id = :p' : '') . ' ORDER BY id LIMIT 100000', $projectId > 0 ? ['p' => $projectId] : []);
+
+        if ($format === 'csv') {
+            $out = fopen('php://temp', 'w+');
+            fputcsv($out, ['source_url', 'target_url', 'redirect_type'], ',', '"', '');
+            foreach ($rules as $r) { fputcsv($out, [Validator::csvCell($r['source_url']), Validator::csvCell($r['target_url']), $r['redirect_type']], ',', '"', ''); }
+            rewind($out);
+            Response::raw((string)stream_get_contents($out), 'text/csv; charset=utf-8', ['Content-Disposition' => 'attachment; filename="redirections.csv"']);
         }
-        
-        $file = $_FILES['file']['tmp_name'];
-        $handle = fopen($file, 'r');
-        
-        if (!$handle) {
-            Response::error('Failed to open file');
+
+        $lines = ['# Generated by Sitewright ' . gmdate('Y-m-d') . ' - review before deploying'];
+        foreach ($rules as $r) {
+            $src = $r['source_url']; $dst = $r['target_url']; $code = $r['redirect_type'];
+            if ($format === 'apache') {
+                $re = '"^' . preg_quote($src, '#') . '$"';
+                if ($code === '410') { $lines[] = "RedirectMatch gone $re"; }
+                elseif ($code === '451') { $lines[] = "# $code not supported by Apache mod_alias: $src"; }
+                else { $lines[] = "RedirectMatch $code $re \"$dst\""; }
+            } else {
+                $body = in_array($code, ['410', '451'], true) ? "return $code;" : "return $code \"$dst\";";
+                $lines[] = "location = \"$src\" { $body }";
+            }
         }
-        
-        $projectId = $_POST['project_id'] ?? null;
-        $imported = 0;
-        $errors = [];
-        
-        // Skip header row
-        fgetcsv($handle);
-        
-        while (($row = fgetcsv($handle)) !== false) {
-            if (count($row) < 2) {
-                continue;
-            }
-            
-            $sourceUrl = trim($row[0]);
-            $targetUrl = trim($row[1]);
-            $redirectType = isset($row[2]) ? trim($row[2]) : '301';
-            
-            if (empty($sourceUrl) || empty($targetUrl)) {
-                $errors[] = "Skipped empty row";
-                continue;
-            }
-            
+        Response::raw(implode("\n", $lines) . "\n", 'text/plain; charset=utf-8', ['Content-Disposition' => 'attachment; filename="redirections-' . $format . '.conf"']);
+    }
+
+    public function importCSV(array $params): never
+    {
+        $file = Request::file('file');
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_readable((string)$file['tmp_name'])) {
+            Response::error('No valid file uploaded', 400);
+        }
+        if ((int)$file['size'] > 1048576) { Response::error('File too large (max 1 MB)', 413); }
+        $max = (int)Config::get('limits.import_rows');
+        $fh = fopen((string)$file['tmp_name'], 'rb');
+        fgetcsv($fh, 0, ',', '"', ''); // header row
+        $projectId = Validator::projectId(['project_id' => $_POST['project_id'] ?? 0]);
+
+        $rows = []; $errors = []; $n = 0;
+        while (($row = fgetcsv($fh, 0, ',', '"', '')) !== false) {
+            $n++;
+            if ($n > $max) { Response::error("Too many rows (max $max)", 413); }
+            if (count($row) < 2 || trim((string)$row[0]) === '') { continue; }
             try {
-                $this->db->insert('redirections', [
-                    'project_id' => $projectId,
-                    'source_url' => $sourceUrl,
-                    'target_url' => $targetUrl,
-                    'redirect_type' => $redirectType,
-                    'status' => 'active',
-                ]);
-                $imported++;
-            } catch (\Exception $e) {
-                $errors[] = "Failed to import $sourceUrl: " . $e->getMessage();
+                $rows[] = $this->validated(['source_url' => trim($row[0]), 'target_url' => trim($row[1]), 'redirect_type' => trim($row[2] ?? '') ?: (string)Config::get('redirects.default_type')], true, true);
+            } catch (\Sitewright\Core\ResponseException) {
+                if (count($errors) < 50) { $errors[] = "Row " . ($n + 1) . ': invalid values'; }
             }
         }
-        
-        fclose($handle);
-        
-        Response::success("Imported $imported redirections", [
-            'imported' => $imported,
-            'errors' => $errors
-        ]);
+        fclose($fh);
+
+        $t = $this->db->t('redirections');
+        $imported = (int)$this->db->transaction(function (Database $db) use ($rows, $projectId, $t): int {
+            $c = 0;
+            foreach ($rows as $r) {
+                $db->query("INSERT INTO `$t` (project_id, source_url, target_url, redirect_type, status) VALUES (:p, :s, :t, :r, 'active')
+                            ON DUPLICATE KEY UPDATE target_url = VALUES(target_url), redirect_type = VALUES(redirect_type)",
+                    ['p' => $projectId, 's' => $r['source_url'], 't' => $r['target_url'], 'r' => $r['redirect_type']]);
+                $c++;
+            }
+            return $c;
+        });
+        Audit::log('redirects_imported', null, '', "$imported rows");
+        \Sitewright\Core\SiteSync::markDirty();
+        Response::success("Imported $imported redirections", ['imported' => $imported, 'errors' => $errors]);
+    }
+
+    /** @return array<string,mixed> validated columns (all of them when $full) */
+    private function validated(array $in, bool $full, bool $quiet = false): array
+    {
+        $out = [];
+        $type = Validator::enum($in, 'redirect_type', self::TYPES, $full ? (string)Config::get('redirects.default_type') : null);
+        if ($type !== null) { $out['redirect_type'] = $type; }
+
+        if ($full || isset($in['source_url'])) {
+            $src = Validator::str($in, 'source_url', 1000, true);
+            if (!preg_match('~^/~', $src) || preg_match(self::BAD_CHARS, $src) || str_contains($src, '?') || str_contains($src, '#') || str_starts_with($src, '//')) {
+                Validator::fail('source_url', 'must be a path starting with "/" (no query, fragment, spaces or quotes)');
+            }
+            $out['source_url'] = $src;
+        }
+        if ($full || isset($in['target_url']) || isset($in['redirect_type'])) {
+            $goneType = in_array($type ?? ($in['redirect_type'] ?? '301'), ['410', '451'], true);
+            $dst = Validator::str($in, 'target_url', 1000, !$goneType) ?? '';
+            if ($dst !== '' && (preg_match(self::BAD_CHARS, $dst) || !preg_match('~^(?:/(?![/\\\\])|https?://[^/?#]+)~i', $dst))) {
+                Validator::fail('target_url', 'must be a relative path ("/new") or an http(s) URL');
+            }
+            if (isset($in['target_url']) || $full) { $out['target_url'] = $dst; }
+        }
+        $status = Validator::enum($in, 'status', ['active', 'inactive'], $full ? 'active' : null);
+        if ($status !== null) { $out['status'] = $status; }
+        return $out;
     }
 }

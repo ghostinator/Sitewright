@@ -1,336 +1,184 @@
 <?php
+declare(strict_types=1);
+
+namespace Sitewright\Modules\ImageSeo;
+
+use Sitewright\Core\{Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
+
 /**
- * Image SEO Controller
- * Optimize and manage image SEO
+ * Image checks: alt text present, file size, pixel dimensions. Bytes are downloaded through SafeHttpClient
+ * (size-capped) and measured with getimagesizefromstring(); URLs are never handed to getimagesize().
+ * Limitation: only <img src>, data-src and the first srcset candidate are read; images injected by JavaScript are not seen.
  */
+class ImageSeoController
+{
+    private static function optimalBytes(): int
+    {
+        return (int)Config::get('image.optimal_bytes');
+    }
 
-namespace RankMathWebapp\Modules\ImageSeo;
+    private Database $db;
 
-use RankMathWebapp\Core\Database;
-use RankMathWebapp\Core\Response;
-
-class ImageSeoController {
-    
-    private $db;
-    
-    public function __construct() {
+    public function __construct()
+    {
         $this->db = Database::getInstance();
     }
-    
-    /**
-     * Get all images
-     */
-    public function getImages($params) {
-        $projectId = $_GET['project_id'] ?? null;
-        $optimized = $_GET['optimized'] ?? null;
-        
-        $prefix = $this->db->getPrefix();
-        $sql = "SELECT * FROM {$prefix}image_seo WHERE 1=1";
-        $queryParams = [];
-        
-        if ($projectId) {
-            $sql .= " AND project_id = :project_id";
-            $queryParams['project_id'] = $projectId;
-        }
-        
-        if ($optimized !== null) {
-            $sql .= " AND optimized = :optimized";
-            $queryParams['optimized'] = (int)$optimized;
-        }
-        
-        $sql .= " ORDER BY created_at DESC";
-        
-        $images = $this->db->fetchAll($sql, $queryParams);
-        
-        Response::success('Images retrieved', $images);
+
+    public function getImages(array $params): never
+    {
+        $projectId = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);
+        $opt = Request::query('optimized');
+        $sql = 'SELECT id, project_id, image_url, alt_text, title, caption, description, file_size, dimensions, optimized, created_at FROM `' . $this->db->t('image_seo') . '` WHERE 1=1';
+        $q = [];
+        if ($projectId > 0) { $sql .= ' AND project_id = :p'; $q['p'] = $projectId; }
+        if ($opt === 'unknown') { $sql .= ' AND optimized IS NULL'; }
+        elseif ($opt === '0' || $opt === '1') { $sql .= ' AND optimized = :o'; $q['o'] = (int)$opt; }
+        Response::success('Images retrieved', $this->db->fetchAll($sql . ' ORDER BY created_at DESC, id DESC LIMIT 1000', $q));
     }
-    
-    /**
-     * Analyze image SEO
-     */
-    public function analyzeImage($params) {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
-        $imageUrl = $data['image_url'] ?? '';
-        
-        if (empty($imageUrl)) {
-            Response::error('Image URL is required');
-        }
-        
-        $analysis = $this->performImageAnalysis($imageUrl);
-        
-        // Store in database
-        $imageId = $this->db->insert('image_seo', [
-            'project_id' => $data['project_id'] ?? null,
-            'image_url' => $imageUrl,
-            'alt_text' => $analysis['alt_text'],
-            'title' => $analysis['title'],
-            'caption' => $analysis['caption'],
-            'description' => $analysis['description'],
-            'file_size' => $analysis['file_size'],
-            'dimensions' => $analysis['dimensions'],
-            'optimized' => $analysis['is_optimized'] ? 1 : 0,
+
+    public function analyzeImage(array $params): never
+    {
+        $in = Request::json();
+        $url = Validator::url($in, 'image_url', 1000);
+        $projectId = Validator::projectId($in);
+        $info = $this->measure($url, microtime(true) + 30);
+        if ($info === null) { Response::error('Could not download or read that image', 502); }
+
+        $id = $this->save($projectId, $info['url'], null, null, $info);
+        Response::success('Image analyzed', [
+            'id' => $id, 'image_url' => $info['url'], 'file_size' => $info['size'], 'dimensions' => $info['dimensions'],
+            'is_optimized' => $info['size'] === null ? null : $info['size'] < self::optimalBytes(),
+            'recommendations' => self::recommendations($info['size']),
         ]);
-        
-        Response::success('Image analyzed', array_merge(['id' => $imageId], $analysis));
     }
-    
-    /**
-     * Update image SEO data
-     */
-    public function updateImage($params) {
-        $id = $params['id'] ?? null;
-        
-        if (!$id) {
-            Response::error('Image ID is required');
+
+    public function updateImage(array $params): never
+    {
+        $id = Validator::id($params['id'] ?? null);
+        $in = Request::json();
+        $data = [];
+        foreach (['alt_text' => 500, 'title' => 500, 'caption' => 2000, 'description' => 2000] as $f => $max) {
+            if (array_key_exists($f, $in)) { $data[$f] = Validator::str($in, $f, $max); }
         }
-        
-        $data = json_decode(file_get_contents('php://input'), true);
-        
-        $updateData = [];
-        $allowedFields = ['alt_text', 'title', 'caption', 'description', 'optimized'];
-        
-        foreach ($allowedFields as $field) {
-            if (isset($data[$field])) {
-                $updateData[$field] = $data[$field];
-            }
+        if (array_key_exists('optimized', $in)) {
+            $o = $in['optimized'];
+            if ($o !== null && $o !== 0 && $o !== 1 && $o !== true && $o !== false) { Validator::fail('optimized', 'must be true, false or null'); }
+            $data['optimized'] = $o === null ? null : (int)$o;
         }
-        
-        if (empty($updateData)) {
-            Response::error('No data to update');
-        }
-        
-        $this->db->update('image_seo', $updateData, 'id = :id', ['id' => $id]);
-        
+        if (!$data) { Response::error('No data to update', 400); }
+        $this->db->update('image_seo', $data, ['id' => $id]) >= 0;
         Response::success('Image updated');
     }
-    
-    /**
-     * Bulk optimize images from a URL
-     */
-    public function bulkAnalyze($params) {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
-        $url = $data['url'] ?? '';
-        $projectId = $data['project_id'] ?? null;
-        
-        if (empty($url)) {
-            Response::error('URL is required');
+
+    public function bulkAnalyze(array $params): never
+    {
+        $in = Request::json();
+        $pageUrl = Validator::url($in, 'url');
+        $projectId = Validator::projectId($in);
+        $maxImages = (int)Config::get('limits.bulk_images');
+        $deadline = microtime(true) + 90;
+        set_time_limit(120);
+
+        try {
+            $page = SafeHttpClient::default()->get($pageUrl, ['max_bytes' => (int)Config::get('fetch.max_html_bytes'), 'deadline' => $deadline]);
+        } catch (FetchException $e) {
+            Response::error('Could not fetch the page: ' . $e->getMessage(), $e->httpStatus === 400 ? 400 : 502);
         }
-        
-        // Fetch HTML
-        $html = $this->fetchUrl($url);
-        if (!$html) {
-            Response::error('Failed to fetch URL');
+        if ($page['status'] >= 400) { Response::error('The page answered with HTTP ' . $page['status'], 502); }
+
+        $dom = Html::load($page['body'], (string)($page['headers']['content-type'] ?? ''));
+        $found = []; $seen = [];
+        foreach ($dom->getElementsByTagName('img') as $img) {
+            $raw = trim($img->getAttribute('src')) ?: trim($img->getAttribute('data-src'));
+            if ($raw === '' && ($srcset = trim($img->getAttribute('srcset'))) !== '') { $raw = trim(explode(' ', trim(explode(',', $srcset)[0]))[0]); }
+            if ($raw === '' || str_starts_with($raw, 'data:')) { continue; }
+            $abs = Url::resolve($page['final_url'], $raw);
+            $norm = $abs !== null ? Url::normalize($abs) : null;
+            if ($norm === null || isset($seen[$norm])) { continue; }
+            $seen[$norm] = true;
+            $found[] = ['url' => $norm, 'alt' => trim($img->getAttribute('alt')), 'title' => trim($img->getAttribute('title'))];
         }
-        
-        // Extract images
-        $dom = new \DOMDocument();
-        @$dom->loadHTML($html);
-        $images = $dom->getElementsByTagName('img');
-        
-        $analyzed = [];
-        $baseUrl = $this->getBaseUrl($url);
-        
-        foreach ($images as $img) {
-            $src = $img->getAttribute('src');
-            $alt = $img->getAttribute('alt');
-            $title = $img->getAttribute('title');
-            
-            // Convert relative URLs to absolute
-            if (strpos($src, 'http') !== 0) {
-                $src = $baseUrl . ltrim($src, '/');
-            }
-            
-            // Get image info
-            $imageInfo = $this->getImageInfo($src);
-            
-            $imageId = $this->db->insert('image_seo', [
-                'project_id' => $projectId,
-                'image_url' => $src,
-                'alt_text' => $alt,
-                'title' => $title,
-                'file_size' => $imageInfo['size'] ?? null,
-                'dimensions' => $imageInfo['dimensions'] ?? null,
-                'optimized' => !empty($alt) && $imageInfo['size'] < 200000 ? 1 : 0,
-            ]);
-            
-            $analyzed[] = [
-                'id' => $imageId,
-                'src' => $src,
-                'alt' => $alt,
-                'title' => $title,
-                'size' => $imageInfo['size'] ?? 0,
-                'dimensions' => $imageInfo['dimensions'] ?? '',
-                'has_alt' => !empty($alt),
-                'optimized' => !empty($alt) && ($imageInfo['size'] ?? 0) < 200000,
+
+        $truncated = count($found) > $maxImages;
+        $out = []; $skipped = 0;
+        foreach (array_slice($found, 0, $maxImages) as $f) {
+            if (microtime(true) > $deadline) { $truncated = true; break; }
+            $info = $this->measure($f['url'], $deadline);
+            if ($info === null) { $skipped++; continue; } // unreachable, not an image, or blocked address
+            $id = $this->save($projectId, $info['url'], $f['alt'], $f['title'], $info);
+            $out[] = [
+                'id' => $id, 'src' => $info['url'], 'alt' => $f['alt'], 'title' => $f['title'], 'size' => $info['size'], 'dimensions' => $info['dimensions'],
+                'has_alt' => $f['alt'] !== '', 'optimized' => $this->optimized($f['alt'], $info['size']),
             ];
         }
-        
-        Response::success("Analyzed {$images->length} images", $analyzed);
+        Response::success('Analyzed ' . count($out) . ' images', ['images' => $out, 'found' => count($found), 'skipped' => $skipped, 'truncated' => $truncated, 'limit' => $maxImages]);
     }
-    
-    /**
-     * Generate alt text suggestions using AI
-     */
-    public function suggestAltText($params) {
-        $imageUrl = $_GET['image_url'] ?? '';
-        
-        if (empty($imageUrl)) {
-            Response::error('Image URL is required');
-        }
-        
-        // Extract filename and create basic suggestion
-        $filename = basename(parse_url($imageUrl, PHP_URL_PATH));
-        $filename = pathinfo($filename, PATHINFO_FILENAME);
-        
-        // Convert filename to readable text
-        $suggestion = str_replace(['-', '_'], ' ', $filename);
-        $suggestion = ucwords($suggestion);
-        
+
+    /** Filename-derived suggestion. Not AI: it only turns "red-shoes_2.jpg" into "Red Shoes 2". */
+    public function suggestAltText(array $params): never
+    {
+        $url = Validator::str(['u' => Request::query('image_url')], 'u', 1000, true);
+        $file = pathinfo(basename((string)parse_url($url, PHP_URL_PATH)), PATHINFO_FILENAME);
         Response::success('Alt text suggestion generated', [
-            'suggestion' => $suggestion,
-            'tips' => [
-                'Be descriptive and specific',
-                'Include relevant keywords naturally',
-                'Keep it under 125 characters',
-                'Avoid "image of" or "picture of"',
-            ]
+            'suggestion' => ucwords(trim(preg_replace('/[\s_\-]+/', ' ', $file) ?? '')),
+            'source' => 'filename_heuristic',
+            'tips' => ['Describe what is in the image', 'Include relevant keywords naturally', 'Keep it under ' . (int)Config::get('image.alt_max_length') . ' characters', 'Avoid "image of" or "picture of"'],
         ]);
     }
-    
-    /**
-     * Get image optimization tips
-     */
-    public function getOptimizationTips($params) {
-        $id = $params['id'] ?? null;
-        
-        if (!$id) {
-            Response::error('Image ID is required');
-        }
-        
-        $prefix = $this->db->getPrefix();
-        $image = $this->db->fetchOne(
-            "SELECT * FROM {$prefix}image_seo WHERE id = :id",
-            ['id' => $id]
-        );
-        
-        if (!$image) {
-            Response::notFound('Image not found');
-        }
-        
+
+    public function getOptimizationTips(array $params): never
+    {
+        $img = $this->db->fetchOne('SELECT * FROM `' . $this->db->t('image_seo') . '` WHERE id = :id', ['id' => Validator::id($params['id'] ?? null)]) ?? Response::notFound('Image not found');
         $tips = [];
-        
-        if (empty($image['alt_text'])) {
-            $tips[] = [
-                'type' => 'error',
-                'message' => 'Missing alt text - Add descriptive alt text for accessibility and SEO'
-            ];
-        }
-        
-        if (empty($image['title'])) {
-            $tips[] = [
-                'type' => 'warning',
-                'message' => 'Missing title attribute - Consider adding a title for better UX'
-            ];
-        }
-        
-        if ($image['file_size'] > 200000) {
-            $tips[] = [
-                'type' => 'error',
-                'message' => 'Large file size - Compress image to under 200KB for faster loading'
-            ];
-        } else if ($image['file_size'] > 100000) {
-            $tips[] = [
-                'type' => 'warning',
-                'message' => 'File size could be optimized - Consider compressing to under 100KB'
-            ];
-        }
-        
-        if (empty($tips)) {
-            $tips[] = [
-                'type' => 'success',
-                'message' => 'Image is well optimized!'
-            ];
-        }
-        
+        if (empty($img['alt_text'])) { $tips[] = ['type' => 'error', 'message' => 'Missing alt text - add descriptive alt text for accessibility and SEO']; }
+        if (empty($img['title'])) { $tips[] = ['type' => 'warning', 'message' => 'Missing title attribute (optional, minor)']; }
+        if ($img['file_size'] === null) { $tips[] = ['type' => 'warning', 'message' => 'File size is unknown']; }
+        elseif ($img['file_size'] > self::optimalBytes()) { $tips[] = ['type' => 'error', 'message' => 'Large file - consider compressing below ' . (int)round(self::optimalBytes() / 1000) . ' KB']; }
+        elseif ($img['file_size'] > 100000) { $tips[] = ['type' => 'warning', 'message' => 'Could be smaller - consider compressing below 100 KB']; }
+        if (!$tips) { $tips[] = ['type' => 'success', 'message' => 'No issues found by these checks']; }
         Response::success('Optimization tips generated', $tips);
     }
-    
-    private function performImageAnalysis($imageUrl) {
-        $imageInfo = $this->getImageInfo($imageUrl);
-        
-        return [
-            'alt_text' => '',
-            'title' => '',
-            'caption' => '',
-            'description' => '',
-            'file_size' => $imageInfo['size'] ?? 0,
-            'dimensions' => $imageInfo['dimensions'] ?? '',
-            'is_optimized' => ($imageInfo['size'] ?? 999999) < 200000,
-            'recommendations' => $this->getRecommendations($imageInfo),
-        ];
-    }
-    
-    private function getImageInfo($imageUrl) {
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $imageUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HEADER, true);
-        curl_setopt($ch, CURLOPT_NOBODY, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        
-        curl_exec($ch);
-        $size = curl_getinfo($ch, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
-        curl_close($ch);
-        
-        // Try to get dimensions
-        $dimensions = '';
+
+    /** Download (size-capped) and measure. Null when unreachable, blocked, or not an image. @return array{url:string,size:?int,dimensions:?string}|null */
+    private function measure(string $url, float $deadline): ?array
+    {
         try {
-            $imageData = @getimagesize($imageUrl);
-            if ($imageData) {
-                $dimensions = $imageData[0] . 'x' . $imageData[1];
-            }
-        } catch (\Exception $e) {
-            // Ignore errors
+            $res = SafeHttpClient::default()->get($url, [
+                'max_bytes' => (int)Config::get('fetch.max_image_bytes'), 'timeout' => 15, 'deadline' => $deadline, 'accept' => 'image/*,*/*;q=0.5',
+            ]);
+        } catch (FetchException) {
+            return null;
         }
-        
-        return [
-            'size' => $size > 0 ? $size : null,
-            'dimensions' => $dimensions,
-        ];
+        if ($res['status'] !== 200) { return null; }
+        $dim = @getimagesizefromstring($res['body']);
+        if ($dim === false) { return null; }
+        return ['url' => $res['final_url'], 'size' => $res['bytes'], 'dimensions' => $dim[0] . 'x' . $dim[1]];
     }
-    
-    private function getRecommendations($imageInfo) {
-        $recommendations = [];
-        
-        if (($imageInfo['size'] ?? 0) > 200000) {
-            $recommendations[] = 'Compress image to reduce file size below 200KB';
-        }
-        
-        $recommendations[] = 'Add descriptive alt text';
-        $recommendations[] = 'Use descriptive filename';
-        $recommendations[] = 'Consider using WebP format for better compression';
-        
-        return $recommendations;
+
+    private function optimized(string $alt, ?int $size): ?bool
+    {
+        return $size === null ? null : ($alt !== '' && $size < self::optimalBytes()); // unknown size => unknown, never "optimized"
     }
-    
-    private function fetchUrl($url) {
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        
-        $html = curl_exec($ch);
-        curl_close($ch);
-        
-        return $html;
+
+    private function save(int $projectId, string $url, ?string $alt, ?string $title, array $info): int
+    {
+        $t = $this->db->t('image_seo');
+        $opt = $alt === null ? ($info['size'] === null ? null : (int)($info['size'] < self::optimalBytes())) : ($this->optimized($alt, $info['size']) === null ? null : (int)$this->optimized($alt, $info['size']));
+        $this->db->query(
+            "INSERT INTO `$t` (project_id, image_url, alt_text, title, file_size, dimensions, optimized) VALUES (:p, :u, :a, :t, :s, :d, :o)
+             ON DUPLICATE KEY UPDATE file_size = VALUES(file_size), dimensions = VALUES(dimensions), optimized = VALUES(optimized),
+               alt_text = COALESCE(VALUES(alt_text), alt_text), title = COALESCE(VALUES(title), title)",
+            ['p' => $projectId, 'u' => $url, 'a' => $alt, 't' => $title, 's' => $info['size'], 'd' => $info['dimensions'], 'o' => $opt]
+        );
+        return (int)($this->db->fetchOne("SELECT id FROM `$t` WHERE project_id = :p AND url_hash = SHA2(:u, 256)", ['p' => $projectId, 'u' => $url])['id'] ?? 0);
     }
-    
-    private function getBaseUrl($url) {
-        $parts = parse_url($url);
-        return $parts['scheme'] . '://' . $parts['host'];
+
+    private static function recommendations(?int $size): array
+    {
+        $r = [];
+        if ($size !== null && $size > self::optimalBytes()) { $r[] = 'Compress the image to reduce file size below ' . (int)round(self::optimalBytes() / 1000) . ' KB'; }
+        $r[] = 'Add descriptive alt text where the image is used';
+        $r[] = 'Use a descriptive file name';
+        return $r;
     }
 }

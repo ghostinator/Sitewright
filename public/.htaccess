@@ -1,0 +1,43 @@
+# Document root = this directory (public/). Works at the web root or in a sub-directory (no RewriteBase needed).
+#
+# Only directives that fit "AllowOverride FileInfo" are used here (rewrite, headers, deflate, AcceptPathInfo), so the file works on shared
+# hosts that do not grant Options/Indexes/AuthConfig overrides (those would answer HTTP 500). Everything that used to need those rights is
+# done with rewrite rules instead: no directory listings, no dotfiles/backups, front controller for the root.
+AcceptPathInfo Off
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Never serve dotfiles or backup/config leftovers
+    RewriteRule (^|/)\. - [F,L]
+    RewriteRule \.(bak|sql|md|log|ini|dist|example|lock|php~|orig|swp)$ - [F,L]
+    # No directory listings (and no probing of directories): only the root is a directory we answer
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^.+ - [R=404,L]
+    # API -> front controller
+    RewriteRule ^api/ api.php [L,QSA]
+    # The root, and anything that is not a real file -> SPA shell (it answers 404 itself for unknown views)
+    RewriteRule ^$ index.php [L]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L,QSA]
+</IfModule>
+
+<IfModule mod_headers.c>
+    # PHP pages already send these headers themselves. "onsuccess unset" drops the PHP copy and "always set" writes ours (also on Apache's own
+    # 403/404 pages), so every response carries each header exactly once.
+    Header onsuccess unset X-Content-Type-Options
+    Header onsuccess unset X-Frame-Options
+    Header onsuccess unset Referrer-Policy
+    Header onsuccess unset Permissions-Policy
+    Header onsuccess unset Content-Security-Policy
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    # Enable only when the site is served over HTTPS:
+    # Header always set Strict-Transport-Security "max-age=31536000"
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css application/javascript application/json
+</IfModule>

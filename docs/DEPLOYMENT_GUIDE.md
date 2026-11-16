@@ -1,615 +1,104 @@
-# Deployment Guide - GitHub to Production
+# Deployment guide
 
-## 📋 Pre-Deployment Checklist
+## Layout
 
-Before pushing to GitHub and deploying:
-
-### Files to Keep OUT of Git
-
-Create/update `.gitignore`:
-
-```gitignore
-# API Keys & Secrets (NEVER COMMIT!)
-config/api-keys.php
-webapp/config/database.php
-
-# Environment files
-.env
-.env.local
-.env.production
-
-# User uploaded content (if any)
-uploads/
-cache/
-
-# IDE & OS
-.vscode/
-.idea/
-*.sublime-*
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-error_log
-debug.log
-
-# Dependencies (if using Composer)
-vendor/
-
-# Temporary files
-*.tmp
-*.temp
+```
+/srv/sitewright/            <- NOT web-accessible
+├── core/ modules/ config/ database/ bin/ docs/ tests/ storage/
+└── public/               <- the ONLY web-accessible directory (document root)
 ```
 
-### Files to Include in Git
+## 1. Database (least privilege)
 
-✅ All PHP files  
-✅ JavaScript/CSS files  
-✅ SQL schema files  
-✅ Documentation files  
-✅ `.htaccess` files  
-✅ `config/api-keys.php.example` (template without real keys)
-
----
-
-## 🔧 Preparing for GitHub
-
-### Step 1: Create Template Config Files
-
-Create `config/api-keys.php.example`:
-
-```php
-<?php
-/**
- * API Keys Configuration Template
- * Copy this file to api-keys.php and add your real keys
- */
-
-return [
-    // Google Gemini API - Required for Content AI
-    'gemini' => [
-        'api_key' => '', // Get from: https://makersuite.google.com/app/apikey
-        'model' => 'gemini-2.0-flash-exp',
-        'endpoint' => 'https://generativelanguage.googleapis.com/v1beta/models',
-    ],
-    
-    // Google Search Console - Optional for enhanced keyword research
-    'google_search_console' => [
-        'client_id' => '', // Get from: https://console.cloud.google.com/
-        'client_secret' => '',
-        'redirect_uri' => 'https://yourdomain.com/api.php/api/google/oauth-callback',
-    ],
-    
-    // SEMrush - Optional for advanced metrics
-    'semrush' => [
-        'api_key' => '', // Requires paid SEMrush plan
-    ],
-];
+```sql
+CREATE DATABASE sitewright CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- Runtime account (what the web app uses): no DDL, no TRUNCATE, no FILE.
+CREATE USER 'sw_app'@'127.0.0.1' IDENTIFIED BY '<long random password>';
+GRANT SELECT, INSERT, UPDATE, DELETE ON sitewright.* TO 'sw_app'@'127.0.0.1';
+-- Install/upgrade account (used only by bin/install.php and bin/migrate.php, e.g. via SW_DB_USER/SW_DB_PASS):
+CREATE USER 'sw_migrate'@'127.0.0.1' IDENTIFIED BY '<another long random password>';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP ON sitewright.* TO 'sw_migrate'@'127.0.0.1';
 ```
 
-Create `webapp/config/database.php.example`:
+Install as `sw_migrate`, then edit `config/config.php` (or the environment) to use `sw_app`. Never use `root`; never `GRANT ALL`.
 
-```php
-<?php
-/**
- * Database Configuration Template
- * Copy this file to database.php and configure for your environment
- */
-
-return [
-    'host' => 'localhost',
-    'port' => 3306,
-    'database' => 'rankmath_webapp',
-    'username' => 'root',
-    'password' => '',
-    'charset' => 'utf8mb4',
-    'collation' => 'utf8mb4_unicode_ci',
-    'prefix' => 'rm_',
-    
-    'options' => [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-    ]
-];
-```
-
-### Step 2: Remove Sensitive Data
+## 2. Install
 
 ```bash
-# Remove your actual API keys file (keep .example)
-git rm --cached config/api-keys.php
-
-# Remove database config
-git rm --cached webapp/config/database.php
-
-# Verify .gitignore is working
-git status
+export SW_DB_PASS='<sw_migrate password>' SW_ADMIN_PASSWORD='<min 12 chars>'
+php bin/install.php --db-user=sw_migrate --db-name=sitewright --admin-user=admin --admin-email=you@example.com
+chmod 600 config/config.php
 ```
 
-### Step 3: Create Installation Documentation
+## 3. Apache
 
-Update `README.md` with:
-- Clear installation steps
-- API setup instructions (link to `docs/API_CONFIGURATION.md`)
-- Quick start guide
-- Troubleshooting section
-
----
-
-## 🚀 Pushing to GitHub
-
-### Initialize Repository
-
-```bash
-cd c:\xampp\htdocs\rankmath
-
-# Initialize Git (if not already)
-git init
-
-# Add all files (respecting .gitignore)
-git add .
-
-# Commit
-git commit -m "Initial commit: RankMath SEO Webapp"
-
-# Add remote repository
-git remote add origin https://github.com/yourusername/rankmath-seo-webapp.git
-
-# Push to GitHub
-git push -u origin main
-```
-
-### Create Repository on GitHub
-
-1. Go to: https://github.com/new
-2. Repository name: `rankmath-seo-webapp`
-3. Description: "Complete SEO analysis and management platform with AI-powered content generation"
-4. Choose: **Public** or **Private**
-5. Don't initialize with README (you already have one)
-6. Click "Create repository"
-
----
-
-## 🌐 Deploying to Production
-
-### Option 1: Shared Hosting (cPanel/Plesk)
-
-#### Step 1: Prepare Server
-
-1. **Create Database**
-   - cPanel → MySQL Databases
-   - Create database: `username_rankmath`
-   - Create user with strong password
-   - Grant all privileges
-
-2. **Get Domain Ready**
-   - Point domain to hosting
-   - Wait for DNS propagation
-
-#### Step 2: Upload Files
-
-**Via Git (Recommended):**
-```bash
-# SSH into server
-ssh user@yourserver.com
-
-# Navigate to web root
-cd public_html
-
-# Clone repository
-git clone https://github.com/yourusername/rankmath-seo-webapp.git rankmath
-
-cd rankmath
-```
-
-**Via FTP/SFTP:**
-- Upload all files to `public_html/rankmath/`
-- Ensure all folders and files transferred
-
-#### Step 3: Configure
-
-```bash
-# Copy example configs
-cp config/api-keys.php.example config/api-keys.php
-cp webapp/config/database.php.example webapp/config/database.php
-
-# Edit with actual values
-nano config/api-keys.php
-# Add production Gemini API key
-# Update redirect URIs to production domain
-
-nano webapp/config/database.php
-# Add production database credentials
-```
-
-#### Step 4: Set Permissions
-
-```bash
-# Set directory permissions
-find . -type d -exec chmod 755 {} \;
-
-# Set file permissions
-find . -type f -exec chmod 644 {} \;
-
-# Secure sensitive files
-chmod 600 config/api-keys.php
-chmod 600 webapp/config/database.php
-```
-
-#### Step 5: Update .htaccess
-
-```bash
-nano webapp/.htaccess
-
-# Update RewriteBase
-RewriteBase /rankmath/        # If in subdirectory
-# OR
-RewriteBase /                 # If in root
-```
-
-#### Step 6: Run Installation
-
-Visit: `https://yourdomain.com/rankmath/install.php`
-
-Complete installation wizard.
-
----
-
-### Option 2: VPS/Cloud Server (DigitalOcean, AWS, etc.)
-
-#### Step 1: Server Setup
-
-```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Install LAMP stack
-sudo apt install apache2 mysql-server php php-mysql php-curl php-dom php-mbstring -y
-
-# Enable Apache modules
-sudo a2enmod rewrite
-sudo systemctl restart apache2
-
-# Secure MySQL
-sudo mysql_secure_installation
-```
-
-#### Step 2: Configure Virtual Host
-
-```bash
-sudo nano /etc/apache2/sites-available/rankmath.conf
-```
-
-Add:
 ```apache
-<VirtualHost *:80>
-    ServerName yourdomain.com
-    ServerAlias www.yourdomain.com
-    DocumentRoot /var/www/html/rankmath/webapp
-    
-    <Directory /var/www/html/rankmath/webapp>
-        Options Indexes FollowSymLinks
+<VirtualHost *:443>
+    ServerName seo.example.com
+    DocumentRoot /srv/sitewright/public
+    # Certificate configuration (SSLEngine, SSLCertificateFile, ...) omitted.
+    SSLEngine on
+    <Directory /srv/sitewright/public>
+        Options -Indexes
+        # public/.htaccess carries the rewrite and header rules.
         AllowOverride All
         Require all granted
     </Directory>
-    
-    ErrorLog ${APACHE_LOG_DIR}/rankmath-error.log
-    CustomLog ${APACHE_LOG_DIR}/rankmath-access.log combined
+    # Or put everything in config/config.php instead of SetEnv.
+    SetEnv SW_BASE_URL https://seo.example.com
 </VirtualHost>
 ```
 
-Enable site:
-```bash
-sudo a2ensite rankmath.conf
-sudo systemctl reload apache2
+Required modules: `rewrite`, `headers`. Environment variables for PHP can be set with `PassEnv`/`SetEnv`, PHP-FPM `env[...]`, or simply `config/config.php`.
+
+**Sub-path** (e.g. `https://example.com/seo/`): `Alias /seo /srv/sitewright/public` with the same `<Directory>` block, and `SW_BASE_URL=https://example.com/seo`. Tested with Apache 2.4 (`tests/docker/smoke.sh`). If your host maps the sub-path differently and rewrites misroute, add `RewriteBase /seo/` inside that `<Directory>`. Do not deploy the whole repository inside the web root.
+
+## 4. nginx + PHP-FPM
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name seo.example.com;
+    root /srv/sitewright/public;
+    index index.php;
+
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+    # add_header Strict-Transport-Security "max-age=31536000" always;   # once HTTPS is final
+
+    location ~ /\. { deny all; }
+    location /api/ { try_files $uri /api.php$is_args$args; }
+    location = /api.php { include fastcgi_params; fastcgi_param SCRIPT_FILENAME $document_root/api.php; fastcgi_pass unix:/run/php/php8.3-fpm.sock; }
+    location = /index.php { include fastcgi_params; fastcgi_param SCRIPT_FILENAME $document_root/index.php; fastcgi_pass unix:/run/php/php8.3-fpm.sock; }
+    location ~ \.php$ { return 404; }              # only the two front controllers are executable
+    location / { try_files $uri /index.php$is_args$args; }
+}
 ```
 
-#### Step 3: Setup SSL (Let's Encrypt)
-
-```bash
-# Install Certbot
-sudo apt install certbot python3-certbot-apache -y
-
-# Get SSL certificate
-sudo certbot --apache -d yourdomain.com -d www.yourdomain.com
-
-# Auto-renewal (already set up by certbot)
-# Verify: sudo certbot renew --dry-run
-```
-
-#### Step 4: Deploy Application
-
-```bash
-cd /var/www/html
-
-# Clone from GitHub
-sudo git clone https://github.com/yourusername/rankmath-seo-webapp.git rankmath
-
-cd rankmath
-
-# Copy and configure
-sudo cp config/api-keys.php.example config/api-keys.php
-sudo cp webapp/config/database.php.example webapp/config/database.php
-
-sudo nano config/api-keys.php
-# Add production keys
-
-sudo nano webapp/config/database.php
-# Add database credentials
-
-# Set ownership
-sudo chown -R www-data:www-data /var/www/html/rankmath
-
-# Set permissions
-sudo find . -type d -exec chmod 755 {} \;
-sudo find . -type f -exec chmod 644 {} \;
-sudo chmod 600 config/api-keys.php
-sudo chmod 600 webapp/config/database.php
-```
-
-#### Step 5: Create Database
-
-```bash
-sudo mysql -u root -p
-
-CREATE DATABASE rankmath_webapp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'rankmath_user'@'localhost' IDENTIFIED BY 'strong_password_here';
-GRANT ALL PRIVILEGES ON rankmath_webapp.* TO 'rankmath_user'@'localhost';
-FLUSH PRIVILEGES;
-EXIT;
-```
-
-#### Step 6: Run Installation
-
-Visit: `https://yourdomain.com/install.php`
-
----
-
-### Option 3: Docker Deployment
-
-Create `Dockerfile`:
-
-```dockerfile
-FROM php:8.1-apache
-
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    libzip-dev \
-    zip \
-    unzip \
-    && docker-php-ext-install pdo_mysql mysqli
-
-# Enable Apache mod_rewrite
-RUN a2enmod rewrite
-
-# Copy application
-COPY . /var/www/html/
-
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html
-
-EXPOSE 80
-```
-
-Create `docker-compose.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  webapp:
-    build: .
-    ports:
-      - "8080:80"
-    environment:
-      - DB_HOST=db
-      - DB_NAME=rankmath_webapp
-      - DB_USER=rankmath
-      - DB_PASSWORD=secure_password
-    volumes:
-      - ./config:/var/www/html/config
-    depends_on:
-      - db
-
-  db:
-    image: mysql:8.0
-    environment:
-      - MYSQL_ROOT_PASSWORD=root_password
-      - MYSQL_DATABASE=rankmath_webapp
-      - MYSQL_USER=rankmath
-      - MYSQL_PASSWORD=secure_password
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-volumes:
-  mysql_data:
-```
-
-Deploy:
-```bash
-docker-compose up -d
-```
-
----
-
-## 🔐 Post-Deployment Security
-
-### 1. Update Google OAuth
-
-- Go to: https://console.cloud.google.com/apis/credentials
-- Edit OAuth client
-- Add production domain to Authorized redirect URIs:
-  - `https://yourdomain.com/api.php/api/google/oauth-callback`
-
-### 2. Restrict API Keys
-
-**Gemini API:**
-- Visit: https://makersuite.google.com/app/apikey
-- Click on your key → "Restrict Key"
-- Add domain restrictions: `yourdomain.com`
-
-### 3. Configure Firewall
-
-```bash
-# UFW (Ubuntu)
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw allow 22/tcp  # SSH
-sudo ufw enable
-```
-
-### 4. Set up Monitoring
-
-**Error Monitoring:**
-```bash
-# Check Apache logs
-tail -f /var/log/apache2/rankmath-error.log
-
-# PHP errors
-tail -f /var/log/php-errors.log
-```
-
-**Uptime Monitoring:**
-- Use services like UptimeRobot, Pingdom, or StatusCake
-- Monitor: `https://yourdomain.com/api.php/api/health`
-
-### 5. Backup Strategy
-
-```bash
-# Database backup script
-cat > /home/user/backup-rankmath.sh << 'EOF'
-#!/bin/bash
-DATE=$(date +%Y%m%d_%H%M%S)
-mysqldump -u rankmath_user -p'password' rankmath_webapp > /backups/rankmath_db_$DATE.sql
-find /backups -name "rankmath_db_*.sql" -mtime +7 -delete
-EOF
-
-chmod +x /home/user/backup-rankmath.sh
-
-# Add to cron (daily at 2 AM)
-crontab -e
-0 2 * * * /home/user/backup-rankmath.sh
-```
-
----
-
-## 🔄 Updates & Maintenance
-
-### Pulling Updates from GitHub
-
-```bash
-cd /var/www/html/rankmath
-
-# Backup first
-sudo cp -r . ../rankmath_backup_$(date +%Y%m%d)
-
-# Pull updates
-sudo git pull origin main
-
-# Check for new dependencies or migrations
-# Re-run installation if database schema changed
-
-# Restart Apache
-sudo systemctl restart apache2
-```
-
-### Regular Maintenance
-
-**Weekly:**
-```bash
-# Clean old logs
-find /var/log/apache2 -name "*.log" -mtime +30 -delete
-
-# Optimize database
-mysql -u rankmath_user -p rankmath_webapp -e "OPTIMIZE TABLE rm_analytics_keywords, rm_analytics_pages, rm_seo_analysis;"
-```
-
-**Monthly:**
-```bash
-# Review security
-sudo apt update && sudo apt upgrade -y
-
-# Check SSL renewal
-sudo certbot renew
-
-# Review API usage and costs
-```
-
----
-
-## 📊 Performance Optimization
-
-### Enable PHP OPcache
-
-```ini
-# /etc/php/8.1/apache2/php.ini
-opcache.enable=1
-opcache.memory_consumption=128
-opcache.max_accelerated_files=10000
-opcache.revalidate_freq=2
-```
-
-### Enable Gzip Compression
-
-Already in `.htaccess`, verify working:
-```bash
-curl -H "Accept-Encoding: gzip" -I https://yourdomain.com
-```
-
-### Database Optimization
-
-```sql
--- Add indexes if missing
-ALTER TABLE rm_analytics_keywords ADD INDEX idx_date (date);
-ALTER TABLE rm_analytics_keywords ADD INDEX idx_keyword (keyword(191));
-ALTER TABLE rm_seo_analysis ADD INDEX idx_analyzed_at (analyzed_at);
-```
-
----
-
-## ✅ Final Deployment Checklist
-
-- [ ] `.gitignore` configured correctly
-- [ ] `api-keys.php.example` created (no real keys)
-- [ ] `database.php.example` created
-- [ ] All documentation complete
-- [ ] README.md updated with quick start
-- [ ] Pushed to GitHub
-- [ ] Production server configured
-- [ ] Database created and configured
-- [ ] Files uploaded and permissions set
-- [ ] API keys configured with production values
-- [ ] `.htaccess` RewriteBase updated
-- [ ] Installation completed successfully
-- [ ] SSL certificate installed
-- [ ] Google OAuth updated with production domain
-- [ ] All features tested on production
-- [ ] Monitoring set up
-- [ ] Backup strategy implemented
-- [ ] Documentation accessible to team
-
----
-
-## 🆘 Support
-
-### Issues During Deployment
-
-1. Check error logs first
-2. Verify all configuration files
-3. Test database connection
-4. Check file permissions
-5. Review Apache/Nginx configuration
-
-### Common Deployment Issues
-
-See `README.md` Troubleshooting section.
-
----
-
-**Last Updated:** January 11, 2026  
-**Version:** 1.0.0
-
-Ready to deploy! 🚀
+## 5. Hardening checklist
+
+* Behind a reverse proxy or load balancer: preserve the `Host` header, and set `SW_TRUSTED_PROXIES` to the proxy addresses (e.g. `10.0.0.0/24`). The app then takes the client address from `X-Forwarded-For`, reading right to left and skipping trusted hops, so login throttling, rate limits and the audit log see real clients. Without it every user shares the proxy's IP (the 30-per-15-minute IP login limit becomes a global lockout). `X-Forwarded-Host`/`-Proto` are deliberately not used: HTTPS is decided by `SW_BASE_URL`, and the same-origin check needs the proxy to pass `Host` through unchanged.
+* HTTPS only; set `SW_BASE_URL` (https) and `SW_ALLOWED_HOSTS`; enable `SW_HSTS=true`.
+* `display_errors=Off` in PHP (the app also forces it off unless `SW_DEBUG`); `expose_php=Off`.
+* `config/config.php` mode `0600`, owned by the PHP user; keep backups encrypted.
+* Block outbound access from the PHP host to internal networks and cloud metadata endpoints at the firewall as a second layer behind the application's SSRF guard.
+* **Settings page (day-to-day configuration)**: admins change nearly everything under **Settings** in the app (mail and alerts, sign-in and session limits, Gemini/Google/geocoding, crawl and job limits, retention and logging). Precedence is **environment variable > value saved in Settings > `config/config.php` > built-in default**; each row shows which one is in effect, and a setting set by an environment variable is locked. Secrets are write-only and stored encrypted (`app_key` required). Things that must exist before the app can start or that weaken the request guard stay in the file/environment and show read-only (database, `app_key`, `base_url`, allowed hosts, trusted proxies, `fetch.allow_ports`, `fetch.dev_allow_cidrs`, `gemini.endpoint`, cookie/HSTS/debug settings). `sudo sw-set-secrets` remains as a break-glass/bootstrap tool and warns when Settings would override what it writes. Every change is audited (`setting_changed`; secrets as "changed").
+* **Worker (required)**: crawls, image batches, e-mail, alerts, site syncs and Search Console imports run in a background worker, not in web requests. Install `deploy/sitewright-worker.service` (and the health-check timer); see `docs/ALERTS_AND_LOGGING.md`. Without a worker those actions stay "waiting for a worker". Run it as the same user as PHP so the same egress firewall applies, and allow that user to reach your mail server only (`deploy/egress-postal.nft.example`).
+* **app_key (required for sites and Search Console)**: `php bin/gen-key.php`, then `'app_key' => '…'` in config or `SW_APP_KEY`. It encrypts site secrets and Google refresh tokens. Back it up with the database backup but NOT in the same place: without it those secrets are unreadable (re-enter them).
+* **Connected WordPress sites**: Sitewright calls the site, so Sitewright can stay private (Tailscale/LAN) as long as it can reach the site. On the Sites page download the plugin, install it (or drop it in `wp-content/mu-plugins/`), add the site, put the secret in `wp-config.php` (`define('SITEWRIGHT_SECRET', '…')`), press Sync. Redirect rules are enforced on the site by the plugin (it keeps working if Sitewright is down); 404s are pulled back. Tested against WordPress 6 (`tests/docker/wordpress-e2e.sh`).
+* **Google Search Console**: create an OAuth client (Web application) in the Google Cloud console, enable the *Search Console API*, add `https://YOUR-HOST/api/gsc/callback` as an authorized redirect URI, then `sudo sw-set-secrets google`. Google redirects your browser, not your server, so the host does not have to be public; use a hostname Google accepts for redirect URIs (a real domain name that resolves privately works; `localhost` works through an SSH tunnel). Read-only scope; the refresh token is stored encrypted. **Not yet proven against Google** (tested with a scripted transport only): the first real connection is the live test.
+* **Roles and accounts**: `viewer` (read-only; cannot see 404 IPs), `editor` (run analyses, change data), `admin` (users, audit log). Every route needs at least `viewer` for GET and `editor` for anything that changes data; the route table marks the rest, and a test walks the whole table per role. Admins manage people in the **Users** page (invite by e-mail, change role, disable, reset MFA, delete); the last enabled administrator cannot be removed, and nobody can demote or disable themselves. Everyone can change their own password and set up two-step verification under **My Account**. Accounts that existed before migration 006 stay administrators; new ones default to viewer.
+* **Password reset**: "Forgot your password?" on the sign-in page e-mails a single-use link (valid 60 minutes; invitations 7 days) built from `SW_BASE_URL` (never from the Host header). It needs mail settings and `SW_BASE_URL`. The answer is the same for unknown addresses, the request is rate limited, only a hash of the token is stored, a reset ends all of the user's sessions, and it never bypasses two-step verification.
+* **MFA (TOTP)**: turn it on for every administrator: `php bin/user.php mfa-enable <username>` prints the secret and an `otpauth://` URI (paste into any authenticator app), asks for one valid code to prove it works, then prints 8 single-use recovery codes (store them offline). Enabling or disabling MFA ends that user's sessions. Sign-in then takes two steps; wrong codes are throttled per account and per IP, and a code cannot be reused. Lost device: use a recovery code, or an operator runs `php bin/user.php mfa-disable <username>` and re-enables.
+* **Audit log**: sign-ins, failures, MFA steps, logouts, imports, deletions and CLI account changes go to the `audit_log` table (never passwords, keys or prompt text; unknown usernames are stored as `(unknown)`). Read with `php bin/audit.php 100`; schedule `php bin/purge-audit.php` daily (`retention_days_audit`, default 365). Optionally give the runtime DB account only INSERT and SELECT on that table (it also needs DELETE for the purge job, so run the purge as the migration account if you do).
+* Schedule `php bin/purge-404.php` and `php bin/purge-audit.php` daily.
+* **Backups**: `SW_DB_NAME=... SW_DB_USER=... SW_DB_PASS=... bin/db-backup.sh backup /var/backups/sitewright` (consistent `mysqldump --single-transaction`, gzip, mode 0600, keeps the newest 14). Restore into an empty database with `SW_RESTORE_CONFIRM=yes bin/db-backup.sh restore <file>`. The dump holds password hashes and TOTP secrets: encrypt it and keep it off the web server. Rehearse a restore with `tests/docker/backup-drill.sh [db-image]` (drops everything and checks the counts), and do the same against your real backups quarterly.
+* Do not run the web server or PHP as root; no recursive `chmod 755/777` — files need only read access for the PHP user, `storage/` write access for the installer.
+* Rotate any API key that was ever committed (and that you own). `tests/all.sh` scans the working tree with gitleaks; scan git history yourself when you adopt the repository.
+
+## 6. Upgrades
+
+**Migrate in the same step as the code update, before reloading PHP-FPM / Apache.** Release 004 (MFA + audit) reads `users.totp_secret`; new code against an un-migrated database fails every sign-in with HTTP 500. Sequence: back up (`bin/db-backup.sh backup`), update the code, `php bin/migrate.php` (migration-capable DB account), run the tests, then reload PHP. `git pull && php bin/migrate.php` (run with the migration-capable DB account). Migrations are tracked in `schema_migrations`; a v1.0 database is detected and adopted automatically. Migration `003` drops the never-used `projects`, `schema`, `settings` and `analytics_pages` tables.

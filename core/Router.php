@@ -1,118 +1,66 @@
 <?php
+declare(strict_types=1);
+
+namespace Sitewright\Core;
+
 /**
- * Simple Router for API Endpoints
+ * Table-driven router. Rows come from config/routes.php:
+ *   [METHOD, '/path/{id}', 'Class@method', ['public' => bool, 'limit' => 'group', 'upload' => bool]]
+ * `{id}` matches digits only; any other {name} matches one path segment.
  */
+final class Router
+{
+    /** @var array<int,array{method:string,path:string,regex:string,handler:string,opts:array}> */
+    private array $routes = [];
 
-namespace RankMathWebapp\Core;
-
-class Router {
-    private $routes = [];
-    private $middleware = [];
-
-    public function get($path, $handler) {
-        $this->addRoute('GET', $path, $handler);
-    }
-
-    public function post($path, $handler) {
-        $this->addRoute('POST', $path, $handler);
-    }
-
-    public function put($path, $handler) {
-        $this->addRoute('PUT', $path, $handler);
-    }
-
-    public function delete($path, $handler) {
-        $this->addRoute('DELETE', $path, $handler);
-    }
-
-    private function addRoute($method, $path, $handler) {
-        $this->routes[] = [
-            'method' => $method,
-            'path' => $path,
-            'handler' => $handler,
-        ];
-    }
-
-    public function addMiddleware($middleware) {
-        $this->middleware[] = $middleware;
-    }
-
-    public function dispatch() {
-        $method = $_SERVER['REQUEST_METHOD'];
-        $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-        
-        // Remove base path if running in subdirectory
-        $basePath = '/rankmath/webapp';
-        if (strpos($path, $basePath) === 0) {
-            $path = substr($path, strlen($basePath));
+    /** @param array<int,array> $table */
+    public function __construct(array $table)
+    {
+        foreach ($table as $row) {
+            [$method, $path, $handler] = $row;
+            $regex = preg_replace_callback(
+                '/\{([a-zA-Z0-9_]+)\}/',
+                static fn (array $m): string => '(?P<' . $m[1] . '>' . ($m[1] === 'id' ? '[0-9]{1,18}' : '[^/]+') . ')',
+                $path
+            );
+            $this->routes[] = [
+                'method' => $method, 'path' => $path, 'regex' => '#^' . $regex . '$#',
+                'handler' => $handler, 'opts' => $row[3] ?? [],
+            ];
         }
-        
-        // Remove /api.php from path if present
-        if (strpos($path, '/api.php') === 0) {
-            $path = substr($path, strlen('/api.php'));
-        }
-        
-        // Ensure path starts with /
-        if (empty($path) || $path[0] !== '/') {
-            $path = '/' . $path;
-        }
+    }
 
-        // Apply middleware
-        foreach ($this->middleware as $mw) {
-            $result = call_user_func($mw);
-            if ($result === false) {
-                return;
-            }
-        }
+    /** @return array<int,array> */
+    public function routes(): array
+    {
+        return $this->routes;
+    }
 
-        // Find matching route
+    /**
+     * @return array{route:array,params:array<string,string>}
+     * @throws ResponseException 404 / 405
+     */
+    public function match(string $method, string $path): array
+    {
+        $allowed = [];
         foreach ($this->routes as $route) {
-            if ($route['method'] === $method && $this->matchPath($route['path'], $path, $params)) {
-                return $this->handleRoute($route['handler'], $params);
-            }
-        }
-
-        // No route found
-        $this->sendJson(['error' => 'Route not found'], 404);
-    }
-
-    private function matchPath($routePath, $requestPath, &$params) {
-        $params = [];
-        
-        // Convert route path to regex pattern
-        $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[^/]+)', $routePath);
-        $pattern = '#^' . $pattern . '$#';
-
-        if (preg_match($pattern, $requestPath, $matches)) {
-            foreach ($matches as $key => $value) {
-                if (is_string($key)) {
-                    $params[$key] = $value;
+            if (preg_match($route['regex'], $path, $m)) {
+                if ($route['method'] === $method) {
+                    $params = array_filter($m, 'is_string', ARRAY_FILTER_USE_KEY);
+                    return ['route' => $route, 'params' => $params];
                 }
+                $allowed[] = $route['method'];
             }
-            return true;
         }
-
-        return false;
+        if ($allowed) {
+            Response::error('Method not allowed', 405, [], ['Allow' => implode(', ', array_unique($allowed))]);
+        }
+        Response::error('Route not found', 404);
     }
 
-    private function handleRoute($handler, $params) {
-        if (is_callable($handler)) {
-            return call_user_func_array($handler, [$params]);
-        }
-
-        if (is_string($handler) && strpos($handler, '@') !== false) {
-            list($class, $method) = explode('@', $handler);
-            $controller = new $class();
-            return call_user_func_array([$controller, $method], [$params]);
-        }
-
-        $this->sendJson(['error' => 'Invalid handler'], 500);
-    }
-
-    public static function sendJson($data, $statusCode = 200) {
-        http_response_code($statusCode);
-        header('Content-Type: application/json');
-        echo json_encode($data);
-        exit;
+    /** Replace {placeholders} with sample values (used by tests to hit every route). */
+    public static function samplePath(string $path): string
+    {
+        return (string)preg_replace('/\{[a-zA-Z0-9_]+\}/', 'x', str_replace('{id}', '1', $path));
     }
 }
