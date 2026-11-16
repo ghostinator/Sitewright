@@ -42,10 +42,10 @@ test('settings API: a whole batch is rejected on one bad field and nothing is wr
 });
 test('settings API: cross-field rules (idle <= longest, timeouts) block lock-out-ish combinations', function () use ($admin, $put) {
     $a = $admin();
-    eq($put($a, ['session.idle_timeout' => 7200, 'session.absolute_timeout' => 3600])['status'], 400);
-    eq($put($a, ['session.idle_timeout' => 600, 'session.absolute_timeout' => 3600])['status'], 200);
-    eq($put($a, ['session.idle_timeout' => 3600])['status'], 200, 'equal is fine');
-    eq($put($a, ['session.absolute_timeout' => 1800])['status'], 400, 'would be shorter than the saved idle timeout');
+    eq($put($a, ['session.idle_timeout' => 7200, 'session.absolute_timeout' => 3600], true)['status'], 400);
+    eq($put($a, ['session.idle_timeout' => 600, 'session.absolute_timeout' => 3600], true)['status'], 200);
+    eq($put($a, ['session.idle_timeout' => 3600], true)['status'], 200, 'equal is fine');
+    eq($put($a, ['session.absolute_timeout' => 1800], true)['status'], 400, 'would be shorter than the saved idle timeout');
     eq($put($a, ['fetch.connect_timeout' => 30, 'fetch.timeout' => 10])['status'], 400);
     eq($put($a, ['alerts.email_to' => ['you@example.test']])['status'], 400, 'recipients need mail configured');
 });

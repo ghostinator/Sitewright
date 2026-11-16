@@ -273,3 +273,11 @@ test('dashboard: window text, card titles, order and hidden cards follow the sta
   assert.equal(JSON.stringify(order), JSON.stringify(['clicks', 'seo']));
   assert.ok(d.querySelector('[data-card=keywords]').classList.contains('hidden'));
 });
+
+test('settings: a non-secret value from the config file offers "Save this value here"; only secrets say "encrypted storage"', () => {
+  const d = settingsData(); d.groups[0].settings.push({ key: 'contact', label: 'Contact', help: 'h', unit: '', type: 'string', enum: null, min: null, max: null, value: 'x', default: '', source: 'file', locked: false, env: null, fallback: 'config file value "x"', secret: false, danger: false, danger_effects: [], apply: 'live', changed_by: null, changed_at: null });
+  d.groups[0].settings.push({ key: 'gemini.api_key', label: 'Gemini', help: 'h', unit: '', type: 'secret', enum: null, min: null, max: null, value: { set: true }, default: null, source: 'file', locked: false, env: null, fallback: 'config file value (set)', secret: true, danger: false, danger_effects: [], apply: 'live', changed_by: null, changed_at: null });
+  const { box } = settingsPage(d);
+  assert.ok(box.querySelector('[data-setting-row="contact"] [data-action="settings-promote"]').textContent.includes('Save this value here'));
+  assert.ok(box.querySelector('[data-setting-row="gemini.api_key"] [data-action="settings-promote"]').textContent.includes('encrypted storage'));
+});

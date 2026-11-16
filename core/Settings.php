@@ -65,12 +65,12 @@ final class Settings
         $add('alerts.cooldown', 'mail', 'Alert cooldown', 'The same alert is sent at most once in this time.', 'int', ['min' => 0, 'max' => 86400, 'unit' => 'seconds']);
         $add('alerts.login_failures', 'mail', 'Failed sign-ins before an alert', 'Alert when this many sign-ins fail within 10 minutes.', 'int', ['min' => 1, 'max' => 1000]);
         // ---- Security
-        $add('session.idle_timeout', 'security', 'Session length when idle', 'Sign out after this much inactivity.', 'int', ['min' => 300, 'max' => 86400, 'unit' => 'seconds']);
-        $add('session.absolute_timeout', 'security', 'Longest session', 'Sign out after this long, however active.', 'int', ['min' => 900, 'max' => 2592000, 'unit' => 'seconds']);
+        $add('session.idle_timeout', 'security', 'Session length when idle', 'Sign out after this much inactivity.', 'int', ['min' => 300, 'max' => 86400, 'unit' => 'seconds', 'danger' => true, 'danger_effects' => ['Changes how long everyone stays signed in.']]);
+        $add('session.absolute_timeout', 'security', 'Longest session', 'Sign out after this long, however active.', 'int', ['min' => 900, 'max' => 2592000, 'unit' => 'seconds', 'danger' => true, 'danger_effects' => ['Changes how long everyone stays signed in.']]);
         $add('security.require_mfa', 'security', 'Require two-step verification for administrators', 'Administrators without it can only reach My Account until they set it up. You must have it on yourself first. Break-glass: SW_REQUIRE_MFA=false on the server.', 'bool', ['env' => 'SW_REQUIRE_MFA', 'danger' => true, 'danger_effects' => ['Other administrators without two-step verification are limited to My Account until they enrol.']]);
-        $add('limits.login_attempts', 'security', 'Failed sign-ins per account', 'Wrong passwords allowed per account in the window below.', 'int', ['min' => 1, 'max' => 100]);
-        $add('limits.login_ip_attempts', 'security', 'Failed sign-ins per address', 'Wrong passwords allowed from one IP address in the window below.', 'int', ['min' => 1, 'max' => 1000]);
-        $add('limits.login_window', 'security', 'Sign-in limit window', 'How long failed sign-ins are counted.', 'int', ['min' => 60, 'max' => 86400, 'unit' => 'seconds']);
+        $add('limits.login_attempts', 'security', 'Failed sign-ins per account', 'Wrong passwords allowed per account in the window below.', 'int', ['min' => 3, 'max' => 100, 'danger' => true, 'danger_effects' => ['Strict sign-in limits apply to everyone and let anyone lock an account by guessing.']]);
+        $add('limits.login_ip_attempts', 'security', 'Failed sign-ins per address', 'Wrong passwords allowed from one IP address in the window below.', 'int', ['min' => 10, 'max' => 1000, 'danger' => true, 'danger_effects' => ['Strict sign-in limits apply to everyone behind the same address, including you.']]);
+        $add('limits.login_window', 'security', 'Sign-in limit window', 'How long failed sign-ins are counted.', 'int', ['min' => 60, 'max' => 86400, 'unit' => 'seconds', 'danger' => true, 'danger_effects' => ['A long window keeps people locked out for longer.']]);
         $add('limits.expensive_per_min', 'security', 'Heavy actions per minute', 'Analyses, crawls and AI requests allowed per user per minute.', 'int', ['min' => 1, 'max' => 600]);
         // ---- Integrations
         $add('gemini.api_key', 'integrations', 'Gemini API key', 'Content AI uses templates when this is empty.', 'secret', ['env' => 'SW_GEMINI_API_KEY']);
@@ -252,6 +252,7 @@ final class Settings
             $key = (string)$row['skey'];
             try {
                 if (self::def($key) === null) { throw new \InvalidArgumentException('unknown or read-only key'); }
+                if ((int)$row['is_secret'] === 1 && (string)$row['svalue'] === '' && self::def($key)['secret']) { $out[$key] = ''; continue; }   // "cleared" marker: the secret is deliberately empty
                 $raw = (int)$row['is_secret'] === 1 ? Crypto::decrypt((string)$row['svalue'], "setting:$key") : json_decode((string)$row['svalue'], true, 16, JSON_THROW_ON_ERROR);
                 $out[$key] = self::coerce($key, $raw);
             } catch (\Throwable $e) {
@@ -267,10 +268,12 @@ final class Settings
         $d = self::def($key) ?? throw new \InvalidArgumentException("Unknown setting $key");
         $locked = self::envLocked($key);
         $savedKeys = Config::savedKeys();
-        $source = $locked ? 'env' : (in_array($key, $savedKeys, true) ? 'saved' : (Config::fileHas($key) ? 'file' : 'default'));
+        $fileVal = Config::fileValue($key);
+        $fromFile = Config::fileHas($key) && $fileVal !== '' && $fileVal !== null;   // an empty value in the file means "not provided"
+        $source = $locked ? 'env' : (in_array($key, $savedKeys, true) ? 'saved' : ($fromFile ? 'file' : 'default'));
         $value = Config::get($key);
         if ($d['secret']) { $value = ['set' => $value !== null && $value !== '']; }
-        $fallback = Config::fileHas($key)
+        $fallback = $fromFile
             ? 'config file value ' . ($d['secret'] ? '(set)' : json_encode(Config::fileValue($key), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
             : 'built-in default ' . ($d['secret'] ? '(none)' : json_encode($d['default'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         return ['value' => $value, 'source' => $source, 'locked' => $locked, 'fallback' => $fallback];
@@ -324,7 +327,11 @@ final class Settings
         foreach (array_keys($values) as $k) {
             if (!self::def($k)['danger']) { continue; }
             foreach (self::def($k)['danger_effects'] as $e) { $effects[] = $e; }
-            foreach (self::DANGER_CLEARS[$k] ?? [] as $c) { if (!array_key_exists($c, $values)) { $clears[] = $c; } }
+            foreach (self::DANGER_CLEARS[$k] ?? [] as $c) {
+                if (array_key_exists($c, $values)) { continue; }            // a new secret arrives together with the new address: keep it
+                if (self::envLocked($c)) { return $fail(409, self::def($c)['label'] . ' is set by ' . self::def($c)['env'] . ' on the server and would stay attached to the new address. Change or remove that variable together with this address.'); }
+                if ((string)Config::get($c) !== '') { $clears[] = $c; }      // from Settings OR the config file: either way it must stop applying
+            }
         }
         $effects = array_values(array_unique($effects)); $clears = array_values(array_unique($clears));
         if ($effects && !$confirm) { return $fail(409, 'This change has side effects and needs confirmation.', ['code' => 'confirm_required', 'effects' => $effects]); }
@@ -349,7 +356,11 @@ final class Settings
                 $db->query("INSERT INTO `$t` (skey, svalue, is_secret, updated_by) VALUES (:k, :v, :s, :u) ON DUPLICATE KEY UPDATE svalue = VALUES(svalue), is_secret = VALUES(is_secret), updated_by = VALUES(updated_by)",
                     ['k' => $k, 'v' => $secret ? Crypto::encrypt((string)$v, "setting:$k") : json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 's' => $secret ? 1 : 0, 'u' => $userId]);
             }
-            foreach ($prepared['clears'] as $c) { if ($db->query("DELETE FROM `$t` WHERE skey = :k", ['k' => $c])->rowCount() > 0) { $cleared[] = $c; } }
+            // An explicit "cleared" marker (empty secret row), not a delete: a copy of the secret in the config file must stop applying too.
+            foreach ($prepared['clears'] as $c) {
+                $db->query("INSERT INTO `$t` (skey, svalue, is_secret, updated_by) VALUES (:k, '', 1, :u) ON DUPLICATE KEY UPDATE svalue = '', is_secret = 1, updated_by = VALUES(updated_by)", ['k' => $c, 'u' => $userId]);
+                $cleared[] = $c;
+            }
         });
         Config::refreshSettings();
         $fmt = static fn (mixed $v): string => mb_substr(is_string($v) ? $v : (string)json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0, 120);
@@ -376,7 +387,8 @@ final class Settings
     public static function promote(string $key, int $userId): void
     {
         $d = self::def($key) ?? throw new \RuntimeException('Unknown setting');
-        if (!Config::fileHas($key) || in_array($key, Config::savedKeys(), true)) { throw new \RuntimeException('There is no config-file value to move.'); }
+        $fv = Config::fileValue($key);
+        if (!Config::fileHas($key) || $fv === '' || $fv === null || in_array($key, Config::savedKeys(), true)) { throw new \RuntimeException('There is no config-file value to move.'); }
         if ($d['secret'] && !Crypto::configured()) { throw new \RuntimeException('Set app_key first.'); }
         $p = ['status' => 200, 'message' => 'ok', 'errors' => [], 'values' => [$key => self::coerce($key, Config::fileValue($key))], 'effects' => [], 'clears' => [], 'secrets' => []];
         self::commit($p, $userId);

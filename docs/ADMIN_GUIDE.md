@@ -37,6 +37,7 @@ For whoever installs, runs and secures Sitewright. Day-to-day use is in the [use
 * These stay in the config file or environment and show read-only in the app: the database login, `app_key`, `base_url`, allowed hosts, trusted proxies, `fetch.allow_ports`, `fetch.dev_allow_cidrs`, `gemini.endpoint`, cookie, HSTS and debug settings.
 * `sudo sw-set-secrets` (in `deploy/`) is the break-glass/bootstrap tool; it warns when a saved setting would override what it writes.
 * Behind a reverse proxy set `SW_TRUSTED_PROXIES`; the proxy must preserve `Host`.
+* Break-glass for any saved setting: `php bin/settings.php reset <key>` (or `reset-all`) removes it so the file value or built-in default applies again.
 * Break-glass if an admin is locked out by "require two-step verification": set `SW_REQUIRE_MFA=false` on the server, or `php bin/user.php mfa-disable <user>`.
 
 ## 4. Operating it
@@ -52,6 +53,7 @@ For whoever installs, runs and secures Sitewright. Day-to-day use is in the [use
 | Health check (cron/timer) | `php bin/healthcheck.php` (alerts only on a state change) |
 | Run migrations | `php bin/migrate.php` with the migration account |
 | Check the environment | `php bin/check-env.php` |
+| Undo a bad saved setting without the web UI (for example a sign-in limit that locks everyone out) | `php bin/settings.php list \| reset <key> \| reset-all` |
 
 ### Upgrading (order matters)
 1. Back up the database. 2. Copy the new code. 3. **Run migrations** (new code reads new columns; code without them answers every sign-in with HTTP 500). 4. Run the tests. 5. Reload PHP-FPM and restart the worker.

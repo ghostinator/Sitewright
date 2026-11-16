@@ -40,15 +40,27 @@ final class SafeHttpClient
         $this->transport = $transport ?? [$this, 'curlTransport'];
     }
 
+    private static ?string $fingerprint = null;
+    private static bool $injected = false;
+
+    /**
+     * The shared client. Built from the `fetch` settings; if those settings change while the process lives (the worker runs for hours and
+     * picks up Settings changes between jobs) the client is rebuilt, so a new block list or timeout applies to the very next request.
+     */
     public static function default(): self
     {
-        return self::$default ??= new self();
+        if (self::$default !== null && self::$injected) { return self::$default; }
+        $fp = md5((string)json_encode(Config::get('fetch')));
+        if (self::$default === null || self::$fingerprint !== $fp) { self::$default = new self(); self::$fingerprint = $fp; }
+        return self::$default;
     }
 
-    /** Test seam. */
+    /** Test seam: an injected client (fake DNS/transport) is never rebuilt; null returns to the normal behaviour. */
     public static function setDefault(?self $client): void
     {
         self::$default = $client;
+        self::$injected = $client !== null;
+        self::$fingerprint = null;
     }
 
     // ------------------------------------------------------------------ public API

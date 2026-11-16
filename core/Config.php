@@ -185,6 +185,19 @@ final class Config
         return self::getPath(self::$fileData, $path);
     }
 
+    /**
+     * Layer $over on top of $base. Maps merge key by key; a LIST (or an empty array) in $over replaces the whole list, so a file that says
+     * ['events' => ['job_failed']] means exactly that, not "the first entry of the built-in list replaced".
+     */
+    private static function mergeLayer(array $base, array $over): array
+    {
+        foreach ($over as $k => $v) {
+            $isMap = is_array($v) && $v !== [] && array_keys($v) !== range(0, count($v) - 1);
+            $base[$k] = ($isMap && isset($base[$k]) && is_array($base[$k])) ? self::mergeLayer($base[$k], $v) : $v;
+        }
+        return $base;
+    }
+
     private static function getPath(array $a, string $path): mixed
     {
         foreach (explode('.', $path) as $p) { if (!is_array($a) || !array_key_exists($p, $a)) { return null; } $a = $a[$p]; }
@@ -212,7 +225,7 @@ final class Config
             $loaded = (static function (string $f) { return require $f; })($file);
             if (is_array($loaded)) {
                 self::$fileData = $loaded;
-                $cfg = array_replace_recursive($cfg, $loaded);
+                $cfg = self::mergeLayer($cfg, $loaded);
             }
         } else {
             self::$fileData = [];

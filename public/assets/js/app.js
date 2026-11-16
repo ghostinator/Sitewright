@@ -340,7 +340,7 @@
             if (!s.secret) meta.push(el('button', { class: 'btn btn-link btn-sm', text: 'Reset', attrs: { type: 'button' }, data: { action: 'settings-reset', key: s.key } }));
             if (!s.secret && s.changed_by) meta.push(el('span', { text: 'Saved by ' + s.changed_by + (s.changed_at ? ', ' + s.changed_at : '') }));
         } else if (s.source === 'file') {
-            meta.push(el('button', { class: 'btn btn-link btn-sm', text: 'Move to encrypted storage', attrs: { type: 'button' }, data: { action: 'settings-promote', key: s.key } }));
+            meta.push(el('button', { class: 'btn btn-link btn-sm', text: s.secret ? 'Move to encrypted storage' : 'Save this value here', attrs: { type: 'button' }, data: { action: 'settings-promote', key: s.key } }));
         }
         if (s.danger) meta.push(el('span', { class: 'settings-danger', text: 'Needs confirmation: ' + s.danger_effects.join(' ') }));
         return el('div', { class: 'settings-row' + (dirty ? ' settings-row-dirty' : '') + (err ? ' settings-row-error' : ''), data: { settingRow: s.key } },

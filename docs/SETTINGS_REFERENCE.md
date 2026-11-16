@@ -34,12 +34,12 @@ Sign-in limits, session lengths and rate limits.
 
 | Setting | Key | Default | Allowed | Environment variable | Notes |
 |---|---|---|---|---|---|
-| Session length when idle | `session.idle_timeout` | 1800 | 300 to 86400 seconds |  | Sign out after this much inactivity. |
-| Longest session | `session.absolute_timeout` | 28800 | 900 to 2592000 seconds |  | Sign out after this long, however active. |
+| Session length when idle | `session.idle_timeout` | 1800 | 300 to 86400 seconds |  | Sign out after this much inactivity. Needs confirmation: Changes how long everyone stays signed in. |
+| Longest session | `session.absolute_timeout` | 28800 | 900 to 2592000 seconds |  | Sign out after this long, however active. Needs confirmation: Changes how long everyone stays signed in. |
 | Require two-step verification for administrators | `security.require_mfa` | off | bool | `SW_REQUIRE_MFA` | Administrators without it can only reach My Account until they set it up. You must have it on yourself first. Break-glass: SW_REQUIRE_MFA=false on the server. Needs confirmation: Other administrators without two-step verification are limited to My Account until they enrol. |
-| Failed sign-ins per account | `limits.login_attempts` | 5 | 1 to 100 |  | Wrong passwords allowed per account in the window below. |
-| Failed sign-ins per address | `limits.login_ip_attempts` | 30 | 1 to 1000 |  | Wrong passwords allowed from one IP address in the window below. |
-| Sign-in limit window | `limits.login_window` | 900 | 60 to 86400 seconds |  | How long failed sign-ins are counted. |
+| Failed sign-ins per account | `limits.login_attempts` | 5 | 3 to 100 |  | Wrong passwords allowed per account in the window below. Needs confirmation: Strict sign-in limits apply to everyone and let anyone lock an account by guessing. |
+| Failed sign-ins per address | `limits.login_ip_attempts` | 30 | 10 to 1000 |  | Wrong passwords allowed from one IP address in the window below. Needs confirmation: Strict sign-in limits apply to everyone behind the same address, including you. |
+| Sign-in limit window | `limits.login_window` | 900 | 60 to 86400 seconds |  | How long failed sign-ins are counted. Needs confirmation: A long window keeps people locked out for longer. |
 | Heavy actions per minute | `limits.expensive_per_min` | 10 | 1 to 600 |  | Analyses, crawls and AI requests allowed per user per minute. |
 
 ## Integrations

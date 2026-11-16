@@ -56,7 +56,7 @@ final class SettingsController
     {
         $key = (string)($params['key'] ?? '');
         if (Settings::def($key) === null) { Response::notFound('Unknown setting'); }
-        try { Settings::promote($key, (int)Auth::user()['id']); } catch (\RuntimeException $e) { Response::error($e->getMessage(), 409); }
+        try { Settings::promote($key, (int)Auth::user()['id']); } catch (\RuntimeException $e) { Response::error($e->getMessage(), 409); } catch (\InvalidArgumentException $e) { Response::error($e->getMessage(), 400); }
         Response::success('Moved to encrypted storage');
     }
 
