@@ -21,6 +21,8 @@ final class Jobs
     /** @var array<string,callable(array):array> extra handlers (mail, alert, ...) registered by their classes */
     private static array $handlers = [];
 
+    private static ?int $currentJob = null;
+
     public static function register(string $type, callable $handler): void
     {
         self::$handlers[$type] = $handler;
@@ -100,6 +102,7 @@ final class Jobs
         $db = Database::getInstance();
         $t = $db->t('jobs');
         $id = (int)$job['id'];
+        self::$currentJob = $id;
         $payload = json_decode((string)$job['payload'], true) ?: [];
         $started = microtime(true);
         try {
@@ -119,6 +122,7 @@ final class Jobs
             Logger::error('job_crashed', ['job' => $id, 'type' => $job['type'], 'exception' => get_class($e), 'error' => $e->getMessage()]);
             self::fail($id, $job, 'Internal error', 500);
         } finally {
+            self::$currentJob = null;
             Request::reset();
         }
     }
@@ -164,6 +168,14 @@ final class Jobs
             }
             return ['message' => (string)($body['message'] ?? 'Done'), 'data' => $body['data'] ?? null];
         }
+    }
+
+    /** A long job calls this inside its loop so it is not declared stuck (job_stale_seconds). No effect outside a running job. */
+    public static function touch(): void
+    {
+        if (self::$currentJob === null) { return; }
+        $db = Database::getInstance();
+        $db->query('UPDATE `' . $db->t('jobs') . '` SET heartbeat_at = NOW() WHERE id = :id AND status = \'running\'', ['id' => self::$currentJob]);
     }
 
     public static function heartbeat(): void

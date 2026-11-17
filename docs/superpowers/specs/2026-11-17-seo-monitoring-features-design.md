@@ -44,7 +44,7 @@ Owner request (2026-11-17): build all seven proposed features, "in full", includ
 ## Progress ledger (update with every commit)
 | # | Feature | Status | Commit | Tests |
 |---|---------|--------|--------|-------|
-| 0 | Shared refactors (SeoAnalyzer, Crawler, Csv, Jobs::touch) | not started | | |
+| 0 | Shared refactors (SeoAnalyzer, Crawler, Jobs::touch; migration 010; `Validator::csvCell` already exists, reused for CSV) | done | (this commit) | PHP 457/457 (8.3) |
 | 7 | Per-site scoping, site switcher, overview | not started | | |
 | 1 | Watchlist, score history, regression alerts | not started | | |
 | 2 | Site audit (+ scheduled repeat, diff) | not started | | |

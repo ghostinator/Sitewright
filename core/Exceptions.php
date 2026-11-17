@@ -85,3 +85,12 @@ final class MailException extends \RuntimeException {}
 
 /** Google OAuth / Search Console problem; the message is safe to show to the administrator (never contains tokens). */
 final class GscException extends \RuntimeException {}
+
+/** A page analysis could not be completed; the message is safe to show to the operator. $httpStatus is the status an HTTP caller should answer with. */
+final class AnalysisException extends \RuntimeException
+{
+    public function __construct(string $message, public readonly int $httpStatus = 502)
+    {
+        parent::__construct($message);
+    }
+}

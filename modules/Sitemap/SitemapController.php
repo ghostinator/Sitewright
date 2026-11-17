@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Sitewright\Modules\Sitemap;
 
-use Sitewright\Core\{Audit, Config, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
+use Sitewright\Core\{Audit, Config, Crawler, Database, FetchException, Html, Request, Response, SafeHttpClient, Url, Validator};
 
 /** Plain XML URL sitemaps (the "general" type). Crawling is bounded, polite and goes through SafeHttpClient. */
 class SitemapController
@@ -109,76 +109,7 @@ class SitemapController
      */
     public function crawl(string $startUrl, int $maxPages, float $deadline): array
     {
-        $client = SafeHttpClient::default();
-        $delay = (int)Config::get('limits.crawl_delay_ms') * 1000;
-        $start = Url::normalize($startUrl);
-        if ($start === null) { return ['pages' => [], 'fetched' => 0, 'stopped_early' => false, 'error' => 'Invalid URL']; }
-
-        $origin = null; $disallow = null;
-        $queue = [$start]; $queued = [$start => true]; $pages = []; $fetched = 0; $error = null; $stopped = false;
-
-        while ($queue) {
-            if (count($pages) >= $maxPages || microtime(true) > $deadline) { $stopped = true; break; }
-            $url = array_shift($queue);
-            if ($origin !== null && $disallow !== null && $this->blocked($url, $disallow)) { continue; }
-            if ($fetched > 0) { usleep($delay); }
-            try {
-                $res = $client->get($url, ['max_bytes' => (int)Config::get('fetch.max_html_bytes'), 'deadline' => $deadline]);
-            } catch (FetchException $e) {
-                $error ??= $e->getMessage();
-                $fetched++;
-                continue;
-            }
-            $fetched++;
-            $final = Url::normalize($res['final_url']);
-            if ($final === null) { continue; }
-            if ($origin === null) {
-                $origin = Url::origin($final);          // the start URL may redirect (http->https, www): follow that
-                $disallow = $this->robots($client, $origin, $deadline);
-            }
-            if (Url::origin($final) !== $origin) { continue; }
-            if ($res['status'] !== 200 || !in_array($res['content_type'], ['text/html', 'application/xhtml+xml'], true)) { continue; }
-            if ($this->blocked($final, $disallow ?? [])) { continue; }
-
-            $pages[$final] = true;
-            $dom = Html::load($res['body'], (string)($res['headers']['content-type'] ?? ''));
-            foreach ($dom->getElementsByTagName('a') as $a) {
-                $abs = Url::resolve($final, trim($a->getAttribute('href')));
-                $norm = $abs !== null ? Url::normalize($abs) : null; // drops mailto:/tel:/javascript:/data:, fragments
-                if ($norm === null || isset($queued[$norm]) || Url::origin($norm) !== $origin) { continue; }
-                if (count($queued) >= $maxPages * 20) { break; } // bound memory on link-heavy sites
-                $queued[$norm] = true;
-                $queue[] = $norm;
-            }
-        }
-        return ['pages' => array_keys($pages), 'fetched' => $fetched, 'stopped_early' => $stopped || ($queue !== [] && count($pages) >= $maxPages), 'error' => $pages ? null : $error];
-    }
-
-    /** @return string[] Disallow path prefixes for "User-agent: *" */
-    private function robots(SafeHttpClient $client, string $origin, float $deadline): array
-    {
-        try {
-            $r = $client->get($origin . '/robots.txt', ['max_bytes' => 262144, 'timeout' => 5, 'deadline' => $deadline, 'accept' => 'text/plain,*/*;q=0.5']);
-        } catch (FetchException) {
-            return [];
-        }
-        if ($r['status'] !== 200) { return []; }
-        $rules = []; $applies = false;
-        foreach (preg_split('/\r?\n/', $r['body']) ?: [] as $line) {
-            $line = trim(preg_replace('/#.*$/', '', $line) ?? '');
-            if (preg_match('/^user-agent:\s*(.+)$/i', $line, $m)) { $applies = trim($m[1]) === '*'; }
-            elseif ($applies && preg_match('/^disallow:\s*(\S+)$/i', $line, $m)) { $rules[] = $m[1]; }
-        }
-        return $rules;
-    }
-
-    private function blocked(string $url, array $disallow): bool
-    {
-        $p = (string)parse_url($url, PHP_URL_PATH) . (($q = parse_url($url, PHP_URL_QUERY)) ? '?' . $q : '');
-        foreach ($disallow as $rule) {
-            if ($rule !== '' && str_starts_with($p, $rule)) { return true; }
-        }
-        return false;
+        return Crawler::run($startUrl, $maxPages, $deadline);
     }
 
     /** @return int number of NEW rows */
