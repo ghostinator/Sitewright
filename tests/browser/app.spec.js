@@ -359,6 +359,21 @@ test('keep me signed in: stays signed in after the session is lost, shows on My 
   await context.clearCookies({ name: 'sw_session' }); await page.goto('/'); await expect(page.locator('#login-form')).toBeVisible();
 });
 
+test('alerts page: pause everything and resume; the Calm preset applies and Everything puts it back', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.goto('/alerts');
+  await expect(page.locator('#alerts-summary')).toContainText('Last 24 hours');
+  await page.click('[data-action=alerts-pause][data-hours="1"]');
+  await expect(page.locator('#alerts-summary')).toContainText('Paused: everything');
+  await page.click('[data-action=alerts-resume]'); await expect(page.locator('#alerts-summary')).not.toContainText('Paused: everything');
+  page.once('dialog', d => d.accept()); await page.click('[data-action=alerts-preset][data-name=calm]');
+  await expect(page.locator('#toast')).toContainText('Preset applied');
+  await page.goto('/settings'); await page.fill('#settings-search', 'Quiet hours start');
+  await expect(page.locator('input[data-setting="alerts.quiet_start"]')).toHaveValue('22:00');
+  await page.goto('/alerts'); page.once('dialog', d => d.accept()); await page.click('[data-action=alerts-preset][data-name=everything]');
+  await expect(page.locator('#toast')).toContainText('Preset applied');
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {

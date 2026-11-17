@@ -63,7 +63,11 @@ final class Config
             ],
             'alerts' => ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 10,
                 'events' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created',
-                    'audit_new_issues', 'watch_down', 'watch_recovered', 'watch_regression']],
+                    'audit_new_issues', 'health_down', 'health_recovered', 'watch_down', 'watch_recovered', 'watch_regression'],
+                'events_batch' => [], 'events_digest' => [], 'channels_error' => ['email', 'teams', 'telegram'], 'channels_warning' => ['email', 'teams', 'telegram'], 'channels_info' => ['email', 'teams', 'telegram'],
+                'max_per_hour' => 30, 'batch_minutes' => 15, 'digest_time' => '08:00', 'quiet_start' => '', 'quiet_end' => '', 'quiet_breakthrough' => true, 'cooldowns' => []],
+            'display' => ['timezone' => 'UTC'],
+            'health' => ['bad_checks' => 3],
             'retention_days_audit' => 365,
             'db' => [
                 'host' => '127.0.0.1', 'port' => 3306, 'name' => 'sitewright_webapp',

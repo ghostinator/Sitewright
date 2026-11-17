@@ -196,7 +196,7 @@ final class SiteAudit
         }
         $db->update('audits', ['status' => 'done', 'pages' => count($pages), 'stopped_early' => (int)$out['stopped_early'], 'summary' => json_encode($summary), 'finished_at' => gmdate('Y-m-d H:i:s')], ['id' => $id]);
         if ($summary['new_high'] > 0) {
-            Alerts::notify('audit_new_issues', 'Audit of ' . $base . ' found ' . $summary['new_high'] . ' new high-priority issue(s) (' . $summary['fixed'] . ' fixed since the last audit). Open Site Audit in Sitewright to see them.', 'warning', 'a' . $project . ':' . $base);
+            Alerts::notify('audit_new_issues', 'Audit of ' . $base . ' found ' . $summary['new_high'] . ' new high-priority issue(s) (' . $summary['fixed'] . ' fixed since the last audit). Open Site Audit in Sitewright to see them.', 'warning', 'a' . $project . ':' . $base, $project);
         }
         return ['pages' => count($pages), 'issues' => count($issues)];
     }

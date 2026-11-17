@@ -75,6 +75,9 @@ Create, list and delete redirect rules (301, 302, 307, 308, 410, 451). For a **c
 ### Sites (admin)
 Add every website you want to analyse and monitor. Untick *WordPress with the Sitewright plugin* for a site that does not use it. For a WordPress site, connect it with the plugin: Sitewright calls the site; the site never calls Sitewright, so Sitewright can stay private. Steps: download the plugin, install it, add the site here, copy the one-time secret into `wp-config.php` (`define('SITEWRIGHT_SECRET', '…');`), then press **Sync now**. The plugin records 404s (path and referrer only, no visitor addresses) and enforces your redirect rules even if Sitewright is offline. **New secret** replaces the secret if it was exposed.
 
+### Alerts (admin)
+See every alert Sitewright raised and what happened to it: *Sent*, *Held back* (with the reason: cooldown, hourly limit, event not enabled), *Batched*, *Daily digest* or *Paused*. **Pause alerts** for one site or everything for 1, 4 or 24 hours while you work on something. Two presets: **Calm** (only real problems arrive at once, the rest is batched or in one daily digest, and nights are quiet) and **Everything**. Every rule is under Settings → Alert controls.
+
 ### Users (admin)
 Add people (with a password, or leave it empty to e-mail an invitation), change roles, disable or delete accounts, remove someone's two-step verification, or send a password-reset link. The last enabled administrator cannot be removed, and you cannot demote or disable yourself.
 

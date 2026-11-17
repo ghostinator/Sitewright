@@ -53,6 +53,10 @@ return [
     ['POST',   '/api/settings/test/{name}',             $C . 'SettingsController@test',    ['role' => 'admin']],
     ['POST',   '/api/settings/{key}/promote',           $C . 'SettingsController@promote', ['role' => 'admin']],
     ['DELETE', '/api/settings/{key}',                   $C . 'SettingsController@reset',   ['role' => 'admin']],
+    ['GET',    '/api/alerts',                   $C . 'AlertController@list',     ['role' => 'admin']],
+    ['POST',   '/api/alerts/mute',              $C . 'AlertController@mute',     ['role' => 'admin']],
+    ['DELETE', '/api/alerts/mute/{id}',         $C . 'AlertController@unmute',   ['role' => 'admin']],
+    ['POST',   '/api/alerts/preset',            $C . 'AlertController@preset',   ['role' => 'admin']],
     ['GET',    '/api/audit',                    $C . 'AuditController@list',     ['role' => 'admin']],
 
     // Watchlist: pages re-checked on a schedule (viewer reads, editor changes and runs)

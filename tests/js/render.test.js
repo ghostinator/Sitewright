@@ -547,3 +547,34 @@ test('sign-in form sends the "keep me signed in" choice with the credentials', a
   await new Promise(r => setTimeout(r, 100));
   assert.equal(sent[0].remember, true); assert.equal(sent[0].username, 'u');
 });
+
+const alertData = (o = {}) => Object.assign({ summary: { sent: 4, suppressed: 30, batched: 6, digest: 2, muted: 1 }, waiting: { batch: 3, digest: 2 }, channels: ['email', 'teams'],
+  mutes: [{ id: 9, project_id: 2, site: 'Corner', until: '2026-11-17 20:00:00', reason: 'deploying' }], settings: { max_per_hour: 30, batch_minutes: 15, digest_time: '08:00', quiet_start: '22:00', quiet_end: '07:00', timezone: 'America/Denver', cooldown: 86400 } }, o);
+test('alerts page: plain-words summary of the last 24 hours, what is waiting, active pauses with Resume, pause buttons and the two presets', () => {
+  const { SW, box } = load();
+  SW.renderAlertSummary(box, alertData(), [{ id: 2, name: 'Corner' }]);
+  assert.match(box.textContent, /4 sent/); assert.match(box.textContent, /30 held back/); assert.match(box.textContent, /6 batched/);
+  assert.match(box.textContent, /3 alerts are waiting for the next batch/); assert.match(box.textContent, /2.*daily digest.*08:00.*America\/Denver/s);
+  assert.match(box.textContent, /Quiet hours 22:00.*07:00/s); assert.match(box.textContent, /e-mail.*teams/i);
+  assert.equal(box.querySelector('[data-action="alerts-resume"]').dataset.id, '9'); assert.match(box.textContent, /Corner.*deploying/s);
+  assert.deepEqual([...box.querySelectorAll('[data-action="alerts-pause"]')].map(b => b.dataset.hours), ['1', '4', '24']);
+  assert.deepEqual([...box.querySelectorAll('#alerts-pause-site option')].map(o => o.textContent), ['Everything', 'Corner']);
+  assert.deepEqual([...box.querySelectorAll('[data-action="alerts-preset"]')].map(b => b.dataset.name), ['calm', 'everything']);
+  box.replaceChildren(); SW.renderAlertSummary(box, alertData({ mutes: [], waiting: { batch: 0, digest: 0 }, settings: { max_per_hour: 0, batch_minutes: 15, digest_time: '08:00', quiet_start: '', quiet_end: '', timezone: 'UTC', cooldown: 300 } }), []);
+  assert.equal(box.querySelector('[data-action="alerts-resume"]'), null); assert.doesNotMatch(box.textContent, /Quiet hours/); assert.doesNotMatch(box.textContent, /waiting/);
+});
+test('alert history: each row says what was decided and why, in words', () => {
+  const { SW, box } = load();
+  SW.renderAlertLog(box, { rows: [
+    { id: 1, created_at: '2026-11-17 14:00:00', event: 'job_failed', level: 'warning', project_id: 0, site: null, message: 'Job #1 failed', outcome: 'sent', channels: 'email,teams', reason: '' },
+    { id: 2, created_at: '2026-11-17 13:59:00', event: 'job_failed', level: 'warning', project_id: 0, site: null, message: 'Job #2 failed', outcome: 'suppressed', channels: '', reason: 'cooldown: the same alert was sent less than 24 h ago' },
+    { id: 3, created_at: '2026-11-17 13:58:00', event: 'watch_down', level: 'error', project_id: 2, site: 'Corner', message: 'Home is down', outcome: 'muted', channels: '', reason: 'muted: paused until 2026-11-17 20:00:00 UTC (deploying)' },
+    { id: 4, created_at: '2026-11-17 13:57:00', event: 'user_created', level: 'info', project_id: 0, site: null, message: 'bob', outcome: 'digest', channels: 'teams', reason: 'daily digest' },
+    { id: 5, created_at: '2026-11-17 13:56:00', event: 'a', level: 'info', project_id: 0, site: null, message: 'x', outcome: 'batched', channels: 'teams', reason: 'held for quiet hours' }] });
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 5);
+  assert.match(rows[0].textContent, /Sent/); assert.match(rows[0].textContent, /email, teams/); assert.match(rows[1].textContent, /Held back/); assert.match(rows[1].textContent, /cooldown/);
+  assert.match(rows[2].textContent, /Paused/); assert.match(rows[2].textContent, /Corner/); assert.match(rows[3].textContent, /Daily digest/); assert.match(rows[4].textContent, /Batched/); assert.match(rows[4].textContent, /quiet hours/);
+  box.replaceChildren(); SW.renderAlertLog(box, { rows: [] }); assert.match(box.textContent, /No alerts recorded/);
+  for (const p of PAYLOADS) { box.replaceChildren(); SW.renderAlertLog(box, { rows: [{ id: 1, created_at: p, event: p, level: 'warning', project_id: 0, site: p, message: p, outcome: 'sent', channels: p, reason: p }] });
+    assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p)); }
+});

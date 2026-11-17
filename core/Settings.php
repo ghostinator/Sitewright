@@ -18,6 +18,7 @@ final class Settings
 
     public const GROUPS = [
         'mail' => ['Mail & alerts', 'How Sitewright sends e-mail and who it alerts.'],
+        'alerts' => ['Alert controls', 'How many alerts and e-mails you get: which events, where they go, how often, when to stay quiet, and one daily summary.'],
         'security' => ['Security', 'Sign-in limits, session lengths and rate limits.'],
         'integrations' => ['Integrations', 'Gemini, Google, geocoding and what the server may fetch.'],
         'crawl' => ['Crawling & jobs', 'How much a crawl or image batch may do, and how often sites sync.'],
@@ -63,7 +64,6 @@ final class Settings
         $add('alerts.teams_webhook', 'mail', 'Teams webhook', 'Microsoft Teams Workflows webhook address (not tested yet).', 'secret', ['env' => 'SW_ALERT_TEAMS_WEBHOOK']);
         $add('alerts.telegram_token', 'mail', 'Telegram bot token', 'Not tested yet.', 'secret', ['env' => 'SW_ALERT_TELEGRAM_TOKEN']);
         $add('alerts.telegram_chat_id', 'mail', 'Telegram chat id', 'Not tested yet.', 'string', ['pattern' => '/^-?\d{0,20}$/D', 'env' => 'SW_ALERT_TELEGRAM_CHAT_ID']);
-        $add('alerts.cooldown', 'mail', 'Alert cooldown', 'The same alert is sent at most once in this time.', 'int', ['min' => 0, 'max' => 86400, 'unit' => 'seconds']);
         $add('alerts.login_failures', 'mail', 'Failed sign-ins before an alert', 'Alert when this many sign-ins fail within 10 minutes.', 'int', ['min' => 1, 'max' => 1000]);
         // ---- Security
         $add('session.idle_timeout', 'security', 'Session length when idle', 'Sign out after this much inactivity.', 'int', ['min' => 300, 'max' => 86400, 'unit' => 'seconds', 'danger' => true, 'danger_effects' => ['Changes how long everyone stays signed in.']]);
@@ -145,7 +145,22 @@ final class Settings
         $add('users.default_role', 'accounts', 'Default role for new users', 'Used when an administrator creates a user without choosing a role.', 'enum', ['enum' => ['viewer', 'editor', 'admin']]);
         $add('users.invite_days', 'accounts', 'Invitation link lifetime', 'How long an invitation e-mail link works.', 'int', ['min' => 1, 'max' => 30, 'unit' => 'days']);
         $add('users.reset_minutes', 'accounts', 'Password reset link lifetime', 'How long a reset e-mail link works.', 'int', ['min' => 5, 'max' => 1440, 'unit' => 'minutes']);
-        $add('alerts.events', 'accounts', 'Events that send an alert', 'One per line. An event that is not listed is never sent (it is still audited).', 'list', ['enum' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created', 'audit_new_issues', 'watch_down', 'watch_recovered', 'watch_regression']]);
+        $add('alerts.events', 'alerts', 'Send immediately', 'Alerts for these events go out the moment they happen. An event that is in none of the three lists (immediately, batches, daily digest) is never sent, but it is still recorded under Alert history.', 'list', ['enum' => Alerts::EVENTS]);
+        $add('alerts.events_batch', 'alerts', 'Send together in batches', 'Events listed here are collected and sent as ONE message every "Batch window". Good for things that happen in bursts, such as failed jobs.', 'list', ['enum' => Alerts::EVENTS]);
+        $add('alerts.events_digest', 'alerts', 'Send once a day (digest)', 'Events listed here are collected and sent as one summary at the digest time. Good for things that are only nice to know.', 'list', ['enum' => Alerts::EVENTS]);
+        $add('alerts.channels_error', 'alerts', 'Where errors go', 'email, teams and/or telegram (each must be set up under Mail & alerts). Leave empty to send no error alerts anywhere.', 'list', ['enum' => ['email', 'teams', 'telegram'], 'max_items' => 3]);
+        $add('alerts.channels_warning', 'alerts', 'Where warnings go', 'For example: only teams, so e-mail is kept for errors.', 'list', ['enum' => ['email', 'teams', 'telegram'], 'max_items' => 3]);
+        $add('alerts.channels_info', 'alerts', 'Where notices go', 'Recoveries and other good-to-know messages.', 'list', ['enum' => ['email', 'teams', 'telegram'], 'max_items' => 3]);
+        $add('alerts.max_per_hour', 'alerts', 'At most this many alerts an hour, per channel', 'Extra alerts are not lost: they wait and go out together in the next batch. 0 means no limit.', 'int', ['min' => 0, 'max' => 1000, 'unit' => 'alerts']);
+        $add('alerts.batch_minutes', 'alerts', 'Batch window', 'How long collected alerts wait before they are sent together.', 'int', ['min' => 1, 'max' => 1440, 'unit' => 'minutes']);
+        $add('alerts.digest_time', 'alerts', 'Daily digest time', 'Local time (see Time zone below), as HH:MM. Nothing is sent when there is nothing to say.', 'string', ['pattern' => '/^([01]\d|2[0-3]):[0-5]\d$/D']);
+        $add('alerts.quiet_start', 'alerts', 'Quiet hours start', 'HH:MM local time. Leave both quiet-hours fields empty for no quiet hours. In quiet hours only errors are sent (if allowed below); everything else waits and is sent together when quiet hours end.', 'string', ['pattern' => '/^(([01]\d|2[0-3]):[0-5]\d)?$/D']);
+        $add('alerts.quiet_end', 'alerts', 'Quiet hours end', 'HH:MM local time. A start later than the end means overnight (22:00 to 07:00).', 'string', ['pattern' => '/^(([01]\d|2[0-3]):[0-5]\d)?$/D']);
+        $add('alerts.quiet_breakthrough', 'alerts', 'Let errors through in quiet hours', 'On: an error (for example a site down) is still sent at night. Off: even errors wait.', 'bool');
+        $add('alerts.cooldown', 'alerts', 'Hold back repeats of the same alert for', 'The same event about the same page or site is sent at most once in this time (86400 seconds = 24 hours). It does not limit DIFFERENT alerts: use the hourly limit, batches and quiet hours for that. Down/recovered alerts are never held back, because they only fire when something changes.', 'int', ['min' => 0, 'max' => 86400, 'unit' => 'seconds']);
+        $add('alerts.cooldowns', 'alerts', 'Different hold-back for some events', 'One per line as event=seconds, for example job_failed=3600. 0 means that event is never held back.', 'list', ['item_pattern' => '/^[a-z_]{1,60}=\d{1,6}$/D']);
+        $add('display.timezone', 'alerts', 'Time zone for quiet hours and the digest', 'The time zone of the times above. Stored times everywhere else stay in UTC.', 'enum', ['enum' => \DateTimeZone::listIdentifiers()]);
+        $add('health.bad_checks', 'monitoring', 'Failed health checks in a row before "down"', 'The health check runs every minute. It reports a problem only after this many bad minutes in a row, so a restart or a blip does not alert.', 'int', ['min' => 1, 'max' => 10]);
 
         // ---- SEO scoring (Phase 2)
         $seo = [

@@ -18,9 +18,9 @@ foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 $views = [
     'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'watchlist' => 'Watchlist', 'site-audit' => 'Site Audit', 'opportunities' => 'Search Opportunities', 'analytics' => 'Analytics',
     'content-ai' => 'Content AI', 'local-seo' => 'Local SEO', 'image-seo' => 'Image SEO', 'sitemaps' => 'Sitemaps',
-    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'users' => 'Users', 'audit' => 'Audit Log', 'settings' => 'Settings',
+    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'alerts' => 'Alerts', 'users' => 'Users', 'audit' => 'Audit Log', 'settings' => 'Settings',
 ];
-$adminViews = ['sites', 'users', 'audit', 'settings'];
+$adminViews = ['sites', 'alerts', 'users', 'audit', 'settings'];
 $slug = trim(App::relativePath(), '/');
 $view = $slug === '' ? 'dashboard' : $slug;
 $resetPage = $slug === 'reset';   // public: the page the password-reset e-mail links to
@@ -369,6 +369,16 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                         <button type="submit" class="btn btn-primary">Add site</button></form>
                     <div id="site-secret" class="hidden"></div>
                     <div id="sites-list" class="list-area"></div>
+                </div></div>
+
+                <div class="view" id="view-alerts"><div class="card">
+                    <h3>Alerts</h3>
+                    <p class="text-muted">Everything Sitewright wanted to tell you, and what it did about each one. Use this page to see why you got (or did not get) a message, pause alerts while you work on a site, or switch to a calmer setup.</p>
+                    <div id="alerts-summary" class="list-area"></div>
+                    <h4>History</h4>
+                    <label class="inline-label" for="alert-outcome">Show</label>
+                    <select id="alert-outcome"><option value="">Everything</option><option value="sent">Sent</option><option value="suppressed">Held back</option><option value="batched">Batched</option><option value="digest">Daily digest</option><option value="muted">Paused</option></select>
+                    <div id="alerts-log" class="list-area"></div>
                 </div></div>
 
                 <div class="view" id="view-settings"><div class="card">

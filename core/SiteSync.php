@@ -34,7 +34,7 @@ final class SiteSync
             return ['message' => 'Synced', 'data' => $out];
         } catch (JobRetryException | JobFailedException | ConfigException $e) {
             $db->query('UPDATE `' . $db->t('sites') . "` SET last_sync_at = NOW(), last_status = 'error', last_error = :e, sync_requested = 0 WHERE id = :i", ['e' => mb_substr($e->getMessage(), 0, 250), 'i' => $id]);
-            Alerts::notify('site_sync_failed', "Sync with {$site['name']} failed: " . $e->getMessage(), 'warning', 'site' . $id);
+            Alerts::notify('site_sync_failed', "Sync with {$site['name']} failed: " . $e->getMessage(), 'warning', 'site' . $id, $id);
             throw $e instanceof ConfigException ? new JobFailedException($e->getMessage(), 500) : $e;
         }
     }

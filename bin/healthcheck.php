@@ -9,7 +9,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require dirname(__DIR__) . '/core/autoload.php';
 
-use Sitewright\Core\{Alerts, Config, Database, Jobs};
+use Sitewright\Core\{Alerts, Config, Database, Health, Jobs};
 
 $problems = [];
 try {
@@ -38,15 +38,11 @@ if ($bdir !== '') {
     elseif (time() - $newest > 36 * 3600) { $problems[] = 'newest database backup is ' . intdiv(time() - $newest, 3600) . ' hours old'; }
 }
 
-$state = Config::root() . '/storage/health.state';
-$was = is_file($state) ? trim((string)file_get_contents($state)) : 'ok';
-$now = $problems === [] ? 'ok' : 'bad';
-if ($now !== $was) {
-    @file_put_contents($state, $now);
-    $res = $now === 'bad'
-        ? Alerts::sendNow('health_down', implode('; ', $problems), 'error')
-        : Alerts::sendNow('health_recovered', 'All checks are passing again.', 'info');
-    echo 'alert: ' . json_encode($res) . "\n";
+$t = Health::record($problems === [])['transition'];
+if ($t === 'down') {
+    echo 'alert: ' . json_encode(Alerts::notifyDirect('health_down', implode('; ', $problems), 'error')) . "\n";
+} elseif ($t === 'recovered') {
+    echo 'alert: ' . json_encode(Alerts::notifyDirect('health_recovered', 'All checks are passing again.', 'info')) . "\n";
 }
 echo $problems === [] ? "ok\n" : 'PROBLEMS: ' . implode('; ', $problems) . "\n";
 exit($problems === [] ? 0 : 1);

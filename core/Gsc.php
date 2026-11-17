@@ -206,7 +206,7 @@ final class Gsc
         } catch (GscException $e) {
             $msg = mb_substr($e->getMessage(), 0, 250);
             $db->query('UPDATE `' . $db->t('gsc_connections') . "` SET last_sync_at = NOW(), last_status = IF(last_status = 'reauth', 'reauth', 'error'), last_error = :e WHERE id = :i", ['e' => $msg, 'i' => $id]);
-            Alerts::notify('gsc_sync_failed', 'Search Console sync failed: ' . $msg, 'warning', 'gsc' . $id);
+            Alerts::notify('gsc_sync_failed', 'Search Console sync failed: ' . $msg, 'warning', 'gsc' . $id, (int)($conn['site_id'] ?? 0));
             throw new JobFailedException($msg, 502);
         }
     }

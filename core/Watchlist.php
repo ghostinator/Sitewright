@@ -62,7 +62,7 @@ final class Watchlist
         $db->query('UPDATE `' . $db->t('watch_items') . "` SET last_run_at = NOW(), next_run_at = NOW() + INTERVAL :m MINUTE, fail_count = :f, last_error = :e"
             . ($down ? ", last_status = 'down'" : '') . ' WHERE id = :i', ['m' => $retry, 'f' => $fails, 'e' => mb_substr($why, 0, 255), 'i' => (int)$w['id']]);
         if ($down && !$wasDown) {
-            Alerts::notify('watch_down', self::name($w) . ' is not reachable: ' . $why, 'error', 'w' . $w['id']);
+            Alerts::notify('watch_down', self::name($w) . ' is not reachable: ' . $why, 'error', 'w' . $w['id'], (int)$w['project_id']);
         }
         return ['message' => 'Page unreachable', 'data' => ['status' => $down ? 'down' : 'ok', 'error' => $why]];
     }
@@ -85,10 +85,10 @@ final class Watchlist
             . ' last_noindex = :n, last_has_title = :t WHERE id = :i', ['h' => (int)$w['interval_hours'], 's' => $score, 'n' => (int)$noindex, 't' => (int)$hasTitle, 'i' => (int)$w['id']]);
         self::queuePageSpeed($w);
         if ($w['last_status'] === 'down') {
-            Alerts::notify('watch_recovered', self::name($w) . ' is reachable again (score ' . $score . ').', 'info', 'w' . $w['id']);
+            Alerts::notify('watch_recovered', self::name($w) . ' is reachable again (score ' . $score . ').', 'info', 'w' . $w['id'], (int)$w['project_id']);
         }
         if ($changes) {
-            Alerts::notify('watch_regression', self::name($w) . ': ' . implode('; ', $changes) . '.', 'warning', 'w' . $w['id']);
+            Alerts::notify('watch_regression', self::name($w) . ': ' . implode('; ', $changes) . '.', 'warning', 'w' . $w['id'], (int)$w['project_id']);
         }
         return ['message' => 'Checked', 'data' => ['status' => 'ok', 'score' => $score, 'changes' => $changes]];
     }

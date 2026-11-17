@@ -228,6 +228,34 @@
     /** Opens the browser's print dialog on the visible report (Save as PDF there). */
     const printButton = title => el('button', { class: 'btn btn-secondary btn-sm no-print', text: 'Print or save as PDF', attrs: { type: 'button' }, data: { action: 'print-report', title } });
 
+    const OUTCOME_LABELS = { sent: 'Sent', suppressed: 'Held back', batched: 'Batched', digest: 'Daily digest', muted: 'Paused' };
+    /** Alerts page, top part: what happened lately, what is waiting, pauses and presets. */
+    function renderAlertSummary(container, data, sites) {
+        const s = data.summary || {}, w = data.waiting || {}, set = data.settings || {};
+        const lines = [el('p', {}, el('strong', { text: 'Last 24 hours: ' }), (s.sent || 0) + ' sent, ' + (s.suppressed || 0) + ' held back (cooldown, limits or not enabled), ' + (s.batched || 0) + ' batched, ' + (s.digest || 0) + ' for the daily digest, ' + (s.muted || 0) + ' paused.')];
+        if (w.batch) lines.push(muted(w.batch + ' alert' + (w.batch === 1 ? ' is' : 's are') + ' waiting for the next batch (every ' + set.batch_minutes + ' minutes).'));
+        if (w.digest) lines.push(muted(w.digest + ' alert' + (w.digest === 1 ? ' is' : 's are') + ' waiting for the daily digest at ' + set.digest_time + ' (' + set.timezone + ').'));
+        lines.push(muted('Channels set up: ' + ((data.channels || []).join(', ').replace('email', 'e-mail') || 'none') + '. At most ' + (set.max_per_hour || 'unlimited') + ' alerts an hour per channel. The same alert about the same item is held back for ' + (set.cooldown >= 3600 ? (set.cooldown / 3600) + ' hours' : Math.round(set.cooldown / 60) + ' minutes') + '.'
+            + (set.quiet_start && set.quiet_end ? ' Quiet hours ' + set.quiet_start + ' to ' + set.quiet_end + ' (' + set.timezone + '): only errors get through.' : '')));
+        const mutes = (data.mutes || []).map(m => el('div', { class: 'list-item' }, el('div', {}, el('strong', { text: m.site ? 'Paused: ' + m.site : 'Paused: everything' }), ' until ' + m.until + ' UTC' + (m.reason ? ' (' + m.reason + ')' : '')),
+            el('div', {}, smallButton('Resume', 'alerts-resume', m.id))));
+        const siteSel = el('select', { attrs: { id: 'alerts-pause-site', 'aria-label': 'What to pause' } }, el('option', { text: 'Everything', attrs: { value: '0' } }), ...(sites || []).map(x => el('option', { text: x.name, attrs: { value: String(x.id) } })));
+        const pause = el('div', { class: 'form-inline' }, el('label', { class: 'inline-label', text: 'Pause alerts for', attrs: { for: 'alerts-pause-site' } }), siteSel,
+            ...[1, 4, 24].flatMap(h => [' ', el('button', { class: 'btn btn-secondary btn-sm', text: h + (h === 1 ? ' hour' : ' hours'), attrs: { type: 'button' }, data: { action: 'alerts-pause', hours: h } })]));
+        const presets = el('div', {}, el('p', { class: 'text-muted', text: 'Too many alerts? Calm sends only real problems at once, batches the rest, puts notices in one daily digest and keeps nights quiet. Everything goes back to one message per event.' }),
+            el('button', { class: 'btn btn-primary btn-sm', text: 'Calm', attrs: { type: 'button' }, data: { action: 'alerts-preset', name: 'calm' } }), ' ',
+            el('button', { class: 'btn btn-secondary btn-sm', text: 'Everything', attrs: { type: 'button' }, data: { action: 'alerts-preset', name: 'everything' } }),
+            el('p', { class: 'text-muted' }, 'Fine-tune every rule under ', el('button', { class: 'btn-link', text: 'Settings, Alert controls', attrs: { type: 'button' }, data: { goto: 'settings' } }), '.'));
+        setContent(container, ...lines, ...mutes, pause, el('h4', { text: 'Presets' }), presets);
+    }
+
+    function renderAlertLog(container, data) {
+        const rows = (data.rows || []).map(r => el('tr', {}, el('td', { text: r.created_at }), el('td', {}, el('strong', { text: r.event }), r.site ? el('br') : null, r.site ? el('small', { class: 'text-muted', text: r.site }) : null),
+            el('td', {}, el('span', { class: 'badge' + (r.outcome === 'sent' ? ' badge-ok' : ''), text: OUTCOME_LABELS[r.outcome] || r.outcome }), r.channels ? el('br') : null, r.channels ? el('small', { class: 'text-muted', text: r.channels.split(',').join(', ') }) : null),
+            el('td', { class: 'break-all' }, r.message, r.reason ? el('br') : null, r.reason ? el('small', { class: 'text-muted', text: r.reason }) : null)));
+        setContent(container, rows.length ? tableOf(['When (UTC)', 'Event', 'What happened', 'Message and reason'], rows) : muted('No alerts recorded yet.'));
+    }
+
     /** My Account: browsers that stay signed in. */
     function renderDevices(container, data) {
         const devices = data.devices || [];
@@ -600,7 +628,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -718,7 +746,7 @@
 
     // ------------------------------------------------------------------ navigation
 
-    const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', watchlist: 'Watchlist', 'site-audit': 'Site Audit', opportunities: 'Search Opportunities', analytics: 'Analytics', 'content-ai': 'Content AI',
+    const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', watchlist: 'Watchlist', alerts: 'Alerts', 'site-audit': 'Site Audit', opportunities: 'Search Opportunities', analytics: 'Analytics', 'content-ai': 'Content AI',
         'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules',
         account: 'My Account', sites: 'Sites', users: 'Users', audit: 'Audit Log', settings: 'Settings' };
     const viewUrl = v => BASE + (v === 'dashboard' ? '/' : '/' + v);
@@ -735,7 +763,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, 'site-audit': loadSiteAudits, opportunities: loadOpportunities, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
+        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, alerts: loadAlerts, 'site-audit': loadSiteAudits, opportunities: loadOpportunities, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
         syncExportLinks();
         if (loaders[view]) loaders[view]();
     }
@@ -804,6 +832,14 @@
     const canEdit = () => !!(cfg.user && cfg.user.role !== 'viewer');
     const loadWatchlist = () => { setContent(document.getElementById('watch-history'), null); return loadInto('watch-list', '/watch' + siteQuery('?'), (box, d) => renderWatchlist(box, d, canEdit(), psiOn), 'the watchlist'); };
     const loadOpportunities = () => { const t = document.getElementById('opp-type'); return loadInto('opp-list', '/opportunities' + siteQuery('?') + (t && t.value ? (siteId > 0 ? '&' : '?') + 'type=' + encodeURIComponent(t.value) : ''), renderOpportunities, 'search opportunities'); };
+    async function loadAlerts() {
+        const f = document.getElementById('alert-outcome'), sumBox = document.getElementById('alerts-summary'), logBox = document.getElementById('alerts-log');
+        if (!sumBox) return;
+        try {
+            const d = await apiRequest('GET', '/alerts?limit=100' + (f && f.value ? '&outcome=' + encodeURIComponent(f.value) : ''));
+            renderAlertSummary(sumBox, d, siteList); renderAlertLog(logBox, d);
+        } catch (e) { showError(sumBox, 'Could not load alerts: ' + e.message); }
+    }
     let auditPoll = null;
     async function loadSiteAudits() {
         clearTimeout(auditPoll);
@@ -1020,6 +1056,7 @@
 
     document.addEventListener('change', async e => {
         if (e.target.closest('#opp-type')) { loadOpportunities(); return; }
+        if (e.target.closest('#alert-outcome')) { loadAlerts(); return; }
         const sw = e.target.closest('#site-switch');
         if (sw) { setSite(sw.value, true); return; }
         const gs = e.target.closest('[data-change="gsc-site"]');
@@ -1129,6 +1166,9 @@
             await apiRequest('POST', '/redirections', { source_url: t.dataset.uri, target_url: t.dataset.target, redirect_type: '301', project_id: Number(t.dataset.project) || 0 });
             showToast('Redirect created: ' + t.dataset.uri + ' → ' + t.dataset.target); load404();
         },
+        'alerts-pause': async t => { const site = document.getElementById('alerts-pause-site'); await apiRequest('POST', '/alerts/mute', { project_id: Number(site && site.value) || 0, hours: Number(t.dataset.hours) }); showToast('Alerts paused'); loadAlerts(); },
+        'alerts-resume': async t => { await apiRequest('DELETE', '/alerts/mute/' + encodeURIComponent(t.dataset.id)); showToast('Alerts resumed'); loadAlerts(); },
+        'alerts-preset': async t => { if (confirm((t.dataset.name === 'calm' ? 'Apply the Calm preset?' : 'Go back to sending every alert immediately?') + ' This replaces your alert event lists, channels, limits and quiet hours.')) { const d = await apiRequest('POST', '/alerts/preset', { name: t.dataset.name }); showToast('Preset applied (' + d.changed.length + ' settings changed)'); loadAlerts(); } },
         'device-forget': async t => { await apiRequest('DELETE', '/auth/devices/' + encodeURIComponent(t.dataset.id)); showToast('Device forgotten'); loadDevices(); },
         'devices-forget-all': async () => { if (confirm('Forget every remembered browser, including this one? You will sign in again once your current session ends.')) { await apiRequest('DELETE', '/auth/devices'); showToast('All devices forgotten'); loadDevices(); } },
         'print-report': t => {
