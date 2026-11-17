@@ -282,6 +282,30 @@ test('sites: add a site without the plugin, switch to it from the header (rememb
   await expect(page.locator('#overview-card')).toBeVisible();
 });
 
+test('watchlist: add a page, run a check through the worker, see its score and history; "Watch this page" works from an analysis; pause and remove', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.goto('/watchlist');
+  await page.fill('#watch-url', 'http://sw-fixture/'); await page.fill('#watch-label', 'Fixture home');
+  await page.click('#watch-form button[type=submit]');
+  const row = page.locator('#watch-list tbody tr', { hasText: 'Fixture home' });
+  await expect(row).toContainText('Waiting for the first check');
+  await row.locator('[data-action=watch-run]').click();
+  await expect(async () => { await page.reload(); await expect(page.locator('#watch-list tbody tr', { hasText: 'Fixture home' })).toContainText('OK'); }).toPass({ timeout: 40000 });
+  await expect(row.locator('td').nth(2)).toContainText(/\d+/);
+  await row.locator('[data-action=watch-history]').click();
+  await expect(page.locator('#watch-history tbody tr')).toHaveCount(1);
+  await page.goto('/seo-analysis');
+  await page.fill('#seo-url', 'http://sw-fixture/'); await page.click('#seo-analysis-form button[type=submit]');
+  await page.click('[data-action=watch-add]');
+  await expect(page.locator('#toast')).toContainText(/already on the watchlist/);
+  await page.goto('/watchlist');
+  await page.locator('#watch-list tbody tr', { hasText: 'Fixture home' }).locator('[data-action=watch-toggle]').click();
+  await expect(page.locator('#watch-list tbody tr', { hasText: 'Fixture home' })).toContainText('Paused');
+  page.once('dialog', d => d.accept());
+  await page.locator('#watch-list tbody tr', { hasText: 'Fixture home' }).locator('[data-action=delete-watch]').click();
+  await expect(page.locator('#watch-list')).toContainText('Nothing is watched yet');
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {

@@ -583,3 +583,10 @@ select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 
 .data-table th { font-weight: 600; color: var(--text-light); white-space: nowrap; }
 .data-table td.num, .data-table th.num { text-align: right; }
 @media (max-width: 720px) { .site-switch { max-width: 9rem; } }
+
+/* Watchlist */
+.spark { vertical-align: middle; }
+.spark polyline { fill: none; stroke: var(--primary-color); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.badge-ok { color: #0d7a55; border-color: currentColor; }
+.badge-bad { color: #b42318; border-color: currentColor; font-weight: 600; }
+.row-actions { white-space: nowrap; }

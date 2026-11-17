@@ -26,6 +26,7 @@ final class Settings
         'site' => ['Images, sitemaps & redirects', 'Defaults for new sitemap rows, redirect rules and the image size check, and which 404 paths to ignore.'],
         'dashboard' => ['Dashboard & analytics', 'The date window and the cards shown on the dashboard.'],
         'accounts' => ['Users & alerts', 'Defaults for new accounts and which events send an alert.'],
+        'monitoring' => ['Monitoring', 'How often watched pages are checked, and when a change or an outage becomes an alert.'],
         'seo' => ['SEO scoring', 'What counts as a good title, description, speed and content, and how many points each check is worth. The score is the sum of the points, capped at 100.'],
     ];
 
@@ -72,6 +73,13 @@ final class Settings
         $add('limits.login_ip_attempts', 'security', 'Failed sign-ins per address', 'Wrong passwords allowed from one IP address in the window below.', 'int', ['min' => 10, 'max' => 1000, 'danger' => true, 'danger_effects' => ['Strict sign-in limits apply to everyone behind the same address, including you.']]);
         $add('limits.login_window', 'security', 'Sign-in limit window', 'How long failed sign-ins are counted.', 'int', ['min' => 60, 'max' => 86400, 'unit' => 'seconds', 'danger' => true, 'danger_effects' => ['A long window keeps people locked out for longer.']]);
         $add('limits.expensive_per_min', 'security', 'Heavy actions per minute', 'Analyses, crawls and AI requests allowed per user per minute.', 'int', ['min' => 1, 'max' => 600]);
+        // ---- Monitoring
+        $add('watch.max_items', 'monitoring', 'Most watched pages', 'Pages that can be on the watchlist at once.', 'int', ['min' => 1, 'max' => 1000]);
+        $add('watch.max_per_tick', 'monitoring', 'Checks started per minute', 'Scheduled checks begin at most this many per minute, and never two at once on the same site, so a long list is spread out.', 'int', ['min' => 1, 'max' => 50]);
+        $add('watch.score_drop', 'monitoring', 'Score drop that raises an alert', 'Alert when a watched page scores at least this many points lower than at its previous check.', 'int', ['min' => 1, 'max' => 100, 'unit' => 'points']);
+        $add('watch.down_after', 'monitoring', 'Failed checks before a page is "down"', 'A page that cannot be fetched this many times in a row is reported down (once), and again when it recovers.', 'int', ['min' => 1, 'max' => 10]);
+        $add('watch.retry_minutes', 'monitoring', 'Recheck a failing page after', 'A page that failed is checked again after this long instead of waiting for its normal interval.', 'int', ['min' => 5, 'max' => 1440, 'unit' => 'minutes']);
+        $add('watch.retention_days', 'monitoring', 'Keep watch history for', 'Scheduled analyses older than this are deleted. Manual analyses are kept.', 'int', ['min' => 7, 'max' => 3650, 'unit' => 'days']);
         // ---- Integrations
         $add('gemini.api_key', 'integrations', 'Gemini API key', 'Content AI uses templates when this is empty.', 'secret', ['env' => 'SW_GEMINI_API_KEY']);
         $add('gemini.model', 'integrations', 'Gemini model', 'For example gemini-3.6-flash.', 'string', ['pattern' => '/^[A-Za-z0-9._\-]{1,80}$/D', 'env' => 'SW_GEMINI_MODEL']);
@@ -123,7 +131,7 @@ final class Settings
         $add('users.default_role', 'accounts', 'Default role for new users', 'Used when an administrator creates a user without choosing a role.', 'enum', ['enum' => ['viewer', 'editor', 'admin']]);
         $add('users.invite_days', 'accounts', 'Invitation link lifetime', 'How long an invitation e-mail link works.', 'int', ['min' => 1, 'max' => 30, 'unit' => 'days']);
         $add('users.reset_minutes', 'accounts', 'Password reset link lifetime', 'How long a reset e-mail link works.', 'int', ['min' => 5, 'max' => 1440, 'unit' => 'minutes']);
-        $add('alerts.events', 'accounts', 'Events that send an alert', 'One per line. An event that is not listed is never sent (it is still audited).', 'list', ['enum' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created']]);
+        $add('alerts.events', 'accounts', 'Events that send an alert', 'One per line. An event that is not listed is never sent (it is still audited).', 'list', ['enum' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created', 'watch_down', 'watch_recovered', 'watch_regression']]);
 
         // ---- SEO scoring (Phase 2)
         $seo = [

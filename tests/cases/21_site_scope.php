@@ -61,11 +61,14 @@ test('overview: one row per site with its latest score, 28-day search numbers an
     $db->insert('analytics_keywords', ['project_id' => $blog, 'keyword' => 'k', 'impressions' => 500, 'clicks' => 20, 'position' => 4, 'ctr' => 4, 'date' => gmdate('Y-m-d', strtotime('-3 days'))]);
     $db->insert('analytics_keywords', ['project_id' => $blog, 'keyword' => 'old', 'impressions' => 900, 'clicks' => 90, 'position' => 4, 'ctr' => 10, 'date' => gmdate('Y-m-d', strtotime('-60 days'))]);
     $db->insert('404_monitor', ['project_id' => $blog, 'uri' => '/gone', 'hits' => 3]);
+    $db->query('TRUNCATE sw_watch_items');
+    foreach ([['/a', 'ok', 1], ['/b', 'down', 1], ['/c', 'down', 0]] as [$p, $st, $en]) { $db->insert('watch_items', ['project_id' => $blog, 'url' => "https://blog.example$p", 'last_status' => $st, 'enabled' => $en]); }
     $o = call(OverviewController::class, 'sites')['json']['data']['sites']; $by = array_column($o, null, 'name');
     eq(array_column($o, 'name'), ['Blog', 'Shop'], 'sorted by name');
     eq([$by['Blog']['last_score'], $by['Blog']['impressions'], $by['Blog']['clicks'], $by['Blog']['not_found']], [70, 500, 20, 1], 'competitor analysis and rows older than 28 days are ignored');
     eq([$by['Shop']['last_score'], $by['Shop']['impressions'], $by['Shop']['clicks'], $by['Shop']['not_found']], [null, null, null, 0]);
     eq($by['Shop']['plugin'], false); eq($by['Blog']['plugin'], true);
+    eq([$by['Blog']['watched'], $by['Blog']['down']], [2, 1], 'paused items are not counted'); eq([$by['Shop']['watched'], $by['Shop']['down']], [0, 0]);
 });
 test('overview and the site list are readable by every signed-in role (a viewer needs them to choose a site)', function () use ($db) {
     seedAdmin('vi', 'viewer passphrase long here', 'viewer');

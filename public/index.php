@@ -16,7 +16,7 @@ if (!Config::hostAllowed((string)($_SERVER['HTTP_HOST'] ?? ''))) {
 foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 
 $views = [
-    'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'analytics' => 'Analytics',
+    'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'watchlist' => 'Watchlist', 'analytics' => 'Analytics',
     'content-ai' => 'Content AI', 'local-seo' => 'Local SEO', 'image-seo' => 'Image SEO', 'sitemaps' => 'Sitemaps',
     '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'users' => 'Users', 'audit' => 'Audit Log', 'settings' => 'Settings',
 ];
@@ -162,6 +162,21 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <?php if ($user && $user['role'] === 'admin'): ?><p class="text-muted settings-link-note"><small>Titles are judged against <?= (int)Config::get('seo.title_min') ?>–<?= (int)Config::get('seo.title_max') ?> characters and descriptions against <?= (int)Config::get('seo.meta_min') ?>–<?= (int)Config::get('seo.meta_max') ?>. <a href="<?= $h($base) ?>/settings#seo">Change in Settings</a></small></p><?php endif; ?>
                     <form id="competitor-form" class="form"><div class="form-group"><label for="competitor-url">Competitor URL</label><input type="url" id="competitor-url" placeholder="https://competitor.com" required maxlength="2048"></div><button type="submit" class="btn btn-primary">Analyze Competitor</button></form>
                     <div id="competitor-results" class="results-area"></div>
+                </div></div>
+
+                <div class="view" id="view-watchlist"><div class="card">
+                    <h3>Watchlist</h3>
+                    <p class="text-muted">Pages that are re-checked on a schedule. You are alerted when a page's score drops, it gains <code>noindex</code> or loses its title, goes down, and when it recovers. The site chosen in the header decides which pages are listed and which site a new page belongs to.</p>
+                    <?php if ($user && $user['role'] !== 'viewer'): ?>
+                    <form id="watch-form" class="form form-inline" autocomplete="off">
+                        <div class="form-group"><label for="watch-url">Page address</label><input type="url" id="watch-url" placeholder="https://example.com/important-page" required maxlength="500"></div>
+                        <div class="form-group"><label for="watch-label">Name (optional)</label><input id="watch-label" maxlength="100"></div>
+                        <div class="form-group"><label for="watch-interval">Check</label><select id="watch-interval"><option value="6">every 6 hours</option><option value="12">every 12 hours</option><option value="24" selected>daily</option><option value="72">every 3 days</option><option value="168">weekly</option></select></div>
+                        <button type="submit" class="btn btn-primary">Add to watchlist</button>
+                    </form>
+                    <?php endif; ?>
+                    <div id="watch-list" class="list-area"></div>
+                    <div id="watch-history" class="list-area"></div>
                 </div></div>
 
                 <div class="view" id="view-analytics"><div class="card">

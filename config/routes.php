@@ -52,6 +52,14 @@ return [
     ['DELETE', '/api/settings/{key}',                   $C . 'SettingsController@reset',   ['role' => 'admin']],
     ['GET',    '/api/audit',                    $C . 'AuditController@list',     ['role' => 'admin']],
 
+    // Watchlist: pages re-checked on a schedule (viewer reads, editor changes and runs)
+    ['GET',    '/api/watch',                $C . 'WatchController@list',    ['role' => 'viewer']],
+    ['POST',   '/api/watch',                $C . 'WatchController@create',  ['role' => 'editor']],
+    ['GET',    '/api/watch/{id}/history',   $C . 'WatchController@history', ['role' => 'viewer']],
+    ['POST',   '/api/watch/{id}/run',       $C . 'WatchController@run',     ['role' => 'editor']],
+    ['PATCH',  '/api/watch/{id}',           $C . 'WatchController@update',  ['role' => 'editor']],
+    ['DELETE', '/api/watch/{id}',           $C . 'WatchController@delete',  ['role' => 'editor']],
+
     // SEO analysis (outbound fetch of the analysed URL)
     ['POST', '/api/seo-analysis/analyze', $M . 'SeoAnalysis\\SeoAnalysisController@analyze', ['limit' => 'fetch']],
     ['GET',  '/api/seo-analysis/history', $M . 'SeoAnalysis\\SeoAnalysisController@getHistory'],

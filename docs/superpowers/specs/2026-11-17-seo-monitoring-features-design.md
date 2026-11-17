@@ -46,7 +46,7 @@ Owner request (2026-11-17): build all seven proposed features, "in full", includ
 |---|---------|--------|--------|-------|
 | 0 | Shared refactors (SeoAnalyzer, Crawler, Jobs::touch; migration 010; `Validator::csvCell` already exists, reused for CSV) | done | (this commit) | PHP 457/457 (8.3) |
 | 7 | Per-site scoping, site switcher, overview; sites without the plugin (`sync_enabled`) | done | (next commit) | PHP 466, JS 33, browser 13 |
-| 1 | Watchlist, score history, regression alerts | not started | | |
+| 1 | Watchlist, score history, regression alerts (migration 011, Watchlist/WatchController, settings group Monitoring) | done | (next commit) | PHP 482, JS 37, browser 14 |
 | 2 | Site audit (+ scheduled repeat, diff) | not started | | |
 | 3 | Redirect suggestions from the 404 log | not started | | |
 | 4 | Search Console: pages import, opportunities | not started | | |

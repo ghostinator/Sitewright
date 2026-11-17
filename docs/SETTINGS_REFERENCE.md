@@ -135,7 +135,20 @@ Defaults for new accounts and which events send an alert.
 | Default role for new users | `users.default_role` | viewer | viewer / editor / admin |  | Used when an administrator creates a user without choosing a role. |
 | Invitation link lifetime | `users.invite_days` | 7 | 1 to 30 days |  | How long an invitation e-mail link works. |
 | Password reset link lifetime | `users.reset_minutes` | 60 | 5 to 1440 minutes |  | How long a reset e-mail link works. |
-| Events that send an alert | `alerts.events` | account_changed, account_deleted, gsc_sync_failed, job_failed, login_failures, mfa_disabled, mfa_reset, server_error, setting_changed, site_sync_failed, user_created | account_changed / account_deleted / gsc_sync_failed / job_failed / login_failures / mfa_disabled / mfa_reset / server_error / setting_changed / site_sync_failed / user_created |  | One per line. An event that is not listed is never sent (it is still audited). |
+| Events that send an alert | `alerts.events` | account_changed, account_deleted, gsc_sync_failed, job_failed, login_failures, mfa_disabled, mfa_reset, server_error, setting_changed, site_sync_failed, user_created, watch_down, watch_recovered, watch_regression | account_changed / account_deleted / gsc_sync_failed / job_failed / login_failures / mfa_disabled / mfa_reset / server_error / setting_changed / site_sync_failed / user_created / watch_down / watch_recovered / watch_regression |  | One per line. An event that is not listed is never sent (it is still audited). |
+
+## Monitoring
+
+How often watched pages are checked, and when a change or an outage becomes an alert.
+
+| Setting | Key | Default | Allowed | Environment variable | Notes |
+|---|---|---|---|---|---|
+| Most watched pages | `watch.max_items` | 100 | 1 to 1000 |  | Pages that can be on the watchlist at once. |
+| Checks started per minute | `watch.max_per_tick` | 5 | 1 to 50 |  | Scheduled checks begin at most this many per minute, and never two at once on the same site, so a long list is spread out. |
+| Score drop that raises an alert | `watch.score_drop` | 10 | 1 to 100 points |  | Alert when a watched page scores at least this many points lower than at its previous check. |
+| Failed checks before a page is "down" | `watch.down_after` | 2 | 1 to 10 |  | A page that cannot be fetched this many times in a row is reported down (once), and again when it recovers. |
+| Recheck a failing page after | `watch.retry_minutes` | 15 | 5 to 1440 minutes |  | A page that failed is checked again after this long instead of waiting for its normal interval. |
+| Keep watch history for | `watch.retention_days` | 365 | 7 to 3650 days |  | Scheduled analyses older than this are deleted. Manual analyses are kept. |
 
 ## SEO scoring
 

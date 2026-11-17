@@ -58,7 +58,7 @@
         return el('div', { class: 'result-section' }, el('h4', { text: title }), ...nodes);
     }
 
-    function renderSeoResults(container, data) {
+    function renderSeoResults(container, data, opts) {
         const r = data.results;
         const score = Number(data.score);
         const cls = score >= 80 ? 'good' : score >= 50 ? 'average' : 'poor';
@@ -82,7 +82,9 @@
             section('Basics', resultRow('HTTPS (final URL)', yn(r.security.uses_https)), resultRow('Viewport meta tag present', yn(r.viewport.has_viewport)),
                 resultRow('Structured data (JSON-LD)', yn(r.structured_data.has_schema)), resultRow('Word count', r.basic.word_count),
                 resultRow('Canonical', r.basic.canonical || 'none'), resultRow('Language', r.basic.lang || 'not set'), resultRow('noindex', yn(r.basic.noindex))),
-            muted('Heuristic checks based on one server-side fetch.')));
+            muted('Heuristic checks based on one server-side fetch.'),
+            opts && opts.canWatch ? el('p', {}, el('button', { class: 'btn btn-secondary', text: 'Watch this page', attrs: { type: 'button' }, data: { action: 'watch-add', url: data.url } }),
+                ' ', el('small', { class: 'text-muted', text: 'Re-checks it on a schedule and alerts you if it gets worse or goes down.' })) : null));
     }
 
     function renderContentResult(container, data, onCopy) {
@@ -164,16 +166,64 @@
             (Number(s.sync_enabled) === 0 ? [] : [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id)]).concat([deleteButton('delete-site', s.id)]))));
     }
 
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    /** Small score trend (values 0-100, oldest first). Fewer than two points draws nothing. */
+    function sparkline(values) {
+        const v = (values || []).filter(x => x !== null && x !== undefined).map(Number);
+        if (v.length < 2) return null;
+        const W = 80, H = 22, step = W / (v.length - 1);
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        for (const [k, val] of Object.entries({ class: 'spark', viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', 'aria-label': 'Score trend: ' + v.join(', ') })) svg.setAttribute(k, String(val));
+        const line = document.createElementNS(SVG_NS, 'polyline');
+        line.setAttribute('points', v.map((x, i) => (i * step).toFixed(1) + ',' + (H - 1 - (Math.max(0, Math.min(100, x)) / 100) * (H - 2)).toFixed(1)).join(' '));
+        svg.append(line);
+        return svg;
+    }
+    const everyText = h => h === 24 ? 'daily' : h === 168 ? 'weekly' : 'every ' + h + (h === 1 ? ' hour' : ' hours');
+
+    /** Watchlist table. canEdit: editors and admins may run, pause and remove. */
+    function renderWatchlist(container, data, canEdit) {
+        const items = data.items || [];
+        if (!items.length) return setContent(container, muted('Nothing is watched yet. Add a page above, or press "Watch this page" on an analysis result.'));
+        const status = w => !w.enabled ? el('span', { class: 'badge', text: 'Paused' })
+            : w.last_status === 'down' ? el('span', { class: 'badge badge-bad', text: 'Down' })
+            : w.last_status === 'new' ? el('span', { class: 'badge', text: 'Waiting for the first check' }) : el('span', { class: 'badge badge-ok', text: 'OK' });
+        const head = el('thead', {}, el('tr', {}, ...['Page', 'Status', 'Score', 'Last check', 'Actions'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+        const body = el('tbody', {}, ...items.map(w => {
+            const actions = [smallButton('History', 'watch-history', w.id)];
+            if (canEdit) actions.push(smallButton('Check now', 'watch-run', w.id), smallButton(w.enabled ? 'Pause' : 'Resume', 'watch-toggle', w.id), smallButton('Remove', 'delete-watch', w.id, 'btn-danger'));
+            actions.forEach(a => { if (a.dataset.action === 'watch-toggle') a.dataset.enabled = w.enabled ? '1' : '0'; });
+            return el('tr', {},
+                el('td', {}, el('strong', { text: w.label || w.url }), el('br'), el('small', { class: 'text-muted break-all', text: (w.label ? w.url + ' | ' : '') + (w.site ? w.site + ' | ' : '') + everyText(w.interval_hours) })),
+                el('td', {}, status(w), w.last_status === 'down' && w.last_error ? el('div', { class: 'text-muted', text: w.last_error }) : null),
+                el('td', {}, w.last_score === null || w.last_score === undefined ? '–' : String(w.last_score), ' ', sparkline(w.trend)),
+                el('td', { text: w.last_run_at || 'never' }),
+                el('td', { class: 'row-actions' }, ...actions.flatMap((a, i) => i ? [' ', a] : [a])));
+        }));
+        setContent(container, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
+    }
+
+    function renderWatchHistory(container, data) {
+        const pts = (data.points || []).slice().reverse();
+        if (!pts.length) return setContent(container, muted('No checks yet.'));
+        const head = el('thead', {}, el('tr', {}, ...['Checked', 'Score', 'Fetch time', 'Words', 'Notes'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+        const body = el('tbody', {}, ...pts.map(p => el('tr', {}, el('td', { text: p.at }), el('td', { text: p.score === null ? '–' : String(p.score) }),
+            el('td', { text: p.load_time === null || p.load_time === undefined ? '–' : p.load_time + 's' }), el('td', { text: p.word_count === null || p.word_count === undefined ? '–' : fmtInt(p.word_count) }),
+            el('td', { text: p.noindex ? 'noindex' : '' }))));
+        setContent(container, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
+    }
+
     /** "All sites" dashboard table. A missing number is a dash, never 0. */
     function renderOverview(container, data) {
         const sites = data.sites || [];
         if (!sites.length) return setContent(container, muted('No sites yet. Add your first site under Sites.'));
         const num = v => (v === null || v === undefined) ? '–' : fmtInt(v);
-        const head = el('thead', {}, el('tr', {}, ...['Site', 'Latest score', 'Impressions (28d)', 'Clicks (28d)', '404s (30d)'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+        const head = el('thead', {}, el('tr', {}, ...['Site', 'Latest score', 'Watched pages', 'Impressions (28d)', 'Clicks (28d)', '404s (30d)'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
         const body = el('tbody', {}, ...sites.map(s => el('tr', {},
             el('td', {}, el('button', { class: 'btn-link', text: s.name, attrs: { type: 'button' }, data: { pickSite: s.id } }), ' ', Number(s.plugin) ? null : el('span', { class: 'badge', text: 'no plugin' }), el('br'),
                 el('small', { class: 'text-muted break-all', text: s.base_url + (s.last_analyzed_at ? ' | analysed ' + s.last_analyzed_at : '') })),
             el('td', { text: s.last_score === null || s.last_score === undefined ? '–' : String(s.last_score) }),
+            el('td', {}, s.watched ? String(s.watched) : '–', ...(Number(s.down) > 0 ? [' ', el('span', { class: 'badge badge-bad', text: s.down + ' down' })] : [])),
             el('td', { text: num(s.impressions) }), el('td', { text: num(s.clicks) }), el('td', { text: num(s.not_found) }))));
         setContent(container, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
     }
@@ -424,7 +474,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderOverview, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -542,7 +592,7 @@
 
     // ------------------------------------------------------------------ navigation
 
-    const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', analytics: 'Analytics', 'content-ai': 'Content AI',
+    const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', watchlist: 'Watchlist', analytics: 'Analytics', 'content-ai': 'Content AI',
         'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules',
         account: 'My Account', sites: 'Sites', users: 'Users', audit: 'Audit Log', settings: 'Settings' };
     const viewUrl = v => BASE + (v === 'dashboard' ? '/' : '/' + v);
@@ -559,7 +609,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
+        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
         if (loaders[view]) loaders[view]();
     }
 
@@ -614,6 +664,8 @@
         if (cfg.user && cfg.user.role !== 'admin') { setContent(box, muted('Ask an administrator to connect Google Search Console.')); return; }
         try { renderGsc(box, await apiRequest('GET', '/gsc'), gscProps, siteList); } catch (e) { showError(box, 'Could not load Search Console: ' + e.message); }
     }
+    const canEdit = () => !!(cfg.user && cfg.user.role !== 'viewer');
+    const loadWatchlist = () => { setContent(document.getElementById('watch-history'), null); return loadInto('watch-list', '/watch' + siteQuery('?'), (box, d) => renderWatchlist(box, d, canEdit()), 'the watchlist'); };
     const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
     const loadSitemaps = () => loadInto('sitemap-list', '/sitemap' + siteQuery('?'), (box, rows) => setContent(box,
         rows.length ? el('p', { class: 'text-muted', text: rows.length + ' URL(s) stored. ' }, el('a', { text: 'Download XML', attrs: { href: BASE + '/api/sitemap/generate-xml', target: '_blank', rel: 'noopener' } })) : muted('No sitemap URLs stored yet.')), 'sitemap');
@@ -687,6 +739,12 @@
     const submitHandlers = {
         'seo-analysis-form': form => analyse(form, 'seo-url', 'seo-results', false),
         'competitor-form': form => analyse(form, 'competitor-url', 'competitor-results', true),
+        'watch-form': async form => {
+            try {
+                await apiRequest('POST', '/watch', { url: form.querySelector('#watch-url').value.trim(), label: form.querySelector('#watch-label').value.trim(), interval_hours: Number(form.querySelector('#watch-interval').value), project_id: siteId });
+                form.reset(); showToast('Added. The first check runs within a minute or two.'); loadWatchlist();
+            } catch (e) { showToast(e.message, 'error'); }
+        },
         'content-ai-form': async form => {
             const box = document.getElementById('ai-results');
             setContent(box, muted('Generating…'));
@@ -790,7 +848,7 @@
         setContent(box, muted('Analyzing… this may take a moment.'));
         try {
             const data = await apiRequest('POST', '/seo-analysis/analyze', { url: form.querySelector('#' + inputId).value, is_competitor: competitor, project_id: siteId });
-            renderSeoResults(box, data);
+            renderSeoResults(box, data, { canWatch: !competitor && cfg.user && cfg.user.role !== 'viewer' });
             showToast(competitor ? 'Competitor analysis complete' : 'Analysis complete');
         } catch (e) { showError(box, e.message); }
     }
@@ -908,6 +966,17 @@
         'delete-location': async t => { if (confirm('Delete this location?')) { await apiRequest('DELETE', '/local-seo/locations/' + encodeURIComponent(t.dataset.id)); showToast('Location deleted'); loadLocations(); } },
         'site-sync': async t => { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/sync', {}); showToast('Sync started'); await new Promise(r => setTimeout(r, 2500)); loadSites(); return d; },
         'site-rotate': async t => { if (confirm('Create a new secret? Syncing stops until the plugin has it.')) { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/rotate-secret', {}); const box = document.getElementById('site-secret'); setContent(box, el('div', { class: 'alert alert-error', text: 'New secret (shown once): put it into the plugin.' }), el('pre', { class: 'break-all', text: d.secret })); box.classList.remove('hidden'); loadSites(); } },
+        'watch-add': async t => { await apiRequest('POST', '/watch', { url: t.dataset.url, project_id: siteId }); showToast('Added to the watchlist'); },
+        'watch-run': async t => { await apiRequest('POST', '/watch/' + encodeURIComponent(t.dataset.id) + '/run', {}); showToast('Check queued'); setTimeout(loadWatchlist, 6000); },
+        'watch-toggle': async t => { await apiRequest('PATCH', '/watch/' + encodeURIComponent(t.dataset.id), { enabled: t.dataset.enabled !== '1' }); loadWatchlist(); },
+        'delete-watch': async t => { if (confirm('Remove this page from the watchlist? Its check history is deleted too.')) { await apiRequest('DELETE', '/watch/' + encodeURIComponent(t.dataset.id)); showToast('Removed'); loadWatchlist(); } },
+        'watch-history': async t => {
+            const box = document.getElementById('watch-history');
+            setContent(box, muted('Loading…'));
+            const d = await apiRequest('GET', '/watch/' + encodeURIComponent(t.dataset.id) + '/history');
+            const tmp = el('div'); renderWatchHistory(tmp, d);
+            setContent(box, el('h4', { text: 'Check history' }), tmp);
+        },
         'delete-site': async t => { if (confirm('Remove this site from Sitewright? Its rules and 404 entries are kept.')) { await apiRequest('DELETE', '/sites/' + encodeURIComponent(t.dataset.id)); showToast('Site removed'); loadSites(); loadSiteOptions(); } },
         'gsc-connect': async () => { const d = await apiRequest('POST', '/gsc/connect', {}); window.location.assign(d.url); },
         'gsc-properties': async t => { gscProps[t.dataset.id] = await apiRequest('GET', '/gsc/' + encodeURIComponent(t.dataset.id) + '/properties'); loadGsc(); },

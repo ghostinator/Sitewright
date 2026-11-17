@@ -311,13 +311,14 @@ test('result checks are labelled in words (Pass / Fix), not emoji, and the label
 test('overview: one row per site with score, search numbers and 404s; "no data" is a dash, not 0; the site name picks that site', () => {
   const { SW, box } = load();
   SW.renderOverview(box, { sites: [
-    { id: 4, name: 'Blog', base_url: 'https://blog.example', plugin: true, last_score: 70, last_analyzed_at: '2026-11-17 01:00:00', impressions: 1500, clicks: 20, not_found: 3 },
+    { id: 4, name: 'Blog', base_url: 'https://blog.example', plugin: true, last_score: 70, last_analyzed_at: '2026-11-17 01:00:00', impressions: 1500, clicks: 20, not_found: 3, watched: 4, down: 1 },
     { id: 5, name: 'Shop', base_url: 'https://shop.example', plugin: false, last_score: null, last_analyzed_at: null, impressions: null, clicks: null, not_found: 0 }] });
   const rows = [...box.querySelectorAll('tbody tr')];
   assert.equal(rows.length, 2);
   assert.match(rows[0].textContent, /Blog/); assert.match(rows[0].textContent, /70/); assert.match(rows[0].textContent, /1,500/);
   assert.match(rows[1].textContent, /Shop/); assert.doesNotMatch(rows[1].textContent, /\b0\b.*\b0\b.*\b0\b/);
   assert.equal(rows[1].querySelectorAll('td')[1].textContent, '–', 'no score yet is a dash');
+  assert.match(rows[0].textContent, /4.*1 down/); assert.equal(rows[1].querySelectorAll('td')[2].textContent, '–', 'nothing watched is a dash');
   const pick = rows[0].querySelector('[data-pick-site]'); assert.equal(pick.dataset.pickSite, '4');
   box.replaceChildren(); SW.renderOverview(box, { sites: [] });
   assert.match(box.textContent, /No sites yet/);
@@ -345,4 +346,50 @@ test('Search Console panel: each connection can be tied to a site', () => {
   const sel = box.querySelector('select[data-change="gsc-site"]');
   assert.ok(sel && sel.dataset.id === '9'); assert.equal(sel.value, '5');
   assert.deepEqual([...sel.options].map(o => o.textContent), ['Not tied to a site', 'Blog', 'Shop']);
+});
+
+const watchItem = (o = {}) => Object.assign({ id: 3, site: 'Corner', url: 'https://w.example/', label: 'Home', interval_hours: 24, enabled: true, last_run_at: '2026-11-17 02:00:00',
+  next_run_at: '2026-11-18 02:00:00', last_score: 72, last_status: 'ok', last_error: null, fail_count: 0, trend: [60, 65, 72] }, o);
+test('watchlist: status, score with a trend line, and actions only for people who can edit', () => {
+  const { SW, box } = load();
+  SW.renderWatchlist(box, { items: [watchItem(), watchItem({ id: 4, url: 'https://d.example/', label: '', last_status: 'down', last_error: 'The site answered with HTTP 503', last_score: 80, fail_count: 3 }),
+    watchItem({ id: 5, url: 'https://n.example/', last_status: 'new', last_score: null, trend: [], last_run_at: null }), watchItem({ id: 6, url: 'https://p.example/', enabled: false })] }, true);
+  const rows = [...box.querySelectorAll('tbody tr')];
+  assert.equal(rows.length, 4);
+  assert.match(rows[0].textContent, /OK/); assert.match(rows[0].textContent, /72/); assert.match(rows[0].textContent, /Home/);
+  assert.match(rows[1].textContent, /Down/); assert.match(rows[1].textContent, /HTTP 503/);
+  assert.match(rows[2].textContent, /waiting for the first check/i); assert.doesNotMatch(rows[2].textContent, /\b0\b/);
+  assert.match(rows[3].textContent, /Paused/);
+  const spark = rows[0].querySelector('svg.spark'); assert.ok(spark); assert.equal(spark.getAttribute('role'), 'img'); assert.match(spark.getAttribute('aria-label'), /60, 65, 72/);
+  assert.equal(spark.querySelector('polyline').getAttribute('points').trim().split(/\s+/).length, 3);
+  assert.equal(rows[2].querySelector('svg'), null, 'no trend yet, no chart');
+  for (const a of ['watch-run', 'watch-toggle', 'delete-watch', 'watch-history']) assert.ok(rows[0].querySelector('[data-action="' + a + '"]'), a);
+  assert.equal(rows[0].querySelector('[data-action="watch-toggle"]').textContent, 'Pause'); assert.equal(rows[3].querySelector('[data-action="watch-toggle"]').textContent, 'Resume');
+  box.replaceChildren(); SW.renderWatchlist(box, { items: [watchItem()] }, false);
+  assert.ok(box.querySelector('[data-action="watch-history"]')); for (const a of ['watch-run', 'watch-toggle', 'delete-watch']) assert.equal(box.querySelector('[data-action="' + a + '"]'), null, a);
+  box.replaceChildren(); SW.renderWatchlist(box, { items: [] }, true); assert.match(box.textContent, /Nothing is watched yet/);
+});
+test('watchlist: hostile text is shown as text only', () => {
+  const { SW, box } = load();
+  for (const p of PAYLOADS) {
+    box.replaceChildren(); SW.renderWatchlist(box, { items: [watchItem({ url: p, label: p, site: p, last_error: p, last_status: 'down' })] }, true);
+    const bad = box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta');
+    assert.equal(bad.length, 0, 'injected element for ' + p);
+    for (const n of box.querySelectorAll('*')) for (const a of n.attributes) assert.ok(!/^on/i.test(a.name) && !/^\s*javascript:/i.test(a.value), 'attribute ' + a.name);
+    assert.ok(box.textContent.includes(p));
+  }
+});
+test('watch history: a table of dates, scores and fetch times; empty says so', () => {
+  const { SW, box } = load();
+  SW.renderWatchHistory(box, { points: [{ at: '2026-11-16 02:00:00', score: 60, load_time: 0.4, word_count: 700, noindex: false, title_length: 45 }, { at: '2026-11-17 02:00:00', score: 72, load_time: 0.3, word_count: 710, noindex: true, title_length: 45 }] });
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 2);
+  assert.match(rows[0].textContent, /2026-11-17/, 'newest first'); assert.match(rows[0].textContent, /noindex/i);
+  box.replaceChildren(); SW.renderWatchHistory(box, { points: [] }); assert.match(box.textContent, /No checks yet/);
+});
+test('analysis result offers "Watch this page" to people who can edit, with the analysed address in a data attribute', () => {
+  const { SW, box } = load();
+  SW.renderSeoResults(box, seoData('x'), { canWatch: true });
+  const b = box.querySelector('[data-action="watch-add"]'); assert.ok(b); assert.equal(b.dataset.url, 'x');
+  box.replaceChildren(); SW.renderSeoResults(box, seoData('x'));
+  assert.equal(box.querySelector('[data-action="watch-add"]'), null);
 });

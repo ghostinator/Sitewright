@@ -16,6 +16,7 @@ final class OverviewController
         $score = $this->byProject("SELECT project_id, SUBSTRING_INDEX(GROUP_CONCAT(score ORDER BY analyzed_at DESC, id DESC), ',', 1) v, MAX(analyzed_at) at FROM `{$db->t('seo_analysis')}` WHERE analysis_type = 'site' AND project_id > 0 AND score IS NOT NULL GROUP BY project_id");
         $search = $this->byProject("SELECT project_id, SUM(impressions) imp, SUM(clicks) clk FROM `{$db->t('analytics_keywords')}` WHERE project_id > 0 AND `date` >= CURDATE() - INTERVAL 28 DAY GROUP BY project_id");
         $nf = $this->byProject("SELECT project_id, COUNT(*) n FROM `{$db->t('404_monitor')}` WHERE project_id > 0 AND last_accessed >= NOW() - INTERVAL 30 DAY GROUP BY project_id");
+        $watch = $this->byProject("SELECT project_id, COUNT(*) n, SUM(last_status = 'down') d FROM `{$db->t('watch_items')}` WHERE enabled = 1 AND project_id > 0 GROUP BY project_id");
         $out = [];
         foreach ($sites as $s) {
             $id = (int)$s['id'];
@@ -23,7 +24,7 @@ final class OverviewController
                 'id' => $id, 'name' => $s['name'], 'base_url' => $s['base_url'], 'plugin' => (bool)(int)$s['sync_enabled'],
                 'last_score' => isset($score[$id]) ? (int)$score[$id]['v'] : null, 'last_analyzed_at' => $score[$id]['at'] ?? null,
                 'impressions' => isset($search[$id]) ? (int)$search[$id]['imp'] : null, 'clicks' => isset($search[$id]) ? (int)$search[$id]['clk'] : null,
-                'not_found' => (int)($nf[$id]['n'] ?? 0),
+                'not_found' => (int)($nf[$id]['n'] ?? 0), 'watched' => (int)($watch[$id]['n'] ?? 0), 'down' => (int)($watch[$id]['d'] ?? 0),
             ];
         }
         Response::success('Overview', ['sites' => $out]);
