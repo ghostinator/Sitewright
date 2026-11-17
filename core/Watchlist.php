@@ -83,6 +83,7 @@ final class Watchlist
         }
         $db->query('UPDATE `' . $db->t('watch_items') . "` SET last_run_at = NOW(), next_run_at = NOW() + INTERVAL :h HOUR, last_score = :s, last_status = 'ok', last_error = NULL, fail_count = 0,"
             . ' last_noindex = :n, last_has_title = :t WHERE id = :i', ['h' => (int)$w['interval_hours'], 's' => $score, 'n' => (int)$noindex, 't' => (int)$hasTitle, 'i' => (int)$w['id']]);
+        self::queuePageSpeed($w);
         if ($w['last_status'] === 'down') {
             Alerts::notify('watch_recovered', self::name($w) . ' is reachable again (score ' . $score . ').', 'info', 'w' . $w['id']);
         }
@@ -90,6 +91,19 @@ final class Watchlist
             Alerts::notify('watch_regression', self::name($w) . ': ' . implode('; ', $changes) . '.', 'warning', 'w' . $w['id']);
         }
         return ['message' => 'Checked', 'data' => ['status' => 'ok', 'score' => $score, 'changes' => $changes]];
+    }
+
+    /** Web Vitals for a page that has them switched on: at most one measurement per pagespeed.watch_days, never while one is already queued. */
+    private static function queuePageSpeed(array $w): void
+    {
+        if (!(int)$w['pagespeed'] || !PageSpeed::enabled()) { return; }
+        $db = Database::getInstance();
+        $recent = $db->fetchOne('SELECT 1 x FROM `' . $db->t('pagespeed_runs') . '` WHERE watch_id = :i AND fetched_at > NOW() - INTERVAL :d DAY', ['i' => (int)$w['id'], 'd' => max(1, (int)Config::get('pagespeed.watch_days'))]);
+        if ($recent) { return; }
+        $payload = ['url' => (string)$w['url'], 'project_id' => (int)$w['project_id'], 'watch_id' => (int)$w['id']];
+        $json = (string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($db->fetchOne('SELECT 1 x FROM `' . $db->t('jobs') . "` WHERE type = 'pagespeed' AND status IN ('queued','running') AND payload = :p", ['p' => $json])) { return; }
+        Jobs::enqueue('pagespeed', $payload, null, 0, 1);
     }
 
     /** Delete scheduled analyses past the retention window (manual analyses have no watch_id and are kept). @return int rows deleted */

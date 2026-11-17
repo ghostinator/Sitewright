@@ -90,6 +90,10 @@ final class Settings
         $add('search.striking_from', 'dashboard', '"Striking distance" starts at position', 'A query ranking from this position down to the next setting is listed as within reach of page one.', 'int', ['min' => 2, 'max' => 50]);
         $add('search.striking_to', 'dashboard', '"Striking distance" ends at position', 'See above.', 'int', ['min' => 3, 'max' => 100]);
         // ---- Integrations
+        $add('pagespeed.enabled', 'integrations', 'Measure Core Web Vitals (Google PageSpeed)', 'Off by default. When on, the address of a page you measure is sent to Google PageSpeed Insights, which loads the page itself. Only public addresses are sent.', 'bool', ['env' => 'SW_PAGESPEED_ENABLED']);
+        $add('pagespeed.api_key', 'integrations', 'PageSpeed API key', 'Needed in practice: without a key Google answers from a shared free quota that is almost always used up (tested). Create a free key in the Google Cloud console (enable the PageSpeed Insights API). Stored encrypted and sent in a request header, never in the address.', 'secret', ['env' => 'SW_PAGESPEED_KEY', 'show_when' => ['pagespeed.enabled', true]]);
+        $add('pagespeed.strategy', 'integrations', 'Measure as', 'Mobile is what Google ranks by; desktop is the other view.', 'enum', ['enum' => ['mobile', 'desktop'], 'show_when' => ['pagespeed.enabled', true]]);
+        $add('pagespeed.watch_days', 'monitoring', 'Web Vitals on watched pages every', 'Watched pages that have Web Vitals switched on are measured this often (one measurement per page per period).', 'int', ['min' => 1, 'max' => 90, 'unit' => 'days']);
         $add('gemini.api_key', 'integrations', 'Gemini API key', 'Content AI uses templates when this is empty.', 'secret', ['env' => 'SW_GEMINI_API_KEY']);
         $add('gemini.model', 'integrations', 'Gemini model', 'For example gemini-3.6-flash.', 'string', ['pattern' => '/^[A-Za-z0-9._\-]{1,80}$/D', 'env' => 'SW_GEMINI_MODEL']);
         $add('enable_geocoding', 'integrations', 'Look up coordinates for new locations', 'Sends the address to OpenStreetMap Nominatim when a location has no coordinates.', 'bool', ['env' => 'SW_ENABLE_GEOCODING']);

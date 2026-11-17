@@ -11,7 +11,7 @@ final class WatchController
         $db = Database::getInstance();
         $project = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);
         $w = $project > 0 ? ' WHERE w.project_id = :p' : '';
-        $items = $db->fetchAll('SELECT w.id, w.project_id, s.name AS site, w.url, w.label, w.interval_hours, w.enabled, w.last_run_at, w.next_run_at, w.last_score, w.last_status, w.last_error, w.fail_count'
+        $items = $db->fetchAll('SELECT w.id, w.project_id, s.name AS site, w.url, w.label, w.interval_hours, w.enabled, w.last_run_at, w.next_run_at, w.last_score, w.last_status, w.last_error, w.fail_count, w.pagespeed'
             . ' FROM `' . $db->t('watch_items') . '` w LEFT JOIN `' . $db->t('sites') . "` s ON s.id = w.project_id$w ORDER BY w.last_status = 'down' DESC, s.name, w.url", $project > 0 ? ['p' => $project] : []);
         $trend = [];
         if ($items) {
@@ -19,7 +19,14 @@ final class WatchController
             foreach ($db->fetchAll('SELECT watch_id, score FROM (SELECT watch_id, score, ROW_NUMBER() OVER (PARTITION BY watch_id ORDER BY analyzed_at DESC, id DESC) rn FROM `' . $db->t('seo_analysis')
                 . "` WHERE watch_id IN ($ids)) x WHERE rn <= 12 ORDER BY watch_id, rn DESC") as $r) { $trend[(int)$r['watch_id']][] = $r['score'] === null ? null : (int)$r['score']; }
         }
+        $psi = [];
+        if ($items) {
+            $ids = implode(',', array_map(static fn (array $i): int => (int)$i['id'], $items));
+            foreach ($db->fetchAll('SELECT p.watch_id, p.perf_score, p.lcp_ms, p.cls, p.fetched_at FROM `' . $db->t('pagespeed_runs') . '` p JOIN (SELECT watch_id, MAX(id) mid FROM `' . $db->t('pagespeed_runs')
+                . "` WHERE watch_id IN ($ids) AND status = 'ok' GROUP BY watch_id) m ON m.mid = p.id") as $r) { $psi[(int)$r['watch_id']] = ['perf_score' => $r['perf_score'] === null ? null : (int)$r['perf_score'], 'lcp_ms' => $r['lcp_ms'] === null ? null : (int)$r['lcp_ms'], 'cls' => $r['cls'] === null ? null : (float)$r['cls'], 'at' => $r['fetched_at']]; }
+        }
         foreach ($items as &$i) {
+            $i['pagespeed'] = (bool)(int)$i['pagespeed']; $i['psi'] = $psi[(int)$i['id']] ?? null;
             $i['enabled'] = (bool)(int)$i['enabled']; $i['last_score'] = $i['last_score'] === null ? null : (int)$i['last_score']; $i['trend'] = $trend[(int)$i['id']] ?? [];
             $i['interval_hours'] = (int)$i['interval_hours']; $i['fail_count'] = (int)$i['fail_count'];
         }
@@ -36,7 +43,7 @@ final class WatchController
         $db = Database::getInstance(); $t = $db->t('watch_items');
         if ((int)$db->fetchOne("SELECT COUNT(*) n FROM `$t`")['n'] >= (int)Config::get('watch.max_items')) { Response::error('The watchlist is full (' . (int)Config::get('watch.max_items') . ' pages). Remove one or raise the limit in Settings.', 409); }
         if ($db->fetchOne("SELECT 1 x FROM `$t` WHERE project_id = :p AND url_hash = SHA2(:u, 256)", ['p' => $project, 'u' => $url])) { Response::error('That page is already on the watchlist.', 409); }
-        $id = (int)$db->insert('watch_items', ['project_id' => $project, 'url' => $url, 'label' => $label, 'interval_hours' => $hours, 'created_by' => $this->userId()]);
+        $id = (int)$db->insert('watch_items', ['project_id' => $project, 'url' => $url, 'label' => $label, 'interval_hours' => $hours, 'created_by' => $this->userId(), 'pagespeed' => filter_var($in['pagespeed'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0]);
         Audit::log('watch_added', null, '', $url);
         Response::success('Added to the watchlist. The first check runs within a minute or two.', ['id' => $id], 201);
     }
@@ -48,6 +55,7 @@ final class WatchController
         $set = [];
         if (array_key_exists('enabled', $in)) { $set['enabled'] = filter_var($in['enabled'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0; }
         if (array_key_exists('interval_hours', $in)) { $set['interval_hours'] = Validator::int($in, 'interval_hours', 1, 720); }
+        if (array_key_exists('pagespeed', $in)) { $set['pagespeed'] = filter_var($in['pagespeed'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0; }
         if (array_key_exists('label', $in)) { $set['label'] = Validator::str($in, 'label', 100) ?? ''; }
         if ($set === []) { Response::error('Nothing to change', 400); }
         Database::getInstance()->update('watch_items', $set, ['id' => $id]);

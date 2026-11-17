@@ -60,6 +60,11 @@ return [
     ['PATCH',  '/api/watch/{id}',           $C . 'WatchController@update',  ['role' => 'editor']],
     ['DELETE', '/api/watch/{id}',           $C . 'WatchController@delete',  ['role' => 'editor']],
 
+    // Core Web Vitals through Google PageSpeed Insights (opt-in under Settings)
+    ['GET',    '/api/pagespeed/status',          $C . 'PageSpeedController@status',  ['role' => 'viewer']],
+    ['GET',    '/api/pagespeed',                 $C . 'PageSpeedController@history', ['role' => 'viewer']],
+    ['POST',   '/api/pagespeed/run',             $C . 'PageSpeedController@run',     ['role' => 'editor', 'limit' => 'fetch']],
+
     // Search opportunities (from Search Console data)
     ['GET',    '/api/opportunities',             $C . 'OpportunityController@list', ['role' => 'viewer']],
 

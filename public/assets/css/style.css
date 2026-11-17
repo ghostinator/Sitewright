@@ -590,3 +590,4 @@ select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 
 .badge-ok { color: #0d7a55; border-color: currentColor; }
 .badge-bad { color: #b42318; border-color: currentColor; font-weight: 600; }
 .row-actions { white-space: nowrap; }
+.check-bad { color: #b42318; }

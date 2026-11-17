@@ -478,3 +478,31 @@ test('opportunities: no data explains how to get some; no findings says so; host
     assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p));
   }
 });
+
+const psiRun = (o = {}) => Object.assign({ status: 'ok', error: null, strategy: 'mobile', perf_score: 87, lcp_ms: 2412, cls: 0.045, tbt_ms: 130, fcp_ms: 1210, ttfb_ms: 311, field_category: 'AVERAGE', field_lcp_ms: 4500, field_cls: 0.12, field_inp_ms: 190, fetched_at: '2026-11-17 03:00:00' }, o);
+test('Web Vitals card: score, each metric in plain units with Good / Needs work / Poor in words, real-user data when Google has it', () => {
+  const { SW, box } = load();
+  SW.renderPageSpeed(box, psiRun());
+  assert.match(box.textContent, /87/); assert.match(box.textContent, /mobile/i);
+  const row = label => [...box.querySelectorAll('tbody tr')].find(r => r.textContent.includes(label));
+  assert.match(row('Largest Contentful Paint').textContent, /2\.4 s/); assert.match(row('Largest Contentful Paint').textContent, /Good/);
+  assert.match(row('Layout shift').textContent, /0\.045/); assert.match(row('Layout shift').textContent, /Good/);
+  assert.match(row('Total blocking time').textContent, /130 ms/); assert.match(row('Server response').textContent, /311 ms/);
+  assert.match(box.textContent, /real users/i); assert.match(row('Largest Contentful Paint (real users)').textContent, /Poor/); assert.match(row('Layout shift (real users)').textContent, /Needs work/); assert.match(row('Interaction to Next Paint').textContent, /Good/);
+  box.replaceChildren(); SW.renderPageSpeed(box, psiRun({ field_category: null, field_lcp_ms: null, field_cls: null, field_inp_ms: null })); assert.doesNotMatch(box.textContent, /real users/i);
+});
+test('Web Vitals card: a refused or failed measurement shows the reason, not zeros', () => {
+  const { SW, box } = load();
+  SW.renderPageSpeed(box, psiRun({ status: 'rate_limited', error: 'Google quota used up. Create a free key.', perf_score: null, lcp_ms: null }));
+  assert.match(box.textContent, /quota used up/); assert.equal(box.querySelectorAll('table').length, 0);
+  for (const p of PAYLOADS) { box.replaceChildren(); SW.renderPageSpeed(box, psiRun({ status: 'error', error: p })); assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p)); }
+});
+test('analysis result offers Web Vitals only when it is switched on and the person can edit; the watchlist shows the newest measurement and a switch', () => {
+  const { SW, box } = load();
+  SW.renderSeoResults(box, seoData('x'), { canWatch: true, canPsi: true }); const b = box.querySelector('[data-action="psi-run"]'); assert.ok(b); assert.equal(b.dataset.url, 'x'); assert.match(b.parentElement.textContent, /sent to Google/i, 'the disclosure sits right next to the button');
+  box.replaceChildren(); SW.renderSeoResults(box, seoData('x'), { canWatch: true }); assert.equal(box.querySelector('[data-action="psi-run"]'), null);
+  box.replaceChildren(); SW.renderWatchlist(box, { items: [watchItem({ pagespeed: true, psi: { perf_score: 82, lcp_ms: 2100, cls: 0.04, at: '2026-11-17' } }), watchItem({ id: 9, url: 'https://n.example/', pagespeed: false, psi: null })] }, true, true);
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.match(rows[0].textContent, /82/); assert.match(rows[0].textContent, /2\.1 s/);
+  assert.equal(rows[0].querySelector('[data-action="watch-psi"]').textContent, 'Web Vitals: on'); assert.equal(rows[1].querySelector('[data-action="watch-psi"]').textContent, 'Web Vitals: off');
+  box.replaceChildren(); SW.renderWatchlist(box, { items: [watchItem()] }, true, false); assert.equal(box.querySelector('[data-action="watch-psi"]'), null, 'not offered while Settings has it off');
+});

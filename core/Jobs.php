@@ -150,6 +150,7 @@ final class Jobs
         if ($type === 'gsc_sync') { return Gsc::handleJob($payload); }
         if ($type === 'watch_run') { return Watchlist::handleJob($payload); }
         if ($type === 'site_audit') { return SiteAudit::handleJob($payload); }
+        if ($type === 'pagespeed') { return PageSpeed::handleJob($payload); }
         if (isset(self::$handlers[$type])) {
             return (self::$handlers[$type])($payload);
         }

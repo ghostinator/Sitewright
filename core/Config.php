@@ -35,6 +35,7 @@ final class Config
             'app_key'          => '',
             'security'         => ['require_mfa' => false],
             'watch' => ['max_items' => 100, 'max_per_tick' => 5, 'score_drop' => 10, 'down_after' => 2, 'retry_minutes' => 15, 'retention_days' => 365],
+            'pagespeed' => ['enabled' => false, 'api_key' => '', 'strategy' => 'mobile', 'watch_days' => 7],
             'search' => ['min_impressions' => 100, 'striking_from' => 8, 'striking_to' => 20],
             'audit' => ['max_pages' => 200, 'max_seconds' => 600, 'thin_words' => 200, 'external_links_max' => 50, 'repeat_days' => 0, 'keep' => 10],
             'dashboard' => ['window_days' => 30, 'cards' => ['seo', 'keywords', 'impressions', 'clicks']],

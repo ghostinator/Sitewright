@@ -172,6 +172,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                         <div class="form-group"><label for="watch-url">Page address</label><input type="url" id="watch-url" placeholder="https://example.com/important-page" required maxlength="500"></div>
                         <div class="form-group"><label for="watch-label">Name (optional)</label><input id="watch-label" maxlength="100"></div>
                         <div class="form-group"><label for="watch-interval">Check</label><select id="watch-interval"><option value="6">every 6 hours</option><option value="12">every 12 hours</option><option value="24" selected>daily</option><option value="72">every 3 days</option><option value="168">weekly</option></select></div>
+                        <div class="form-group"><label><input type="checkbox" id="watch-psi"> Also measure Core Web Vitals weekly (needs Settings, Integrations)</label></div>
                         <button type="submit" class="btn btn-primary">Add to watchlist</button>
                     </form>
                     <?php endif; ?>

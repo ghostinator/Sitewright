@@ -84,7 +84,10 @@
                 resultRow('Canonical', r.basic.canonical || 'none'), resultRow('Language', r.basic.lang || 'not set'), resultRow('noindex', yn(r.basic.noindex))),
             muted('Heuristic checks based on one server-side fetch.'),
             opts && opts.canWatch ? el('p', {}, el('button', { class: 'btn btn-secondary', text: 'Watch this page', attrs: { type: 'button' }, data: { action: 'watch-add', url: data.url } }),
-                ' ', el('small', { class: 'text-muted', text: 'Re-checks it on a schedule and alerts you if it gets worse or goes down.' })) : null));
+                ' ', el('small', { class: 'text-muted', text: 'Re-checks it on a schedule and alerts you if it gets worse or goes down.' })) : null,
+            opts && opts.canPsi ? el('p', {}, el('button', { class: 'btn btn-secondary', text: 'Measure Core Web Vitals', attrs: { type: 'button' }, data: { action: 'psi-run', url: data.url } }),
+                ' ', el('small', { class: 'text-muted', text: 'The address is sent to Google, which loads the page itself (about a minute).' })) : null,
+            opts && opts.canPsi ? el('div', { attrs: { id: 'psi-result' } }) : null));
     }
 
     function renderContentResult(container, data, onCopy) {
@@ -182,21 +185,23 @@
     const everyText = h => h === 24 ? 'daily' : h === 168 ? 'weekly' : 'every ' + h + (h === 1 ? ' hour' : ' hours');
 
     /** Watchlist table. canEdit: editors and admins may run, pause and remove. */
-    function renderWatchlist(container, data, canEdit) {
+    function renderWatchlist(container, data, canEdit, psiOn) {
         const items = data.items || [];
         if (!items.length) return setContent(container, muted('Nothing is watched yet. Add a page above, or press "Watch this page" on an analysis result.'));
         const status = w => !w.enabled ? el('span', { class: 'badge', text: 'Paused' })
             : w.last_status === 'down' ? el('span', { class: 'badge badge-bad', text: 'Down' })
             : w.last_status === 'new' ? el('span', { class: 'badge', text: 'Waiting for the first check' }) : el('span', { class: 'badge badge-ok', text: 'OK' });
-        const head = el('thead', {}, el('tr', {}, ...['Page', 'Status', 'Score', 'Last check', 'Actions'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+        const head = el('thead', {}, el('tr', {}, ...['Page', 'Status', 'Score', 'Web Vitals', 'Last check', 'Actions'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
         const body = el('tbody', {}, ...items.map(w => {
             const actions = [smallButton('History', 'watch-history', w.id)];
+            if (canEdit && psiOn) { const b = smallButton('Web Vitals: ' + (w.pagespeed ? 'on' : 'off'), 'watch-psi', w.id); b.dataset.on = w.pagespeed ? '1' : '0'; actions.push(b); }
             if (canEdit) actions.push(smallButton('Check now', 'watch-run', w.id), smallButton(w.enabled ? 'Pause' : 'Resume', 'watch-toggle', w.id), smallButton('Remove', 'delete-watch', w.id, 'btn-danger'));
             actions.forEach(a => { if (a.dataset.action === 'watch-toggle') a.dataset.enabled = w.enabled ? '1' : '0'; });
             return el('tr', {},
                 el('td', {}, el('strong', { text: w.label || w.url }), el('br'), el('small', { class: 'text-muted break-all', text: (w.label ? w.url + ' | ' : '') + (w.site ? w.site + ' | ' : '') + everyText(w.interval_hours) })),
                 el('td', {}, status(w), w.last_status === 'down' && w.last_error ? el('div', { class: 'text-muted', text: w.last_error }) : null),
                 el('td', {}, w.last_score === null || w.last_score === undefined ? '–' : String(w.last_score), ' ', sparkline(w.trend)),
+                el('td', { text: w.psi ? 'Score ' + w.psi.perf_score + (w.psi.lcp_ms !== null ? ', LCP ' + (w.psi.lcp_ms / 1000).toFixed(1) + ' s' : '') : (w.pagespeed ? 'waiting' : '–') }),
                 el('td', { text: w.last_run_at || 'never' }),
                 el('td', { class: 'row-actions' }, ...actions.flatMap((a, i) => i ? [' ', a] : [a])));
         }));
@@ -274,6 +279,28 @@
                 canEdit ? el('button', { class: 'btn btn-secondary btn-sm', text: 'Redirect to ' + s.target, attrs: { type: 'button' }, data: { action: 'redirect-accept', uri: i.uri, target: s.target, project: i.project_id } }) : el('span', { class: 'break-all', text: s.target }),
                 ' ', el('span', { class: 'badge', text: s.score + '% match' + (s.score < 55 ? ', low confidence' : '') }), ' ', el('small', { class: 'text-muted', text: s.reason }))]))));
         setContent(container, tableOf(['404 address', 'Suggested pages'], rows), more);
+    }
+
+    const rate = (v, good, ok) => v <= good ? ['Good', 'check-ok'] : v <= ok ? ['Needs work', 'check-warn'] : ['Poor', 'check-bad'];
+    /** Core Web Vitals result card. A refused measurement shows its reason instead of numbers. */
+    function renderPageSpeed(container, run) {
+        if (run.status !== 'ok') return setContent(container, el('div', { class: 'alert ' + (run.status === 'rate_limited' ? 'alert-warn' : 'alert-error'), text: run.error || 'The measurement did not complete.' }));
+        const sec = v => (v / 1000).toFixed(1) + ' s';
+        const metric = (label, shown, r) => el('tr', {}, el('td', { text: label }), el('td', { text: shown }), el('td', {}, r ? el('span', { class: 'check ' + r[1], text: r[0] }) : null));
+        const rows = [];
+        if (run.lcp_ms !== null) rows.push(metric('Largest Contentful Paint', sec(run.lcp_ms), rate(run.lcp_ms, 2500, 4000)));
+        if (run.cls !== null) rows.push(metric('Layout shift', String(run.cls), rate(run.cls, 0.1, 0.25)));
+        if (run.tbt_ms !== null) rows.push(metric('Total blocking time', run.tbt_ms + ' ms', rate(run.tbt_ms, 200, 600)));
+        if (run.fcp_ms !== null) rows.push(metric('First Contentful Paint', sec(run.fcp_ms), rate(run.fcp_ms, 1800, 3000)));
+        if (run.ttfb_ms !== null) rows.push(metric('Server response time', run.ttfb_ms + ' ms', rate(run.ttfb_ms, 800, 1800)));
+        const field = [];
+        if (run.field_lcp_ms !== null) field.push(metric('Largest Contentful Paint (real users)', sec(run.field_lcp_ms), rate(run.field_lcp_ms, 2500, 4000)));
+        if (run.field_cls !== null) field.push(metric('Layout shift (real users)', String(run.field_cls), rate(run.field_cls, 0.1, 0.25)));
+        if (run.field_inp_ms !== null) field.push(metric('Interaction to Next Paint (real users)', run.field_inp_ms + ' ms', rate(run.field_inp_ms, 200, 500)));
+        setContent(container, el('h4', { text: 'Core Web Vitals' }),
+            el('p', {}, el('strong', { text: 'Performance score ' + (run.perf_score === null ? '–' : run.perf_score) + '/100' }), ' (' + run.strategy + ', measured by Google PageSpeed Insights ' + run.fetched_at + ').'),
+            tableOf(['Measure', 'Value', 'Rating'], rows.concat(field)),
+            field.length ? muted('"Real users" figures come from Chrome users over the last 28 days. They are what Google uses for ranking, and only exist for pages with enough visits.') : muted('No real-user data exists for this page yet (too few visits), so only the lab test above is shown.'));
     }
 
     const OPP_LABELS = { ctr_gap: 'Low click-through', striking_distance: 'Within reach of page one', cannibalisation: 'Pages competing', falling: 'Losing clicks' };
@@ -554,7 +581,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -745,8 +772,10 @@
         if (cfg.user && cfg.user.role !== 'admin') { setContent(box, muted('Ask an administrator to connect Google Search Console.')); return; }
         try { renderGsc(box, await apiRequest('GET', '/gsc'), gscProps, siteList); } catch (e) { showError(box, 'Could not load Search Console: ' + e.message); }
     }
+    let psiOn = false;
+    apiRequest('GET', '/pagespeed/status').then(s => { psiOn = !!s.enabled; }).catch(() => {});
     const canEdit = () => !!(cfg.user && cfg.user.role !== 'viewer');
-    const loadWatchlist = () => { setContent(document.getElementById('watch-history'), null); return loadInto('watch-list', '/watch' + siteQuery('?'), (box, d) => renderWatchlist(box, d, canEdit()), 'the watchlist'); };
+    const loadWatchlist = () => { setContent(document.getElementById('watch-history'), null); return loadInto('watch-list', '/watch' + siteQuery('?'), (box, d) => renderWatchlist(box, d, canEdit(), psiOn), 'the watchlist'); };
     const loadOpportunities = () => { const t = document.getElementById('opp-type'); return loadInto('opp-list', '/opportunities' + siteQuery('?') + (t && t.value ? (siteId > 0 ? '&' : '?') + 'type=' + encodeURIComponent(t.value) : ''), renderOpportunities, 'search opportunities'); };
     let auditPoll = null;
     async function loadSiteAudits() {
@@ -841,7 +870,7 @@
         },
         'watch-form': async form => {
             try {
-                await apiRequest('POST', '/watch', { url: form.querySelector('#watch-url').value.trim(), label: form.querySelector('#watch-label').value.trim(), interval_hours: Number(form.querySelector('#watch-interval').value), project_id: siteId });
+                await apiRequest('POST', '/watch', { url: form.querySelector('#watch-url').value.trim(), label: form.querySelector('#watch-label').value.trim(), interval_hours: Number(form.querySelector('#watch-interval').value), project_id: siteId, pagespeed: !!(form.querySelector('#watch-psi') && form.querySelector('#watch-psi').checked) });
                 form.reset(); showToast('Added. The first check runs within a minute or two.'); loadWatchlist();
             } catch (e) { showToast(e.message, 'error'); }
         },
@@ -948,7 +977,7 @@
         setContent(box, muted('Analyzing… this may take a moment.'));
         try {
             const data = await apiRequest('POST', '/seo-analysis/analyze', { url: form.querySelector('#' + inputId).value, is_competitor: competitor, project_id: siteId });
-            renderSeoResults(box, data, { canWatch: !competitor && cfg.user && cfg.user.role !== 'viewer' });
+            renderSeoResults(box, data, { canWatch: !competitor && cfg.user && cfg.user.role !== 'viewer', canPsi: !competitor && psiOn && cfg.user && cfg.user.role !== 'viewer' });
             showToast(competitor ? 'Competitor analysis complete' : 'Analysis complete');
         } catch (e) { showError(box, e.message); }
     }
@@ -1071,6 +1100,13 @@
             await apiRequest('POST', '/redirections', { source_url: t.dataset.uri, target_url: t.dataset.target, redirect_type: '301', project_id: Number(t.dataset.project) || 0 });
             showToast('Redirect created: ' + t.dataset.uri + ' → ' + t.dataset.target); load404();
         },
+        'psi-run': async t => {
+            const box = document.getElementById('psi-result');
+            await runJob('/pagespeed/run', { url: t.dataset.url, project_id: siteId }, box, 'Measuring with Google PageSpeed Insights (up to a minute)');
+            const d = await apiRequest('GET', '/pagespeed?limit=1&url=' + encodeURIComponent(t.dataset.url));
+            renderPageSpeed(box, d.runs[0] || { status: 'error', error: 'No result was stored.' });
+        },
+        'watch-psi': async t => { await apiRequest('PATCH', '/watch/' + encodeURIComponent(t.dataset.id), { pagespeed: t.dataset.on !== '1' }); loadWatchlist(); },
         'watch-add': async t => { await apiRequest('POST', '/watch', { url: t.dataset.url, project_id: siteId }); showToast('Added to the watchlist'); },
         'watch-run': async t => { await apiRequest('POST', '/watch/' + encodeURIComponent(t.dataset.id) + '/run', {}); showToast('Check queued'); setTimeout(loadWatchlist, 6000); },
         'watch-toggle': async t => { await apiRequest('PATCH', '/watch/' + encodeURIComponent(t.dataset.id), { enabled: t.dataset.enabled !== '1' }); loadWatchlist(); },

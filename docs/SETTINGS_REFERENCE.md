@@ -48,6 +48,9 @@ Gemini, Google, geocoding and what the server may fetch.
 
 | Setting | Key | Default | Allowed | Environment variable | Notes |
 |---|---|---|---|---|---|
+| Measure Core Web Vitals (Google PageSpeed) | `pagespeed.enabled` | off | bool | `SW_PAGESPEED_ENABLED` | Off by default. When on, the address of a page you measure is sent to Google PageSpeed Insights, which loads the page itself. Only public addresses are sent. |
+| PageSpeed API key | `pagespeed.api_key` | (secret) | secret | `SW_PAGESPEED_KEY` | Needed in practice: without a key Google answers from a shared free quota that is almost always used up (tested). Create a free key in the Google Cloud console (enable the PageSpeed Insights API). Stored encrypted and sent in a request header, never in the address. Secret: write-only, stored encrypted. |
+| Measure as | `pagespeed.strategy` | mobile | mobile / desktop |  | Mobile is what Google ranks by; desktop is the other view. |
 | Gemini API key | `gemini.api_key` | (secret) | secret | `SW_GEMINI_API_KEY` | Content AI uses templates when this is empty. Secret: write-only, stored encrypted. |
 | Gemini model | `gemini.model` | gemini-3.6-flash | string | `SW_GEMINI_MODEL` | For example gemini-3.6-flash. |
 | Look up coordinates for new locations | `enable_geocoding` | off | bool | `SW_ENABLE_GEOCODING` | Sends the address to OpenStreetMap Nominatim when a location has no coordinates. |
@@ -158,6 +161,7 @@ How often watched pages are checked, and when a change or an outage becomes an a
 | External links to check | `audit.external_links_max` | 50 | 0 to 500 |  | How many different outside links an audit tests for 404/410 (one request each). 0 turns the check off. |
 | Repeat audits every | `audit.repeat_days` | 0 | 0 to 90 days |  | Audit every site automatically this often, one site per minute at most. 0 means only when you start one. |
 | Audits kept per site | `audit.keep` | 10 | 1 to 100 |  | Older audits (with their pages and issues) are deleted. |
+| Web Vitals on watched pages every | `pagespeed.watch_days` | 7 | 1 to 90 days |  | Watched pages that have Web Vitals switched on are measured this often (one measurement per page per period). |
 
 ## SEO scoring
 
