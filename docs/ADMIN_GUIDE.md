@@ -79,7 +79,7 @@ Create an OAuth client (Web application), enable the Search Console API, add `ht
 |---|---|---|
 | Outbound fetches | One guarded client, DNS pinning, per-hop checks, size/time caps | `tests/cases/02_*`, WordPress E2E |
 | Sign-in | Throttled per account and IP, optional TOTP (replay-proof, recovery codes), new session id at each step | `04`, `11`, browser suite |
-| Sessions | HttpOnly, SameSite, Secure over HTTPS, idle and absolute timeouts, fingerprint ends sessions on password/MFA change | `09`, `13` |
+| Sessions | HttpOnly, SameSite, Secure over HTTPS, idle and absolute timeouts, fingerprint ends sessions on password/MFA change. "Keep me signed in" (`session.remember_days`, default 30, 0 = off): a separate HttpOnly cookie holds `selector.secret`; only the SHA-256 of the secret is stored; a wrong secret deletes the token; expiry slides (written at most twice a day) up to a 180-day ceiling; a password or MFA change, disabling or deleting the account, or signing out ends it; each person lists and forgets their devices on My Account | `09`, `13`, `29` |
 | Requests | Same-origin check, CSRF token, JSON content type, per-route roles (viewer < editor < admin) walked by a test | `04`, `13` |
 | Secrets | Encrypted at rest (XChaCha20-Poly1305, bound to the row), never in responses, logs or audit | `14`, `15`, `16`, `17` |
 | Front end | No HTML-string sinks; CSP `script-src 'self'; style-src 'self'` | `tests/js`, browser suite |

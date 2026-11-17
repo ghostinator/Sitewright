@@ -109,7 +109,7 @@ test('login: server asks for a code => credentials hidden, code field shown, pas
     { status: 401, json: { success: false, message: 'Invalid verification code' } },
   ]);
   await submit(dom, doc);
-  assert.equal(calls[0].url, '/api/auth/login'); assert.deepEqual(calls[0].body, { username: 'admin', password: 'pw' });
+  assert.equal(calls[0].url, '/api/auth/login'); assert.deepEqual(calls[0].body, { username: 'admin', password: 'pw', remember: false }, 'no checkbox on the page means no request to be remembered');
   assert.ok(doc.getElementById('login-mfa').className.indexOf('hidden') === -1, 'code field visible');
   assert.ok(doc.querySelector('[name=username]').closest('.form-group').classList.contains('hidden'));
   assert.ok(doc.querySelector('[name=password]').closest('.form-group').classList.contains('hidden'));
@@ -521,4 +521,29 @@ test('export and print: reports offer CSV downloads and a "Print or save as PDF"
   box.replaceChildren(); SW.renderSeoResults(box, seoData('https://c.example/x')); const p2 = box.querySelector('[data-action="print-report"]'); assert.ok(p2); assert.match(p2.dataset.title, /c\.example\/x/);
   for (const p of PAYLOADS) { box.replaceChildren(); SW.renderSiteAuditReport(box, { audit: { id: 1, base_url: p, status: 'done', pages: 1, stopped_early: 0, summary: { pages: 1, avg_score: 1, new: null, fixed: null, by_severity: { high: 0, medium: 0, low: 0 } } }, types: [] });
     for (const a of box.querySelectorAll('a')) assert.ok(!/^\s*javascript:/i.test(a.getAttribute('href') || ''), 'no javascript: link for ' + p); }
+});
+
+test('signed-in devices: browser, when it was added and last used, which one is this browser, and remove buttons; empty says so', () => {
+  const { SW, box } = load();
+  SW.renderDevices(box, { devices: [{ id: 5, browser: 'Mozilla/5.0 (Macintosh) Safari/605', created_at: '2026-11-01 08:00:00', last_used_at: '2026-11-17 09:00:00', expires_at: '2026-12-17 09:00:00', current: true },
+    { id: 6, browser: 'Firefox on Linux', created_at: '2026-10-01 08:00:00', last_used_at: '2026-11-10 09:00:00', expires_at: '2026-12-10 09:00:00', current: false }] });
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 2);
+  assert.match(rows[0].textContent, /This browser/); assert.match(rows[0].textContent, /2026-11-17/); assert.doesNotMatch(rows[1].textContent, /This browser/);
+  assert.equal(rows[1].querySelector('[data-action="device-forget"]').dataset.id, '6'); assert.ok(box.querySelector('[data-action="devices-forget-all"]'));
+  box.replaceChildren(); SW.renderDevices(box, { devices: [] }); assert.match(box.textContent, /No remembered devices/); assert.equal(box.querySelector('[data-action="devices-forget-all"]'), null);
+  for (const p of PAYLOADS) { box.replaceChildren(); SW.renderDevices(box, { devices: [{ id: 1, browser: p, created_at: p, last_used_at: p, expires_at: p, current: false }] });
+    assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p)); }
+});
+test('sign-in form sends the "keep me signed in" choice with the credentials', async () => {
+  const sent = [];
+  const html = '<!doctype html><body><script type="application/json" id="app-config">{"basePath":"","csrfToken":"tok"}</script>'
+    + '<form id="login-form"><div class="form-group"><input name="username" value="u"></div><div class="form-group"><input name="password" value="p"></div><div id="login-mfa" class="hidden"><input name="code"></div>'
+    + '<label><input type="checkbox" name="remember" id="login-remember" checked> Keep me signed in</label><div id="login-error" class="hidden"></div><button type="submit">Go</button></form></body>';
+  const { VirtualConsole } = require('jsdom');
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', virtualConsole: new VirtualConsole() });
+  dom.window.fetch = async (url, opts) => { sent.push(JSON.parse(opts.body)); return { ok: true, status: 200, json: async () => ({ success: true, data: { mfa_required: true } }) }; };
+  dom.window.eval(SRC);
+  dom.window.document.getElementById('login-form').dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true }));
+  await new Promise(r => setTimeout(r, 100));
+  assert.equal(sent[0].remember, true); assert.equal(sent[0].username, 'u');
 });

@@ -19,7 +19,7 @@ final class AuthController
         if (!is_string($password) || $password === '' || strlen($password) > 1024) {
             Response::error('Username and password are required', 400);
         }
-        $user = Auth::login($username, $password);
+        $user = Auth::login($username, $password, filter_var($in['remember'] ?? false, FILTER_VALIDATE_BOOLEAN));
         if ($user === null) {
             Response::error('Invalid username or password', 401);
         }
@@ -38,6 +38,25 @@ final class AuthController
             Response::error('Invalid verification code', 401);
         }
         Response::success('Logged in', ['user' => $user, 'csrf_token' => Auth::csrfToken()]);
+    }
+
+    /** Remembered devices of the signed-in person. */
+    public function devices(array $params): never
+    {
+        Response::success('Devices', ['devices' => Auth::devices((int)Auth::user()['id'])]);
+    }
+
+    public function forgetDevice(array $params): never
+    {
+        $n = Auth::forgetDevice((int)Auth::user()['id'], Validator::id($params['id'] ?? null));
+        $n === 1 ? Audit::log('device_forgotten') : Response::notFound('Device not found');
+        Response::success('Device forgotten');
+    }
+
+    public function forgetAllDevices(array $params): never
+    {
+        Audit::log('devices_forgotten', null, '', (string)Auth::forgetAllDevices((int)Auth::user()['id']) . ' device(s)');
+        Response::success('All remembered devices were forgotten');
     }
 
     public function logout(array $params): never

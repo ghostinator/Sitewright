@@ -228,6 +228,18 @@
     /** Opens the browser's print dialog on the visible report (Save as PDF there). */
     const printButton = title => el('button', { class: 'btn btn-secondary btn-sm no-print', text: 'Print or save as PDF', attrs: { type: 'button' }, data: { action: 'print-report', title } });
 
+    /** My Account: browsers that stay signed in. */
+    function renderDevices(container, data) {
+        const devices = data.devices || [];
+        if (!devices.length) return setContent(container, muted('No remembered devices. Tick "Keep me signed in" on the sign-in page to add this browser.'));
+        const rows = devices.map(d => el('tr', {},
+            el('td', { class: 'break-all' }, el('strong', { text: d.current ? 'This browser' : 'Another browser' }), el('br'), el('small', { class: 'text-muted', text: d.browser })),
+            el('td', { text: d.created_at }), el('td', { text: d.last_used_at }), el('td', { text: d.expires_at }),
+            el('td', { class: 'row-actions' }, smallButton('Forget', 'device-forget', d.id, 'btn-danger'))));
+        setContent(container, tableOf(['Browser', 'Signed in', 'Last used', 'Stays signed in until', ''], rows),
+            el('p', {}, smallButton('Forget all remembered devices', 'devices-forget-all', 0, 'btn-danger')));
+    }
+
     /** Audit history. A running audit has nothing to view yet; a failed one shows why. */
     function renderSiteAudits(container, data, canEdit) {
         const audits = data.audits || [];
@@ -588,7 +600,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -679,7 +691,7 @@
             await withPending(loginForm, async () => {
                 try {
                     if (!awaitingCode) {
-                        const r = await apiRequest('POST', '/auth/login', { username: field('username').value, password: field('password').value });
+                        const r = await apiRequest('POST', '/auth/login', { username: field('username').value, password: field('password').value, remember: !!(field('remember') && field('remember').checked) });
                         if (r && r.mfa_required) {
                             // Second step: hide the credentials, ask for the code.
                             awaitingCode = true;
@@ -843,6 +855,7 @@
         } catch (e) { showError(box, 'Could not load the audit log: ' + e.message); }
     }
 
+    const loadDevices = () => loadInto('devices-list', '/auth/devices', renderDevices, 'remembered devices');
     async function loadAccount() {
         try {
             const me = await apiRequest('GET', '/auth/me');
@@ -852,6 +865,7 @@
             document.getElementById('mfa-secret').classList.add('hidden');
             if (me.csrf_token) csrf = me.csrf_token;
         } catch (e) { document.getElementById('mfa-state').textContent = 'Could not load: ' + e.message; }
+        loadDevices();
     }
 
     // ------------------------------------------------------------------ background jobs
@@ -1115,6 +1129,8 @@
             await apiRequest('POST', '/redirections', { source_url: t.dataset.uri, target_url: t.dataset.target, redirect_type: '301', project_id: Number(t.dataset.project) || 0 });
             showToast('Redirect created: ' + t.dataset.uri + ' → ' + t.dataset.target); load404();
         },
+        'device-forget': async t => { await apiRequest('DELETE', '/auth/devices/' + encodeURIComponent(t.dataset.id)); showToast('Device forgotten'); loadDevices(); },
+        'devices-forget-all': async () => { if (confirm('Forget every remembered browser, including this one? You will sign in again once your current session ends.')) { await apiRequest('DELETE', '/auth/devices'); showToast('All devices forgotten'); loadDevices(); } },
         'print-report': t => {
             const pt = document.getElementById('print-title');
             if (pt) pt.textContent = (t.dataset.title || 'Report') + ' – ' + new Date().toISOString().slice(0, 10);

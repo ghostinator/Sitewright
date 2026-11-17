@@ -344,6 +344,21 @@ test('404 log: a 404 gets a suggested page from the crawled sitemap list, and on
   await expect(page.locator('#redirections-list')).toContainText('/ABOUT.html');
 });
 
+test('keep me signed in: stays signed in after the session is lost, shows on My Account, and "Forget" ends it', async ({ page, context }) => {
+  await page.goto('/');
+  await expect(page.locator('label.check-row')).toContainText('30 days');
+  await page.fill('#login-username', ADMIN.user); await page.fill('#login-password', ADMIN.pass); await page.check('#login-remember');
+  await page.click('#login-form button[type=submit]'); await expect(page.locator('#page-title')).toBeVisible();
+  const c = (await context.cookies()).find(x => x.name === 'sw_remember'); expect(c, 'remember cookie').toBeTruthy(); expect(c.httpOnly).toBe(true); expect(c.sameSite).toBe('Lax');
+  expect(c.expires - Date.now() / 1000).toBeGreaterThan(29 * 86400);
+  await context.clearCookies({ name: 'sw_session' });   // the PHP session is gone, as after a browser restart or an idle timeout
+  await page.goto('/account'); await expect(page.locator('#page-title')).toBeVisible(); await expect(page.locator('#login-form')).toHaveCount(0);
+  await expect(page.locator('#devices-list')).toContainText('This browser');
+  page.once('dialog', d => d.accept());
+  await page.click('[data-action=devices-forget-all]'); await expect(page.locator('#devices-list')).toContainText('No remembered devices');
+  await context.clearCookies({ name: 'sw_session' }); await page.goto('/'); await expect(page.locator('#login-form')).toBeVisible();
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {

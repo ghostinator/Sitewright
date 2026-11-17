@@ -30,7 +30,8 @@ Expiry monitoring (phase 4) covers the alerting need whatever the answers.
 ## Progress ledger (update with every commit)
 | # | Phase | Status | Commit | Tests |
 |---|-------|--------|--------|-------|
-| 1 | Alert controls (+ health-state fix, UTC pin) | not started | | |
+| 0 | **Stay signed in (30 days)**: remember-me tokens (migration 015), devices panel, setting `session.remember_days` | done | see git log | PHP 557, JS 50, browser 17 |
+| 1 | Alert controls (+ health-state fix; the DB session is already pinned to UTC in `Database::connect`) | not started | | |
 | 2 | Site profile, public discovery, setup guide, prefills | not started | | |
 | 3 | Plugin 1.1 with owner consent | not started | | |
 | 4 | Certificate/domain expiry, setup checklist, digest, update warnings | not started | | |

@@ -75,7 +75,7 @@ final class Config
                 'endpoint' => 'https://generativelanguage.googleapis.com/v1beta/models',
             ],
             'session' => [
-                'name' => 'sw_session', 'idle_timeout' => 1800, 'absolute_timeout' => 28800, 'secure' => null,
+                'name' => 'sw_session', 'idle_timeout' => 1800, 'absolute_timeout' => 28800, 'secure' => null, 'remember_days' => 30,
             ],
             'limits' => [
                 'body_bytes' => 1048576, 'max_pages' => 500, 'bulk_images' => 50, 'import_rows' => 5000,
@@ -243,6 +243,7 @@ final class Config
             if (($v = $env($e)) !== null) { $cfg['db'][$k] = $v; }
         }
         if (($v = $env('SW_DB_PORT')) !== null) { $cfg['db']['port'] = (int)$v; }
+        if (($v = $env('SW_SESSION_REMEMBER_DAYS')) !== null) { $cfg['session']['remember_days'] = max(0, min(90, (int)$v)); }
         if (($v = $env('SW_GEMINI_API_KEY')) !== null) { $cfg['gemini']['api_key'] = $v; }
         if (($v = $env('SW_GEMINI_MODEL')) !== null) { $cfg['gemini']['model'] = $v; }
         if (($v = $env('SW_BASE_URL')) !== null) { $cfg['base_url'] = rtrim($v, '/'); }

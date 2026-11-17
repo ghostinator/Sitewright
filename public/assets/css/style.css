@@ -627,3 +627,5 @@ select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 
     .top-bar { gap: 8px; }
     .top-bar h1 { font-size: 20px; }
 }
+.check-row { display: flex; gap: 8px; align-items: flex-start; font-weight: normal; }
+.check-row input { margin-top: 3px; }

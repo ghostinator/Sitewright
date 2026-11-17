@@ -205,6 +205,7 @@ final class Jobs
         $out['audit'] = Audit::purge();
         $out['watch_history'] = Watchlist::purge();
         $out['audits'] = SiteAudit::purge();
+        $out['remember_tokens'] = Auth::purgeRemembered();
         $out['404'] = (new \Sitewright\Modules\Monitor\MonitorController())->purgeExpired();
         return $out;
     }

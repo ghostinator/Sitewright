@@ -83,6 +83,9 @@ $configJson = json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
             <div class="form-group"><label for="login-username">Username</label><input id="login-username" name="username" type="text" autocomplete="username" required maxlength="60"></div>
             <div class="form-group"><label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required></div>
             <div id="login-mfa" class="form-group hidden"><label for="login-code">Verification code</label><input id="login-code" name="code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="32" placeholder="6-digit code or recovery code"><small>Open your authenticator app, or enter an unused recovery code.</small></div>
+<?php if ((int)Config::get('session.remember_days') > 0): ?>
+            <div class="form-group"><label class="check-row"><input type="checkbox" name="remember" id="login-remember"> Keep me signed in on this device for <?= (int)Config::get('session.remember_days') ?> days</label></div>
+<?php endif; ?>
             <button type="submit" class="btn btn-primary">Sign in</button>
             <p><button type="button" class="btn btn-link" id="forgot-toggle">Forgot your password?</button></p>
         </form>
@@ -317,6 +320,11 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
 <?php if (Auth::needsMfaEnrolment()): ?>
                     <div class="alert alert-error" role="alert"><strong>Two-step verification is required for administrators.</strong> Set it up below; the rest of the app opens as soon as it is on.</div>
 <?php endif; ?>
+                    <div class="card">
+                        <h3>Remembered devices</h3>
+                        <p class="text-muted">Browsers where you ticked <em>Keep me signed in</em>. Each stays signed in even after its normal session ends, until the date shown (the clock restarts every time you come back). Forget one you no longer use, or all of them. Changing your password or two-step verification forgets every device.</p>
+                        <div id="devices-list" class="list-area"></div>
+                    </div>
                     <div class="card">
                         <h3>Change password</h3>
                         <form id="password-form" class="form" autocomplete="off">

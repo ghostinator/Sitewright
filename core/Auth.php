@@ -13,6 +13,10 @@ final class Auth
     /** Seconds the "password OK, code pending" state lasts. */
     private const MFA_WINDOW = 300;
 
+    /** Cookie that holds "selector.secret" of a remembered device, and the longest a device may stay remembered however often it is used. */
+    public const REMEMBER_COOKIE = 'sw_remember';
+    private const REMEMBER_CEILING_DAYS = 180;
+
     private static ?array $user = null;
     private static bool $userChecked = false;
 
@@ -47,7 +51,7 @@ final class Auth
         self::$userChecked = true;
         self::startSession();
         if (empty($_SESSION['uid'])) {
-            return null;
+            return self::restoreRemembered();
         }
         $now = time();
         $expired = $now - (int)($_SESSION['created'] ?? 0) > (int)Config::get('session.absolute_timeout')
@@ -71,7 +75,7 @@ final class Auth
      * (the session is then only "pending": Auth::user() stays null), or null on bad credentials.
      * @throws ResponseException 429 when throttled
      */
-    public static function login(string $username, string $password): ?array
+    public static function login(string $username, string $password, bool $remember = false): ?array
     {
         $win = (int)Config::get('limits.login_window');
         RateLimiter::enforce('login:ip:' . Request::ip(), (int)Config::get('limits.login_ip_attempts'), $win, 'Too many login attempts');
@@ -105,11 +109,12 @@ final class Auth
             unset($_SESSION['uid'], $_SESSION['created'], $_SESSION['last'], $_SESSION['pwf']);   // password alone grants nothing
             $_SESSION['mfa_uid'] = (int)$row['id'];
             $_SESSION['mfa_until'] = time() + self::MFA_WINDOW;
+            $_SESSION['remember_pending'] = $remember;   // honoured only after the code is accepted
             $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
             Audit::log('login_password_ok', (int)$row['id'], $row['username'], 'second factor required');
             return ['mfa_required' => true];
         }
-        return self::establish($row, 'login_ok');
+        return self::establish($row, 'login_ok', $remember);
     }
 
     /**
@@ -155,21 +160,23 @@ final class Auth
             return null;
         }
         RateLimiter::clear('mfa:user:' . $uid);
-        return self::establish($row, $how);
+        $remember = !empty($_SESSION['remember_pending']);
+        return self::establish($row, $how, $remember);
     }
 
     /** Create the authenticated session (fresh id, fresh CSRF token). */
-    private static function establish(array $row, string $auditAction): array
+    private static function establish(array $row, string $auditAction, bool $remember = false): array
     {
         self::startSession();
         session_regenerate_id(true);
-        unset($_SESSION['mfa_uid'], $_SESSION['mfa_until']);
+        unset($_SESSION['mfa_uid'], $_SESSION['mfa_until'], $_SESSION['remember_pending']);
         $_SESSION['uid'] = (int)$row['id'];
         $_SESSION['created'] = $_SESSION['last'] = time();
         $_SESSION['pwf'] = self::fingerprint($row);
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
         self::$userChecked = true;
         Audit::log($auditAction, (int)$row['id'], $row['username']);
+        if ($remember) { self::issueRemembered($row); }
         return self::$user = ['id' => (int)$row['id'], 'username' => $row['username'], 'display_name' => $row['display_name'], 'role' => $row['role'], 'mfa' => ($row['totp_secret'] ?? '') !== ''];
     }
 
@@ -177,6 +184,7 @@ final class Auth
     {
         self::startSession();
         if (!empty($_SESSION['uid'])) { Audit::log('logout'); }
+        self::forgetThisDevice();
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
@@ -217,7 +225,109 @@ final class Auth
         if ($row) {
             session_regenerate_id(true);
             $_SESSION['pwf'] = self::fingerprint($row);
+            self::forgetAllDevices((int)$_SESSION['uid']);   // a credential change ends every remembered device, this one included
+            self::clearRememberCookie();
         }
+    }
+
+    // ------------------------------------------------------------------ "keep me signed in"
+
+    /** Remember this browser: a random secret in an HttpOnly cookie; only its SHA-256 is stored. Never for a password-only (MFA pending) sign-in. */
+    private static function issueRemembered(array $row): void
+    {
+        $days = (int)Config::get('session.remember_days');
+        if ($days <= 0) { return; }
+        $selector = bin2hex(random_bytes(12)); $secret = bin2hex(random_bytes(32));
+        $db = Database::getInstance();
+        $db->insert('remember_tokens', ['user_id' => (int)$row['id'], 'selector' => $selector, 'validator_hash' => hash('sha256', $secret), 'pwf' => self::fingerprint($row),
+            'user_agent' => mb_substr((string)Request::header('user-agent'), 0, 200), 'expires_at' => gmdate('Y-m-d H:i:s', time() + $days * 86400)]);
+        self::setRememberCookie($selector . '.' . $secret, time() + $days * 86400);
+    }
+
+    /** No PHP session but a valid remember cookie: sign the person back in (fresh session id and CSRF token). Any doubt deletes the token. */
+    private static function restoreRemembered(): ?array
+    {
+        $cookie = $_COOKIE[self::REMEMBER_COOKIE] ?? null;
+        if (!is_string($cookie)) { return null; }
+        $days = (int)Config::get('session.remember_days');
+        if ($days <= 0 || !preg_match('/^([a-f0-9]{24})\.([a-f0-9]{64})$/D', $cookie, $m)) { self::clearRememberCookie(); return null; }
+        $db = Database::getInstance(); $t = $db->t('remember_tokens');
+        $tok = $db->fetchOne("SELECT * FROM `$t` WHERE selector = :s", ['s' => $m[1]]);
+        if (!$tok) { self::clearRememberCookie(); return null; }
+        $drop = static function () use ($db, $t, $tok): ?array { $db->query("DELETE FROM `$t` WHERE id = :i", ['i' => (int)$tok['id']]); self::clearRememberCookie(); return null; };
+        if (strtotime($tok['expires_at'] . ' UTC') < time() || strtotime($tok['created_at'] . ' UTC') < time() - self::REMEMBER_CEILING_DAYS * 86400) { return $drop(); }
+        if (!hash_equals((string)$tok['validator_hash'], hash('sha256', $m[2]))) { return $drop(); }   // a wrong secret gets exactly one try
+        $row = $db->fetchOne('SELECT id, username, display_name, password, totp_secret, role, disabled FROM `' . $db->t('users') . '` WHERE id = :i', ['i' => (int)$tok['user_id']]);
+        if (!$row || (int)$row['disabled'] === 1 || !hash_equals((string)$tok['pwf'], self::fingerprint($row))) { return $drop(); }
+        $user = self::establish($row, 'login_remembered');
+        if (strtotime($tok['last_used_at'] . ' UTC') < time() - 12 * 3600) {   // sliding expiry, written at most twice a day
+            $until = min(time() + $days * 86400, strtotime($tok['created_at'] . ' UTC') + self::REMEMBER_CEILING_DAYS * 86400);
+            $db->query("UPDATE `$t` SET expires_at = :e, last_used_at = :n WHERE id = :i", ['e' => gmdate('Y-m-d H:i:s', $until), 'n' => gmdate('Y-m-d H:i:s'), 'i' => (int)$tok['id']]);
+            self::setRememberCookie($cookie, $until);
+        }
+        return $user;
+    }
+
+    private static function forgetThisDevice(): void
+    {
+        $c = $_COOKIE[self::REMEMBER_COOKIE] ?? null;
+        if (is_string($c) && preg_match('/^([a-f0-9]{24})\./', $c, $m)) {
+            $db = Database::getInstance();
+            $db->query('DELETE FROM `' . $db->t('remember_tokens') . '` WHERE selector = :s', ['s' => $m[1]]);
+        }
+        self::clearRememberCookie();
+    }
+
+    public static function forgetAllDevices(int $userId): int
+    {
+        $db = Database::getInstance();
+        return $db->query('DELETE FROM `' . $db->t('remember_tokens') . '` WHERE user_id = :u', ['u' => $userId])->rowCount();
+    }
+
+    /** The signed-in person's remembered devices (never the secret). @return array<int,array<string,mixed>> */
+    public static function devices(int $userId): array
+    {
+        $db = Database::getInstance();
+        $mine = null;
+        if (is_string($_COOKIE[self::REMEMBER_COOKIE] ?? null) && preg_match('/^([a-f0-9]{24})\./', $_COOKIE[self::REMEMBER_COOKIE], $m)) { $mine = $m[1]; }
+        $out = [];
+        foreach ($db->fetchAll('SELECT id, selector, user_agent, created_at, last_used_at, expires_at FROM `' . $db->t('remember_tokens') . '` WHERE user_id = :u AND expires_at > NOW() ORDER BY last_used_at DESC', ['u' => $userId]) as $r) {
+            $out[] = ['id' => (int)$r['id'], 'browser' => $r['user_agent'] !== '' ? $r['user_agent'] : 'Unknown browser', 'created_at' => $r['created_at'], 'last_used_at' => $r['last_used_at'], 'expires_at' => $r['expires_at'], 'current' => $mine !== null && $mine === $r['selector']];
+        }
+        return $out;
+    }
+
+    /** @return int rows removed (0 when the id is not this person's) */
+    public static function forgetDevice(int $userId, int $id): int
+    {
+        $db = Database::getInstance();
+        return $db->query('DELETE FROM `' . $db->t('remember_tokens') . '` WHERE id = :i AND user_id = :u', ['i' => $id, 'u' => $userId])->rowCount();
+    }
+
+    /** Hourly housekeeping. @return int rows deleted */
+    public static function purgeRemembered(): int
+    {
+        $db = Database::getInstance();
+        return $db->query('DELETE FROM `' . $db->t('remember_tokens') . '` WHERE expires_at < NOW() OR created_at < NOW() - INTERVAL ' . self::REMEMBER_CEILING_DAYS . ' DAY')->rowCount();
+    }
+
+    private static function setRememberCookie(string $value, int $expires): void
+    {
+        if (PHP_SAPI === 'cli') { $_COOKIE[self::REMEMBER_COOKIE] = $value; return; }
+        $secure = Config::get('session.secure');
+        if ($secure === null) {
+            $base = (string)Config::get('base_url', '');
+            $secure = $base !== '' ? str_starts_with($base, 'https://') : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        }
+        setcookie(self::REMEMBER_COOKIE, $value, ['expires' => $expires, 'path' => App::basePath() ?: '/', 'secure' => (bool)$secure, 'httponly' => true, 'samesite' => 'Lax']);
+        $_COOKIE[self::REMEMBER_COOKIE] = $value;
+    }
+
+    private static function clearRememberCookie(): void
+    {
+        unset($_COOKIE[self::REMEMBER_COOKIE]);
+        if (PHP_SAPI === 'cli') { return; }
+        setcookie(self::REMEMBER_COOKIE, '', ['expires' => time() - 3600, 'path' => App::basePath() ?: '/', 'httponly' => true, 'samesite' => 'Lax']);
     }
 
     public static function csrfToken(): string

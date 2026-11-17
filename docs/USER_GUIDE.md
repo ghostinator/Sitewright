@@ -14,8 +14,9 @@ Sitewright is an SEO toolkit you run yourself. You sign in, point it at websites
 
 1. Open the address you were given and enter your username and password.
 2. If two-step verification is on for your account, a second box asks for a **6-digit code** from your authenticator app, or one of your **recovery codes** (each works once).
-3. Too many wrong attempts lock the account for a while; wait and try again.
-4. **Forgot your password?** on the sign-in page e-mails you a single-use link. The page gives the same answer for any address, so it never reveals who has an account.
+3. Tick **Keep me signed in on this device for 30 days** to stay signed in on that browser even after your normal session (30 minutes idle) ends. The 30 days restart each time you come back, up to a 180-day ceiling, after which you sign in again. If you use two-step verification you enter the code once, at that sign-in. Do not tick it on a shared computer. See and forget your remembered browsers under **My Account → Remembered devices**.
+4. Too many wrong attempts lock the account for a while; wait and try again.
+5. **Forgot your password?** on the sign-in page e-mails you a single-use link. The page gives the same answer for any address, so it never reveals who has an account.
 
 If your administrator has required two-step verification for administrators, an admin without it can only reach **My Account** until it is set up.
 
