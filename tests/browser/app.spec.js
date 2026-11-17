@@ -261,6 +261,27 @@ test('page settings: a dashboard window change shows on the dashboard; the SEO p
   await expect(page.locator('#settings-root legend').first()).toHaveText('SEO scoring');
 });
 
+test('sites: add a site without the plugin, switch to it from the header (remembered after reload), the overview hides and shows again', async ({ page }) => {
+  await login(page, ADMIN);
+  await expect(page.locator('#overview-card')).toBeVisible();
+  await page.goto('/sites');
+  await page.click('[data-action=toggle-form][data-target=site-create-form]');
+  await page.fill('#site-name', 'Corner Shop'); await page.fill('#site-url', 'https://shop.example.com');
+  await page.uncheck('#site-wordpress');
+  await page.click('#site-create-form button[type=submit]');
+  await expect(page.locator('#sites-list')).toContainText('no plugin');
+  await expect(page.locator('#sites-list [data-action=site-sync]')).toHaveCount(0);
+  await page.goto('/');
+  await expect(page.locator('#overview-list')).toContainText('Corner Shop');
+  await page.selectOption('#site-switch', { label: 'Corner Shop' });
+  await expect(page.locator('#overview-card')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#site-switch option:checked')).toHaveText('Corner Shop');
+  await expect(page.locator('#overview-card')).toBeHidden();
+  await page.selectOption('#site-switch', { label: 'All sites' });
+  await expect(page.locator('#overview-card')).toBeVisible();
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {

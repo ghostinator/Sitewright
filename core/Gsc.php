@@ -135,6 +135,14 @@ final class Gsc
         Audit::log('gsc_property_set', null, '', $siteUrl);
     }
 
+    /** Tie a connection to one of your sites (0 = none): its imported rows are then stored under that site. */
+    public static function setSite(int $connId, int $siteId): void
+    {
+        self::connection($connId);
+        Database::getInstance()->update('gsc_connections', ['site_id' => $siteId], ['id' => $connId]);
+        Audit::log('gsc_site_set', null, '', "connection $connId -> site $siteId");
+    }
+
     public static function disconnect(int $connId): void
     {
         $conn = self::connection($connId);
@@ -191,7 +199,7 @@ final class Gsc
                 $total += count($batch);
                 if (count($batch) < 25000) { break; }
             }
-            self::store($rows);
+            self::store($rows, (int)$conn['site_id']);
             $db->update('gsc_connections', ['last_sync_at' => gmdate('Y-m-d H:i:s'), 'last_status' => 'ok', 'last_error' => null, 'rows_synced' => count($rows)], ['id' => $id]);
             return ['message' => 'Search Console synced', 'data' => ['rows' => count($rows), 'from' => $start, 'to' => $end]];
         } catch (GscException $e) {
@@ -203,15 +211,15 @@ final class Gsc
     }
 
     /** @param array<int,array{0:string,1:int,2:int,3:float,4:float,5:string}> $rows */
-    private static function store(array $rows): void
+    private static function store(array $rows, int $siteId): void
     {
         $db = Database::getInstance();
         $t = $db->t('analytics_keywords');
-        $db->transaction(function (Database $db) use ($rows, $t): void {
+        $db->transaction(function (Database $db) use ($rows, $t, $siteId): void {
             foreach (array_chunk($rows, 500) as $chunk) {
                 $ph = []; $bind = [];
                 foreach ($chunk as $i => [$kw, $imp, $clk, $pos, $ctr, $date]) {
-                    $ph[] = "(0, :k$i, :i$i, :c$i, :p$i, :r$i, :d$i)";
+                    $ph[] = "($siteId, :k$i, :i$i, :c$i, :p$i, :r$i, :d$i)";
                     $bind += ["k$i" => $kw, "i$i" => $imp, "c$i" => $clk, "p$i" => $pos, "r$i" => $ctr, "d$i" => $date];
                 }
                 $db->query("INSERT INTO `$t` (project_id, keyword, impressions, clicks, position, ctr, `date`) VALUES " . implode(',', $ph)

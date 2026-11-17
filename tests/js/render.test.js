@@ -307,3 +307,42 @@ test('result checks are labelled in words (Pass / Fix), not emoji, and the label
   assert.ok(!/[✅⚠❌]/u.test(box.textContent));
   assert.ok(box.querySelector('.check-warn') && box.querySelector('.check-ok'));
 });
+
+test('overview: one row per site with score, search numbers and 404s; "no data" is a dash, not 0; the site name picks that site', () => {
+  const { SW, box } = load();
+  SW.renderOverview(box, { sites: [
+    { id: 4, name: 'Blog', base_url: 'https://blog.example', plugin: true, last_score: 70, last_analyzed_at: '2026-11-17 01:00:00', impressions: 1500, clicks: 20, not_found: 3 },
+    { id: 5, name: 'Shop', base_url: 'https://shop.example', plugin: false, last_score: null, last_analyzed_at: null, impressions: null, clicks: null, not_found: 0 }] });
+  const rows = [...box.querySelectorAll('tbody tr')];
+  assert.equal(rows.length, 2);
+  assert.match(rows[0].textContent, /Blog/); assert.match(rows[0].textContent, /70/); assert.match(rows[0].textContent, /1,500/);
+  assert.match(rows[1].textContent, /Shop/); assert.doesNotMatch(rows[1].textContent, /\b0\b.*\b0\b.*\b0\b/);
+  assert.equal(rows[1].querySelectorAll('td')[1].textContent, '–', 'no score yet is a dash');
+  const pick = rows[0].querySelector('[data-pick-site]'); assert.equal(pick.dataset.pickSite, '4');
+  box.replaceChildren(); SW.renderOverview(box, { sites: [] });
+  assert.match(box.textContent, /No sites yet/);
+});
+test('overview text is inert even for hostile site names', () => {
+  const { SW, box } = load();
+  for (const p of PAYLOADS) {
+    box.replaceChildren(); SW.renderOverview(box, { sites: [{ id: 1, name: p, base_url: p, plugin: true, last_score: 1, last_analyzed_at: p, impressions: 1, clicks: 1, not_found: 1 }] });
+    assertInert(box, p, 'overview'); assert.ok(box.textContent.includes(p));
+  }
+});
+test('sites list: a site without the plugin says so and offers no Sync or New secret', () => {
+  const { SW, box } = load();
+  SW.renderSites(box, [{ id: 1, name: 'Blog', base_url: 'https://b.example', last_status: 'ok', last_sync_at: null, plugin_version: '1.0', last_error: null, sync_enabled: 1 },
+    { id: 2, name: 'Shop', base_url: 'https://s.example', last_status: 'never', last_sync_at: null, plugin_version: null, last_error: null, sync_enabled: 0 }]);
+  const items = [...box.querySelectorAll('.list-item')];
+  assert.ok(items[0].querySelector('[data-action="site-sync"]') && items[0].querySelector('[data-action="site-rotate"]'));
+  assert.ok(!items[1].querySelector('[data-action="site-sync"]') && !items[1].querySelector('[data-action="site-rotate"]'));
+  assert.ok(items[1].querySelector('[data-action="delete-site"]'), 'it can still be removed');
+  assert.match(items[1].textContent, /no plugin/i);
+});
+test('Search Console panel: each connection can be tied to a site', () => {
+  const { SW, box } = load();
+  SW.renderGsc(box, { configured: true, redirect_uri: 'x', connections: [{ id: 9, property_url: 'sc-domain:shop.example', site_id: 5, last_status: 'ok', last_sync_at: null, rows_synced: 0, last_error: null }] }, {}, [{ id: 4, name: 'Blog' }, { id: 5, name: 'Shop' }]);
+  const sel = box.querySelector('select[data-change="gsc-site"]');
+  assert.ok(sel && sel.dataset.id === '9'); assert.equal(sel.value, '5');
+  assert.deepEqual([...sel.options].map(o => o.textContent), ['Not tied to a site', 'Blog', 'Shop']);
+});

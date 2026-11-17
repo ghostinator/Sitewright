@@ -9,7 +9,7 @@ final class GscController
     public function status(array $params): never
     {
         $db = Database::getInstance();
-        $rows = $db->fetchAll('SELECT id, property_url, created_at, last_sync_at, last_status, last_error, rows_synced FROM `' . $db->t('gsc_connections') . '` ORDER BY id');
+        $rows = $db->fetchAll('SELECT id, property_url, site_id, created_at, last_sync_at, last_status, last_error, rows_synced FROM `' . $db->t('gsc_connections') . '` ORDER BY id');
         Response::success('Search Console', ['configured' => Gsc::configured(), 'redirect_uri' => (string)Config::get('google.redirect_uri'), 'connections' => $rows]);
     }
 
@@ -43,6 +43,14 @@ final class GscController
         $url = Validator::str(Request::json(), 'site_url', 255, true);
         try { Gsc::setProperty(Validator::id($params['id'] ?? null), $url); } catch (GscException $e) { Response::error($e->getMessage(), 400); }
         Response::success('Property saved');
+    }
+
+    public function setSite(array $params): never
+    {
+        $id = Validator::id($params['id'] ?? null);
+        $site = Validator::siteId(Request::json(), 'site_id');
+        try { Gsc::setSite($id, $site); } catch (GscException $e) { Response::notFound($e->getMessage()); }
+        Response::success('Site saved');
     }
 
     public function sync(array $params): never

@@ -21,18 +21,22 @@ class AnalyticsController
     public function getDashboardStats(array $params): never
     {
         $win = max(7, (int)Config::get('dashboard.window_days'));
+        $projectId = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);
+        $kp = $projectId > 0 ? ' AND project_id = :p' : '';
+        $ap = $projectId > 0 ? ' AND project_id = :p' : '';
+        $q = $projectId > 0 ? ['p' => $projectId] : [];
         $k = $this->db->t('analytics_keywords');
         $kw = $this->db->fetchOne(
             "SELECT SUM(impressions) AS impressions, SUM(clicks) AS clicks, COUNT(DISTINCT keyword_hash) AS keywords, AVG(position) AS pos,
-                    MAX(is_sample) AS sample FROM `$k` WHERE `date` BETWEEN (CURDATE() - INTERVAL $win DAY) AND CURDATE()"
+                    MAX(is_sample) AS sample FROM `$k` WHERE `date` BETWEEN (CURDATE() - INTERVAL $win DAY) AND CURDATE()$kp", $q
         ) ?? [];
         // Score of YOUR site only: competitor analyses are excluded.
         $seo = $this->db->fetchOne(
             'SELECT AVG(score) AS avg_score, COUNT(*) AS n, MAX(is_sample) AS sample FROM `' . $this->db->t('seo_analysis')
-            . "` WHERE analysis_type = 'site' AND analyzed_at >= (NOW() - INTERVAL $win DAY)"
+            . "` WHERE analysis_type = 'site' AND analyzed_at >= (NOW() - INTERVAL $win DAY)$ap", $q
         ) ?? [];
         $recent = $this->db->fetchAll(
-            'SELECT analysis_type AS type, url, score, analyzed_at AS date, is_sample FROM `' . $this->db->t('seo_analysis') . '` ORDER BY analyzed_at DESC, id DESC LIMIT 5'
+            'SELECT analysis_type AS type, url, score, analyzed_at AS date, is_sample FROM `' . $this->db->t('seo_analysis') . '` WHERE 1 = 1' . $ap . ' ORDER BY analyzed_at DESC, id DESC LIMIT 5', $q
         );
 
         Response::success('Dashboard stats retrieved', [

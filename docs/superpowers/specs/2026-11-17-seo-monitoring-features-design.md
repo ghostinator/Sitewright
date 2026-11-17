@@ -35,7 +35,7 @@ Owner request (2026-11-17): build all seven proposed features, "in full", includ
 | Retention | `retention.watch_days` (365) for scheduled analyses; keep the last `retention.audits_keep` (10) audits per site; purge in `Jobs::maintenance()`. | Disk. |
 
 ## Data model (migrations 010-014)
-* 010: `gsc_connections.site_id`, `seo_analysis.watch_id` + index.
+* 010: `sites.sync_enabled` (a site without the WordPress plugin is analysed and monitored but never synced), `gsc_connections.site_id`, `seo_analysis.watch_id` + indexes.
 * 011: `watch_items` (project_id, url, label, interval_hours, enabled, pagespeed, last_run_at, next_run_at, last_score, last_status new/ok/down, last_error, fail_count, last_noindex, created_by) unique (project_id, url_hash).
 * 012: `audits`, `audit_pages`, `audit_issues` (code, severity, url, detail).
 * 013: `search_pages` (project_id, page, query, impressions, clicks, ctr, position, window) unique (project_id, page_hash, query_hash).
@@ -45,7 +45,7 @@ Owner request (2026-11-17): build all seven proposed features, "in full", includ
 | # | Feature | Status | Commit | Tests |
 |---|---------|--------|--------|-------|
 | 0 | Shared refactors (SeoAnalyzer, Crawler, Jobs::touch; migration 010; `Validator::csvCell` already exists, reused for CSV) | done | (this commit) | PHP 457/457 (8.3) |
-| 7 | Per-site scoping, site switcher, overview | not started | | |
+| 7 | Per-site scoping, site switcher, overview; sites without the plugin (`sync_enabled`) | done | (next commit) | PHP 466, JS 33, browser 13 |
 | 1 | Watchlist, score history, regression alerts | not started | | |
 | 2 | Site audit (+ scheduled repeat, diff) | not started | | |
 | 3 | Redirect suggestions from the 404 log | not started | | |

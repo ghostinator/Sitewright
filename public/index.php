@@ -125,7 +125,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
         <main class="main-content">
             <header class="top-bar">
                 <h1 id="page-title"><?= $h($views[$view]) ?></h1>
-                <div class="user-actions"><span class="user-name"><?= $h($user['username']) ?></span> <button type="button" class="btn btn-secondary btn-sm" data-action="logout">Sign out</button></div>
+                <div class="user-actions"><label class="visually-hidden" for="site-switch">Site</label><select id="site-switch" class="site-switch"><option value="0">All sites</option></select> <span class="user-name"><?= $h($user['username']) ?></span> <button type="button" class="btn btn-secondary btn-sm" data-action="logout">Sign out</button></div>
             </header>
 
             <div class="content-area" id="content-area">
@@ -137,6 +137,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                         <div class="stat-card" data-card="clicks"><div class="stat-info"><h3>Clicks (30d)</h3><p class="stat-value" id="stat-clicks">--</p></div></div>
                     </div>
                     <p id="dashboard-note" class="text-muted"></p>
+                    <div class="card" id="overview-card"><h3>Your sites</h3><div id="overview-list"></div></div>
                     <div class="dashboard-grid">
                         <div class="card"><h3>Quick Actions</h3><div class="quick-actions">
                             <button type="button" class="btn btn-primary" data-goto="seo-analysis">Run SEO Analysis</button>
@@ -242,7 +243,6 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <p class="text-muted">This app does not detect 404s on your site. Add entries here or import them from your server logs.</p>
                     <?php if ($user && $user['role'] === 'admin'): ?><p class="text-muted settings-link-note"><small><?= count((array)Config::get('monitor.ignore_patterns')) ?> ignore pattern(s) active. <a href="<?= $h($base) ?>/settings#site">Change in Settings</a></small></p><?php endif; ?>
                     <button type="button" class="btn btn-secondary" data-action="refresh-404">Refresh</button>
-                    <label class="inline-label" for="site-select-404">Site</label> <select id="site-select-404" class="site-select" data-site-select="404"><option value="0">All sites</option></select>
                     <a class="btn btn-secondary" id="export-404" href="<?= $h($base) ?>/api/404-monitor/export">Export CSV</a>
                     <button type="button" class="btn btn-danger" data-action="clear-404">Clear All</button>
                     <form id="log404-form" class="form form-inline"><div class="form-group"><label for="log404-uri">Add entry (path)</label><input id="log404-uri" placeholder="/missing-page" required maxlength="1000"></div><button type="submit" class="btn btn-primary">Add</button></form>
@@ -252,7 +252,6 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                 <div class="view" id="view-redirections"><div class="card">
                     <h3>Redirect Rules</h3>
                     <p class="text-muted">Rules are enforced on a site that has the Sitewright plugin installed (see <strong>Sites</strong>); for other servers, export them as Apache, nginx or CSV.</p>
-                    <label class="inline-label" for="site-select-rules">Site</label> <select id="site-select-rules" class="site-select" data-site-select="rules"><option value="0">All sites</option></select>
                     <button type="button" class="btn btn-primary" data-action="toggle-form" data-target="redirection-form">Add Rule</button>
                     <a class="btn btn-secondary export-rules" data-format="apache" href="<?= $h($base) ?>/api/redirections/export?format=apache">Export Apache</a>
                     <a class="btn btn-secondary export-rules" data-format="nginx" href="<?= $h($base) ?>/api/redirections/export?format=nginx">Export nginx</a>
@@ -312,6 +311,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <form id="site-create-form" class="form hidden" autocomplete="off"><div class="form-row">
                         <div class="form-group"><label for="site-name">Name</label><input id="site-name" required maxlength="100"></div>
                         <div class="form-group"><label for="site-url">Site address</label><input id="site-url" type="url" placeholder="https://www.example.com" required maxlength="255"></div></div>
+                        <div class="form-group"><label><input type="checkbox" id="site-wordpress" checked> This is a WordPress site and I will install the Sitewright plugin (needed for 404 collection and redirects). Untick it to only analyse and monitor the site.</label></div>
                         <button type="submit" class="btn btn-primary">Add site</button></form>
                     <div id="site-secret" class="hidden"></div>
                     <div id="sites-list" class="list-area"></div>

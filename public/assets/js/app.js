@@ -157,14 +157,29 @@
     function renderSites(container, sites) {
         if (!sites.length) return setContent(container, muted('No sites connected yet.'));
         setContent(container, ...sites.map(s => listItem([
-            el('strong', { text: s.name }), ' ', el('span', { class: 'badge', text: s.last_status }), el('br'),
-            el('small', { class: 'text-muted break-all', text: s.base_url + ' | last sync: ' + (s.last_sync_at || 'never') + (s.plugin_version ? ' | plugin ' + s.plugin_version : '') }),
+            el('strong', { text: s.name }), ' ', el('span', { class: 'badge', text: Number(s.sync_enabled) === 0 ? 'no plugin' : s.last_status }), el('br'),
+            el('small', { class: 'text-muted break-all', text: Number(s.sync_enabled) === 0 ? s.base_url + ' | analysed and monitored from here, no plugin'
+                : s.base_url + ' | last sync: ' + (s.last_sync_at || 'never') + (s.plugin_version ? ' | plugin ' + s.plugin_version : '') }),
             s.last_error ? el('div', { class: 'alert alert-error', text: s.last_error }) : null],
-            [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id), deleteButton('delete-site', s.id)])));
+            (Number(s.sync_enabled) === 0 ? [] : [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id)]).concat([deleteButton('delete-site', s.id)]))));
+    }
+
+    /** "All sites" dashboard table. A missing number is a dash, never 0. */
+    function renderOverview(container, data) {
+        const sites = data.sites || [];
+        if (!sites.length) return setContent(container, muted('No sites yet. Add your first site under Sites.'));
+        const num = v => (v === null || v === undefined) ? '–' : fmtInt(v);
+        const head = el('thead', {}, el('tr', {}, ...['Site', 'Latest score', 'Impressions (28d)', 'Clicks (28d)', '404s (30d)'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+        const body = el('tbody', {}, ...sites.map(s => el('tr', {},
+            el('td', {}, el('button', { class: 'btn-link', text: s.name, attrs: { type: 'button' }, data: { pickSite: s.id } }), ' ', Number(s.plugin) ? null : el('span', { class: 'badge', text: 'no plugin' }), el('br'),
+                el('small', { class: 'text-muted break-all', text: s.base_url + (s.last_analyzed_at ? ' | analysed ' + s.last_analyzed_at : '') })),
+            el('td', { text: s.last_score === null || s.last_score === undefined ? '–' : String(s.last_score) }),
+            el('td', { text: num(s.impressions) }), el('td', { text: num(s.clicks) }), el('td', { text: num(s.not_found) }))));
+        setContent(container, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
     }
 
     /** Search Console panel. state = {configured, redirect_uri, connections:[...]}; properties = {id: [{site_url}]} for connections being set up. */
-    function renderGsc(container, state, properties) {
+    function renderGsc(container, state, properties, sites) {
         const nodes = [];
         if (!state.configured) {
             nodes.push(el('div', { class: 'alert' }, 'Not configured yet. Create an OAuth client (type "Web application") in the Google Cloud console, add ', el('code', { text: state.redirect_uri || 'https://YOUR-HOST/api/gsc/callback' }),
@@ -179,6 +194,12 @@
             if (c.property_url) actions.push(smallButton('Sync now', 'gsc-sync', c.id));
             actions.push(smallButton('Disconnect', 'gsc-disconnect', c.id, 'btn-danger'));
             nodes.push(listItem(row, actions));
+            if (Array.isArray(sites)) {
+                const pick = el('select', { attrs: { id: 'gsc-site-' + c.id, 'aria-label': 'Site this Search Console data belongs to' }, data: { change: 'gsc-site', id: c.id } },
+                    el('option', { text: 'Not tied to a site', attrs: { value: '0' } }), ...sites.map(s => el('option', { text: s.name, attrs: { value: String(s.id) } })));
+                pick.value = String(c.site_id || 0);
+                nodes.push(el('div', { class: 'form-inline' }, el('label', { class: 'inline-label', text: 'Belongs to site', attrs: { for: 'gsc-site-' + c.id } }), pick));
+            }
             if (props) {
                 const sel = el('select', { attrs: { id: 'gsc-prop-' + c.id, 'aria-label': 'Search Console property' } }, ...props.map(p => el('option', { text: p.site_url + ' (' + p.permission + ')', attrs: { value: p.site_url } })));
                 nodes.push(el('div', { class: 'form-inline' }, sel, smallButton('Use this property', 'gsc-set-property', c.id, 'btn-primary')));
@@ -403,7 +424,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderOverview, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -555,18 +576,29 @@
     }
 
     async function loadDashboard() {
-        try { renderDashboard(await apiRequest('GET', '/dashboard/stats')); } catch (e) { showToast(e.message, 'error'); }
+        const ov = document.getElementById('overview-card'); if (ov) ov.classList.toggle('hidden', siteId > 0);
+        try { renderDashboard(await apiRequest('GET', '/dashboard/stats' + siteQuery('?'))); } catch (e) { showToast(e.message, 'error'); }
+        if (siteId === 0 && document.getElementById('overview-list')) loadInto('overview-list', '/overview', renderOverview, 'the site overview');
     }
-    const loadAnalytics = () => loadInto('analytics-dashboard', '/analytics/dashboard', renderAnalytics, 'analytics');
+    const loadAnalytics = () => loadInto('analytics-dashboard', '/analytics/dashboard' + siteQuery('?'), renderAnalytics, 'analytics');
     // The site selector (404 log and redirect rules) scopes data to one connected site; 0 = everything / not tied to a site.
     let siteId = 0;
+    try { siteId = Number(window.localStorage.getItem('sw-site')) || 0; } catch (e) { /* storage blocked: start on All sites */ }
+    let siteList = [];
     async function loadSiteOptions() {
-        let sites = [];
-        try { sites = await apiRequest('GET', '/sites/options'); } catch (e) { /* viewers cannot list sites: selector stays on "All sites" */ }
-        document.querySelectorAll('.site-select').forEach(sel => {
-            sel.replaceChildren(el('option', { text: 'All sites', attrs: { value: '0' } }), ...sites.map(s => el('option', { text: s.name, attrs: { value: String(s.id) } })));
+        try { siteList = await apiRequest('GET', '/sites/options'); } catch (e) { siteList = []; }
+        if (siteId > 0 && !siteList.some(s => s.id === siteId)) setSite(0, false);   // the remembered site was removed
+        const sel = document.getElementById('site-switch');
+        if (sel) {
+            sel.replaceChildren(el('option', { text: 'All sites', attrs: { value: '0' } }), ...siteList.map(s => el('option', { text: s.name, attrs: { value: String(s.id) } })));
             sel.value = String(siteId);
-        });
+        }
+    }
+    function setSite(id, reload) {
+        siteId = Number(id) || 0;
+        try { window.localStorage.setItem('sw-site', String(siteId)); } catch (e) { /* ignore */ }
+        const sel = document.getElementById('site-switch'); if (sel) sel.value = String(siteId);
+        if (reload) switchView(viewFromLocation(), false);
     }
     const siteQuery = sep => (siteId > 0 ? sep + 'project_id=' + siteId : '');
     function syncExportLinks() {
@@ -580,10 +612,10 @@
     async function loadGsc() {
         const box = document.getElementById('gsc-box');
         if (cfg.user && cfg.user.role !== 'admin') { setContent(box, muted('Ask an administrator to connect Google Search Console.')); return; }
-        try { renderGsc(box, await apiRequest('GET', '/gsc'), gscProps); } catch (e) { showError(box, 'Could not load Search Console: ' + e.message); }
+        try { renderGsc(box, await apiRequest('GET', '/gsc'), gscProps, siteList); } catch (e) { showError(box, 'Could not load Search Console: ' + e.message); }
     }
     const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
-    const loadSitemaps = () => loadInto('sitemap-list', '/sitemap', (box, rows) => setContent(box,
+    const loadSitemaps = () => loadInto('sitemap-list', '/sitemap' + siteQuery('?'), (box, rows) => setContent(box,
         rows.length ? el('p', { class: 'text-muted', text: rows.length + ' URL(s) stored. ' }, el('a', { text: 'Download XML', attrs: { href: BASE + '/api/sitemap/generate-xml', target: '_blank', rel: 'noopener' } })) : muted('No sitemap URLs stored yet.')), 'sitemap');
 
     async function loadAiStatus() {
@@ -666,13 +698,13 @@
         'image-bulk-form': async form => {
             const box = document.getElementById('image-results');
             setContent(box, muted('Analyzing images… this can take a minute.'));
-            try { renderImageResults(box, await runJob('/image-seo/bulk-analyze', { url: form.querySelector('#image-url').value }, box, 'Analyzing images')); } catch (e) { showError(box, e.message); }
+            try { renderImageResults(box, await runJob('/image-seo/bulk-analyze', { url: form.querySelector('#image-url').value, project_id: siteId }, box, 'Analyzing images')); } catch (e) { showError(box, e.message); }
         },
         'sitemap-crawl-form': async form => {
             const box = document.getElementById('sitemap-results');
             setContent(box, muted('Crawling… this can take a couple of minutes.'));
             try {
-                renderSitemapResult(box, await runJob('/sitemap/crawl', { base_url: form.querySelector('#sitemap-url').value, max_pages: 100 }, box, 'Crawling'), BASE + '/api/sitemap/generate-xml');
+                renderSitemapResult(box, await runJob('/sitemap/crawl', { base_url: form.querySelector('#sitemap-url').value, max_pages: 100, project_id: siteId }, box, 'Crawling'), BASE + '/api/sitemap/generate-xml');
                 loadSitemaps();
             } catch (e) { showError(box, e.message); }
         },
@@ -698,10 +730,11 @@
         },
         'site-create-form': async form => {
             try {
-                const d = await apiRequest('POST', '/sites', { name: form.querySelector('#site-name').value.trim(), base_url: form.querySelector('#site-url').value.trim() });
+                const d = await apiRequest('POST', '/sites', { name: form.querySelector('#site-name').value.trim(), base_url: form.querySelector('#site-url').value.trim(), wordpress: form.querySelector('#site-wordpress').checked });
                 form.reset(); form.classList.add('hidden');
                 const box = document.getElementById('site-secret');
-                setContent(box, el('div', { class: 'alert alert-error', text: 'Copy this secret into the plugin now. It is not shown again.' }), el('pre', { class: 'break-all', text: d.secret }));
+                if (d.secret) setContent(box, el('div', { class: 'alert alert-error', text: 'Copy this secret into the plugin now. It is not shown again.' }), el('pre', { class: 'break-all', text: d.secret }));
+                else setContent(box, el('div', { class: 'alert alert-info', text: 'Site added. It will be analysed and monitored from here.' }));
                 box.classList.remove('hidden'); loadSites(); loadSiteOptions();
             } catch (e) { showToast(e.message, 'error'); }
         },
@@ -756,7 +789,7 @@
         const box = document.getElementById(resultId);
         setContent(box, muted('Analyzing… this may take a moment.'));
         try {
-            const data = await apiRequest('POST', '/seo-analysis/analyze', { url: form.querySelector('#' + inputId).value, is_competitor: competitor });
+            const data = await apiRequest('POST', '/seo-analysis/analyze', { url: form.querySelector('#' + inputId).value, is_competitor: competitor, project_id: siteId });
             renderSeoResults(box, data);
             showToast(competitor ? 'Competitor analysis complete' : 'Analysis complete');
         } catch (e) { showError(box, e.message); }
@@ -770,8 +803,10 @@
     });
 
     document.addEventListener('change', async e => {
-        const ss = e.target.closest('[data-site-select]');
-        if (ss) { siteId = Number(ss.value) || 0; document.querySelectorAll('.site-select').forEach(x => { x.value = String(siteId); }); if (ss.dataset.siteSelect === '404') load404(); else loadRedirections(); return; }
+        const sw = e.target.closest('#site-switch');
+        if (sw) { setSite(sw.value, true); return; }
+        const gs = e.target.closest('[data-change="gsc-site"]');
+        if (gs) { try { await apiRequest('POST', '/gsc/' + encodeURIComponent(gs.dataset.id) + '/site', { site_id: Number(gs.value) || 0 }); showToast('Saved'); } catch (err) { showToast(err.message, 'error'); loadGsc(); } return; }
         const t = e.target.closest('[data-change="user-role"]');
         if (!t) return;
         try { await apiRequest('PATCH', '/users/' + encodeURIComponent(t.dataset.id), { role: t.value }); showToast('Role updated'); } catch (err) { showToast(err.message, 'error'); loadUsers(); }
@@ -903,6 +938,8 @@
     document.addEventListener('click', async e => {
         const nav = e.target.closest('.nav-item');
         if (nav) { e.preventDefault(); switchView(nav.dataset.view, true); return; }
+        const pickSite = e.target.closest('[data-pick-site]');
+        if (pickSite) { setSite(pickSite.dataset.pickSite, true); return; }
         const go = e.target.closest('[data-goto]');
         if (go) { switchView(go.dataset.goto, true); return; }
         const t = e.target.closest('[data-action]');

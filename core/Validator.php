@@ -119,6 +119,17 @@ final class Validator
         return self::int($in, 'project_id', 0, 4294967295, 0) ?? 0;
     }
 
+    /** Site scoping for new endpoints: 0 means "not tied to a site"; anything else must be a connected site. */
+    public static function siteId(array $in, string $field = 'project_id'): int
+    {
+        $id = self::int($in, $field, 0, 4294967295, 0) ?? 0;
+        if ($id > 0) {
+            $db = Database::getInstance();
+            if (!$db->fetchOne('SELECT 1 x FROM `' . $db->t('sites') . '` WHERE id = :i', ['i' => $id])) { self::fail($field, 'unknown site'); }
+        }
+        return $id;
+    }
+
     public static function id(mixed $v): int
     {
         if (!is_string($v) && !is_int($v) || !preg_match('/^\d{1,18}$/D', (string)$v) || (int)$v < 1) {

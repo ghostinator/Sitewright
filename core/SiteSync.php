@@ -23,6 +23,7 @@ final class SiteSync
         $db = Database::getInstance();
         $site = $db->fetchOne('SELECT * FROM `' . $db->t('sites') . '` WHERE id = :i', ['i' => $id]);
         if (!$site) { throw new JobFailedException('Site no longer exists', 404); }
+        if (!(int)$site['sync_enabled']) { return ['message' => 'This site does not use the plugin', 'data' => ['skipped' => true]]; }
         $out = ['pulled' => 0, 'pushed' => false];
         try {
             $secret = Crypto::decrypt((string)$site['secret_enc'], 'site:' . $id);
@@ -118,7 +119,7 @@ final class SiteSync
         $db = Database::getInstance();
         $every = max(1, (int)Config::get('sites.sync_minutes'));
         $n = 0;
-        foreach ($db->fetchAll('SELECT id FROM `' . $db->t('sites') . "` WHERE sync_requested = 1 OR last_sync_at IS NULL OR last_sync_at < NOW() - INTERVAL $every MINUTE") as $s) {
+        foreach ($db->fetchAll('SELECT id FROM `' . $db->t('sites') . "` WHERE sync_enabled = 1 AND (sync_requested = 1 OR last_sync_at IS NULL OR last_sync_at < NOW() - INTERVAL $every MINUTE)") as $s) {
             $payload = (string)json_encode(['site_id' => (int)$s['id']]);
             $open = $db->fetchOne('SELECT 1 x FROM `' . $db->t('jobs') . "` WHERE type = 'site_sync' AND status IN ('queued','running') AND payload = :p", ['p' => $payload]);
             if (!$open) { Jobs::enqueue('site_sync', ['site_id' => (int)$s['id']], null, 0, 2); $n++; }
@@ -131,7 +132,7 @@ final class SiteSync
     {
         try {
             $db = Database::getInstance();
-            $db->query('UPDATE `' . $db->t('sites') . '` SET sync_requested = 1');
+            $db->query('UPDATE `' . $db->t('sites') . '` SET sync_requested = 1 WHERE sync_enabled = 1');
         } catch (\Throwable) {
             // a missing sites table (older schema) must never break rule editing
         }
