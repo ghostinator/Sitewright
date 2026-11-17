@@ -10,13 +10,14 @@ namespace Sitewright\Core;
  *   on_fetch(string $requestedUrl, ?array $res, ?string $error)               every internal fetch, including errors and non-200 answers
  *   on_links(string $finalUrl, string[] $internal, string[] $external)        normalised link targets found on that page
  *   on_tick()                                                                 once per loop (long jobs refresh their heartbeat here)
+ *   seeds: string[]                                                           extra start URLs (same origin as the start URL), e.g. the sitemap list
  */
 final class Crawler
 {
     private const MAX_LINKS_PER_PAGE = 500;
 
     /**
-     * @param array{on_page?:callable,on_fetch?:callable,on_links?:callable,on_tick?:callable} $hooks
+     * @param array{on_page?:callable,on_fetch?:callable,on_links?:callable,on_tick?:callable,seeds?:array} $hooks
      * @return array{pages:string[],fetched:int,stopped_early:bool,error:?string}
      */
     public static function run(string $startUrl, int $maxPages, float $deadline, array $hooks = []): array
@@ -27,7 +28,11 @@ final class Crawler
         if ($start === null) { return ['pages' => [], 'fetched' => 0, 'stopped_early' => false, 'error' => 'Invalid URL']; }
 
         $origin = null; $disallow = null;
-        $queue = [$start]; $queued = [$start => true]; $pages = []; $fetched = 0; $error = null; $stopped = false;
+        $queue = [$start]; $queued = [$start => true];
+        foreach ((array)($hooks['seeds'] ?? []) as $seed) {
+            $n = is_string($seed) ? Url::normalize($seed) : null;
+            if ($n !== null && !isset($queued[$n]) && Url::origin($n) === Url::origin($start) && count($queued) < $maxPages * 20) { $queued[$n] = true; $queue[] = $n; }
+        } $pages = []; $fetched = 0; $error = null; $stopped = false;
 
         while ($queue) {
             if (isset($hooks['on_tick'])) { ($hooks['on_tick'])(); }

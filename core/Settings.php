@@ -80,6 +80,12 @@ final class Settings
         $add('watch.down_after', 'monitoring', 'Failed checks before a page is "down"', 'A page that cannot be fetched this many times in a row is reported down (once), and again when it recovers.', 'int', ['min' => 1, 'max' => 10]);
         $add('watch.retry_minutes', 'monitoring', 'Recheck a failing page after', 'A page that failed is checked again after this long instead of waiting for its normal interval.', 'int', ['min' => 5, 'max' => 1440, 'unit' => 'minutes']);
         $add('watch.retention_days', 'monitoring', 'Keep watch history for', 'Scheduled analyses older than this are deleted. Manual analyses are kept.', 'int', ['min' => 7, 'max' => 3650, 'unit' => 'days']);
+        $add('audit.max_pages', 'monitoring', 'Pages per site audit', 'An audit stops after this many pages (and never exceeds the crawl page limit).', 'int', ['min' => 1, 'max' => 500]);
+        $add('audit.max_seconds', 'monitoring', 'Longest site audit', 'An audit stops after this long and reports what it found.', 'int', ['min' => 60, 'max' => 1800, 'unit' => 'seconds']);
+        $add('audit.thin_words', 'monitoring', 'Thin page below', 'Pages with fewer words than this are reported as thin content.', 'int', ['min' => 20, 'max' => 2000, 'unit' => 'words']);
+        $add('audit.external_links_max', 'monitoring', 'External links to check', 'How many different outside links an audit tests for 404/410 (one request each). 0 turns the check off.', 'int', ['min' => 0, 'max' => 500]);
+        $add('audit.repeat_days', 'monitoring', 'Repeat audits every', 'Audit every site automatically this often, one site per minute at most. 0 means only when you start one.', 'int', ['min' => 0, 'max' => 90, 'unit' => 'days']);
+        $add('audit.keep', 'monitoring', 'Audits kept per site', 'Older audits (with their pages and issues) are deleted.', 'int', ['min' => 1, 'max' => 100]);
         // ---- Integrations
         $add('gemini.api_key', 'integrations', 'Gemini API key', 'Content AI uses templates when this is empty.', 'secret', ['env' => 'SW_GEMINI_API_KEY']);
         $add('gemini.model', 'integrations', 'Gemini model', 'For example gemini-3.6-flash.', 'string', ['pattern' => '/^[A-Za-z0-9._\-]{1,80}$/D', 'env' => 'SW_GEMINI_MODEL']);
@@ -131,7 +137,7 @@ final class Settings
         $add('users.default_role', 'accounts', 'Default role for new users', 'Used when an administrator creates a user without choosing a role.', 'enum', ['enum' => ['viewer', 'editor', 'admin']]);
         $add('users.invite_days', 'accounts', 'Invitation link lifetime', 'How long an invitation e-mail link works.', 'int', ['min' => 1, 'max' => 30, 'unit' => 'days']);
         $add('users.reset_minutes', 'accounts', 'Password reset link lifetime', 'How long a reset e-mail link works.', 'int', ['min' => 5, 'max' => 1440, 'unit' => 'minutes']);
-        $add('alerts.events', 'accounts', 'Events that send an alert', 'One per line. An event that is not listed is never sent (it is still audited).', 'list', ['enum' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created', 'watch_down', 'watch_recovered', 'watch_regression']]);
+        $add('alerts.events', 'accounts', 'Events that send an alert', 'One per line. An event that is not listed is never sent (it is still audited).', 'list', ['enum' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created', 'audit_new_issues', 'watch_down', 'watch_recovered', 'watch_regression']]);
 
         // ---- SEO scoring (Phase 2)
         $seo = [

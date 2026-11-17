@@ -35,6 +35,7 @@ final class Config
             'app_key'          => '',
             'security'         => ['require_mfa' => false],
             'watch' => ['max_items' => 100, 'max_per_tick' => 5, 'score_drop' => 10, 'down_after' => 2, 'retry_minutes' => 15, 'retention_days' => 365],
+            'audit' => ['max_pages' => 200, 'max_seconds' => 600, 'thin_words' => 200, 'external_links_max' => 50, 'repeat_days' => 0, 'keep' => 10],
             'dashboard' => ['window_days' => 30, 'cards' => ['seo', 'keywords', 'impressions', 'clicks']],
             'users' => ['default_role' => 'viewer', 'invite_days' => 7, 'reset_minutes' => 60],
             'content_ai' => ['default_tone' => 'professional', 'tones_enabled' => ['professional', 'casual', 'friendly', 'formal'],
@@ -60,7 +61,7 @@ final class Config
             ],
             'alerts' => ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 10,
                 'events' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created',
-                    'watch_down', 'watch_recovered', 'watch_regression']],
+                    'audit_new_issues', 'watch_down', 'watch_recovered', 'watch_regression']],
             'retention_days_audit' => 365,
             'db' => [
                 'host' => '127.0.0.1', 'port' => 3306, 'name' => 'sitewright_webapp',

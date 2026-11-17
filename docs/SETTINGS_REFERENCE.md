@@ -135,7 +135,7 @@ Defaults for new accounts and which events send an alert.
 | Default role for new users | `users.default_role` | viewer | viewer / editor / admin |  | Used when an administrator creates a user without choosing a role. |
 | Invitation link lifetime | `users.invite_days` | 7 | 1 to 30 days |  | How long an invitation e-mail link works. |
 | Password reset link lifetime | `users.reset_minutes` | 60 | 5 to 1440 minutes |  | How long a reset e-mail link works. |
-| Events that send an alert | `alerts.events` | account_changed, account_deleted, gsc_sync_failed, job_failed, login_failures, mfa_disabled, mfa_reset, server_error, setting_changed, site_sync_failed, user_created, watch_down, watch_recovered, watch_regression | account_changed / account_deleted / gsc_sync_failed / job_failed / login_failures / mfa_disabled / mfa_reset / server_error / setting_changed / site_sync_failed / user_created / watch_down / watch_recovered / watch_regression |  | One per line. An event that is not listed is never sent (it is still audited). |
+| Events that send an alert | `alerts.events` | account_changed, account_deleted, gsc_sync_failed, job_failed, login_failures, mfa_disabled, mfa_reset, server_error, setting_changed, site_sync_failed, user_created, audit_new_issues, watch_down, watch_recovered, watch_regression | account_changed / account_deleted / gsc_sync_failed / job_failed / login_failures / mfa_disabled / mfa_reset / server_error / setting_changed / site_sync_failed / user_created / audit_new_issues / watch_down / watch_recovered / watch_regression |  | One per line. An event that is not listed is never sent (it is still audited). |
 
 ## Monitoring
 
@@ -149,6 +149,12 @@ How often watched pages are checked, and when a change or an outage becomes an a
 | Failed checks before a page is "down" | `watch.down_after` | 2 | 1 to 10 |  | A page that cannot be fetched this many times in a row is reported down (once), and again when it recovers. |
 | Recheck a failing page after | `watch.retry_minutes` | 15 | 5 to 1440 minutes |  | A page that failed is checked again after this long instead of waiting for its normal interval. |
 | Keep watch history for | `watch.retention_days` | 365 | 7 to 3650 days |  | Scheduled analyses older than this are deleted. Manual analyses are kept. |
+| Pages per site audit | `audit.max_pages` | 200 | 1 to 500 |  | An audit stops after this many pages (and never exceeds the crawl page limit). |
+| Longest site audit | `audit.max_seconds` | 600 | 60 to 1800 seconds |  | An audit stops after this long and reports what it found. |
+| Thin page below | `audit.thin_words` | 200 | 20 to 2000 words |  | Pages with fewer words than this are reported as thin content. |
+| External links to check | `audit.external_links_max` | 50 | 0 to 500 |  | How many different outside links an audit tests for 404/410 (one request each). 0 turns the check off. |
+| Repeat audits every | `audit.repeat_days` | 0 | 0 to 90 days |  | Audit every site automatically this often, one site per minute at most. 0 means only when you start one. |
+| Audits kept per site | `audit.keep` | 10 | 1 to 100 |  | Older audits (with their pages and issues) are deleted. |
 
 ## SEO scoring
 

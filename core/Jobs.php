@@ -149,6 +149,7 @@ final class Jobs
         if ($type === 'site_sync') { return SiteSync::handleJob($payload); }
         if ($type === 'gsc_sync') { return Gsc::handleJob($payload); }
         if ($type === 'watch_run') { return Watchlist::handleJob($payload); }
+        if ($type === 'site_audit') { return SiteAudit::handleJob($payload); }
         if (isset(self::$handlers[$type])) {
             return (self::$handlers[$type])($payload);
         }
@@ -202,6 +203,7 @@ final class Jobs
         $out['rate_limits'] = $db->query("DELETE FROM `{$db->t('rate_limits')}` WHERE window_start < :old", ['old' => time() - 86400])->rowCount();
         $out['audit'] = Audit::purge();
         $out['watch_history'] = Watchlist::purge();
+        $out['audits'] = SiteAudit::purge();
         $out['404'] = (new \Sitewright\Modules\Monitor\MonitorController())->purgeExpired();
         return $out;
     }

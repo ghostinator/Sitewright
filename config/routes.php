@@ -60,6 +60,14 @@ return [
     ['PATCH',  '/api/watch/{id}',           $C . 'WatchController@update',  ['role' => 'editor']],
     ['DELETE', '/api/watch/{id}',           $C . 'WatchController@delete',  ['role' => 'editor']],
 
+    // Site audits (crawl + per-page checks)
+    ['GET',    '/api/site-audits',               $C . 'SiteAuditController@list',   ['role' => 'viewer']],
+    ['POST',   '/api/site-audits',               $C . 'SiteAuditController@start',  ['role' => 'editor', 'limit' => 'fetch']],
+    ['GET',    '/api/site-audits/{id}',          $C . 'SiteAuditController@show',   ['role' => 'viewer']],
+    ['GET',    '/api/site-audits/{id}/issues',   $C . 'SiteAuditController@issues', ['role' => 'viewer']],
+    ['GET',    '/api/site-audits/{id}/pages',    $C . 'SiteAuditController@pages',  ['role' => 'viewer']],
+    ['DELETE', '/api/site-audits/{id}',          $C . 'SiteAuditController@delete', ['role' => 'editor']],
+
     // SEO analysis (outbound fetch of the analysed URL)
     ['POST', '/api/seo-analysis/analyze', $M . 'SeoAnalysis\\SeoAnalysisController@analyze', ['limit' => 'fetch']],
     ['GET',  '/api/seo-analysis/history', $M . 'SeoAnalysis\\SeoAnalysisController@getHistory'],

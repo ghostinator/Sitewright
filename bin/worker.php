@@ -25,7 +25,7 @@ $done = 0; $lastMaint = 0; $lastSched = 0;
 while (!$stop) {
     try {
         Jobs::heartbeat();
-        if (!$once && time() - $lastSched >= 60) { $lastSched = time(); \Sitewright\Core\SiteSync::scheduleDue(); \Sitewright\Core\Gsc::scheduleDue(); \Sitewright\Core\Watchlist::scheduleDue(); }
+        if (!$once && time() - $lastSched >= 60) { $lastSched = time(); \Sitewright\Core\SiteSync::scheduleDue(); \Sitewright\Core\Gsc::scheduleDue(); \Sitewright\Core\Watchlist::scheduleDue(); \Sitewright\Core\SiteAudit::scheduleDue(); }
         if (!$once && time() - $lastMaint > 3600) { $lastMaint = time(); Logger::info('maintenance', Jobs::maintenance()); }
         if (Jobs::runNext()) {
             $done++;

@@ -94,3 +94,6 @@ final class AnalysisException extends \RuntimeException
         parent::__construct($message);
     }
 }
+
+/** An audit of this site is already queued or running. */
+final class AuditBusyException extends \RuntimeException {}
