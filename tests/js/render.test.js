@@ -293,3 +293,17 @@ test('settings: SMTP fields are hidden while Postal is chosen (and the other way
   assert.ok(box.querySelector('[data-setting-row="mail.host"]')); assert.equal(box.querySelector('[data-setting-row="mail.postal_url"]'), null);
   st.edits = {}; st.q = 'SMTP server'; redraw(); assert.ok(box.querySelector('[data-setting-row="mail.host"]'));
 });
+
+test('result checks are labelled in words (Pass / Fix), not emoji, and the label is text a screen reader can read', () => {
+  const { SW, box } = load();
+  SW.renderSeoResults(box, seoData('x'));
+  assert.ok(!/[✅⚠❌]/u.test(box.textContent), 'no emoji status marks');
+  const tags = [...box.querySelectorAll('.check')].map(n => n.textContent + ':' + n.className);
+  assert.ok(tags.some(t => t.startsWith('Pass:') && t.includes('check-ok')), 'a passing check says Pass');
+  assert.ok(tags.some(t => t.startsWith('Fix:') && t.includes('check-warn')), 'a failing check says Fix (description_optimal is false in the fixture)');
+  assert.ok(/HTTPS \(final URL\)Yes/.test(box.textContent) && /Structured data \(JSON-LD\)No/.test(box.textContent), 'Yes/No answers are plain words');
+  box.replaceChildren();
+  SW.renderImageResults(box, { images: [{ src: 'a', has_alt: false, size: 10, dimensions: '1x1', optimized: null }, { src: 'b', has_alt: true, size: 10, dimensions: '1x1', optimized: true }], found: 2, skipped: 0, truncated: false, limit: 5 });
+  assert.ok(!/[✅⚠❌]/u.test(box.textContent));
+  assert.ok(box.querySelector('.check-warn') && box.querySelector('.check-ok'));
+});

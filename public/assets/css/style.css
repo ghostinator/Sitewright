@@ -560,3 +560,16 @@ select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 
 .btn-danger { background: #fff; color: #b42318; border-color: #e7b0ab; }
 .btn-danger:hover { background: #b42318; border-color: #b42318; color: #fff; }
 .list-item .btn-danger { background: #fff; }
+
+/* Check labels in analysis results: words first, colour second. */
+.check { display: inline-block; min-width: 3.2em; margin-right: 6px; padding: 0 6px; border-radius: 3px; font-size: 12px; font-weight: 600; text-align: center; border: 1px solid currentColor; }
+.check-ok { color: #0d7a55; }
+.check-warn { color: #a85a00; }
+
+/* Phone: the scrolling nav row keeps a thin dark scrollbar instead of the bright system track. */
+@media (max-width: 720px) {
+    .nav-menu { scrollbar-width: thin; scrollbar-color: #3b4a5a transparent; }
+    .nav-menu::-webkit-scrollbar { height: 4px; }
+    .nav-menu::-webkit-scrollbar-track { background: transparent; }
+    .nav-menu::-webkit-scrollbar-thumb { background: #3b4a5a; border-radius: 2px; }
+}

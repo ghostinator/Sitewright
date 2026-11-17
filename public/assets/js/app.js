@@ -32,6 +32,9 @@
     }
 
     const muted = text => el('p', { class: 'text-muted', text });
+    /** A check result labelled in words ("Pass" / "Fix"), so it never relies on colour or emoji alone. */
+    const checkTag = ok => el('span', { class: 'check ' + (ok ? 'check-ok' : 'check-warn'), text: ok ? 'Pass' : 'Fix' });
+    const check = (ok, textIfOk, textIfNot) => el('p', { class: 'text-muted' }, checkTag(ok), ' ' + (ok ? textIfOk : textIfNot));
     const fmtInt = n => (Number(n) || 0).toLocaleString();
     const fmtKB = bytes => (bytes === null || bytes === undefined) ? 'unknown' : (Number(bytes) / 1024).toFixed(1) + ' KB';
     const sampleBadge = row => (row && Number(row.is_sample) === 1) ? el('span', { class: 'badge', text: 'sample data' }) : null;
@@ -59,21 +62,21 @@
         const r = data.results;
         const score = Number(data.score);
         const cls = score >= 80 ? 'good' : score >= 50 ? 'average' : 'poor';
-        const yn = v => v ? '✅ Yes' : '❌ No';
+        const yn = v => v ? 'Yes' : 'No';
         setContent(container, el('div', { class: 'result-card' },
             el('h3', { class: 'text-center', text: 'SEO Score' }),
             el('div', { class: 'result-score ' + cls, text: score + '/100' }),
             el('p', { class: 'text-muted text-center break-all', text: 'Analyzed: ' + data.url + ' (HTTP ' + r.fetch.status_code + ', ' + r.fetch.redirect_count + ' redirect(s))' }),
             section('Title', resultRow(r.basic.title || 'No title found', r.basic.title_length + ' chars'),
-                muted(r.basic.title_optimal ? '✅ Title length is optimal' : '⚠️ Title should be 30-60 characters')),
+                check(r.basic.title_optimal, 'Title length is optimal', 'Title should be 30-60 characters')),
             section('Meta Description', resultRow(r.meta.description || 'No description found', r.meta.description_length + ' chars'),
-                muted(r.meta.description_optimal ? '✅ Description length is optimal' : '⚠️ Description should be 120-160 characters')),
+                check(r.meta.description_optimal, 'Description length is optimal', 'Description should be 120-160 characters')),
             section('Headings', resultRow('H1 tags', r.headings.h1_count),
                 ...(r.headings.headings.h1 || []).slice(0, 5).map(h => resultRow('H1', h)),
-                muted(r.headings.h1_optimal ? '✅ Exactly one H1 tag' : '⚠️ Should have exactly one H1 tag')),
+                check(r.headings.h1_optimal, 'Exactly one H1 tag', 'Should have exactly one H1 tag')),
             section('Images', resultRow('Total images', r.images.total_images),
                 resultRow('With alt text', r.images.images_with_alt + ' (' + r.images.alt_ratio + '%)'),
-                muted(r.images.alt_ratio >= 90 ? '✅ Great alt text coverage' : '⚠️ Add alt text to all images')),
+                check(r.images.alt_ratio >= 90, 'Great alt text coverage', 'Add alt text to all images')),
             section('Links', resultRow('Internal', r.links.internal_links), resultRow('External', r.links.external_links), resultRow('nofollow', r.links.nofollow_links)),
             section('Fetch time', resultRow('HTML document fetched in', r.performance.load_time + 's'), muted(r.performance.note)),
             section('Basics', resultRow('HTTPS (final URL)', yn(r.security.uses_https)), resultRow('Viewport meta tag present', yn(r.viewport.has_viewport)),
@@ -97,8 +100,8 @@
     function renderImageResults(container, data) {
         const items = data.images.map(img => listItem([
             el('strong', { class: 'break-all', text: img.src }), el('br'),
-            el('small', { class: 'text-muted', text: (img.has_alt ? '✅ Has alt text' : '⚠️ Missing alt text') + ' | Size: ' + fmtKB(img.size) + ' | ' + (img.dimensions || 'unknown dimensions')
-                + ' | Optimized: ' + (img.optimized === null ? 'unknown' : (img.optimized ? 'yes' : 'no')) })]));
+            el('small', { class: 'text-muted' }, checkTag(img.has_alt), ' ' + (img.has_alt ? 'Has alt text' : 'Missing alt text') + ' | Size: ' + fmtKB(img.size) + ' | ' + (img.dimensions || 'unknown dimensions')
+                + ' | Optimized: ' + (img.optimized === null ? 'unknown' : (img.optimized ? 'yes' : 'no')))]));
         const notes = [];
         if (data.truncated) notes.push(muted('Only the first ' + data.limit + ' of ' + data.found + ' images were analyzed.'));
         if (data.skipped) notes.push(muted(data.skipped + ' image(s) skipped (unreachable, not an image, or not allowed).'));
