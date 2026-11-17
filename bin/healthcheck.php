@@ -28,6 +28,15 @@ try {
 $free = @disk_free_space(Config::root() . '/storage'); $total = @disk_total_space(Config::root() . '/storage');
 if ($free !== false && $total > 0 && $free / $total < 0.05) { $problems[] = 'less than 5% disk space free'; }
 
+// Nightly backup (deploy/sitewright-backup.timer): only checked where SW_BACKUP_DIR is set. Pre-deploy copies with other names do not count.
+$bdir = (string)getenv('SW_BACKUP_DIR');
+if ($bdir !== '') {
+    $newest = 0;
+    foreach (glob(rtrim($bdir, '/') . '/sitewright-*.sql.gz') ?: [] as $f) { $newest = max($newest, (int)@filemtime($f)); }
+    if ($newest === 0) { $problems[] = 'no database backup found in the backup directory'; }
+    elseif (time() - $newest > 36 * 3600) { $problems[] = 'newest database backup is ' . intdiv(time() - $newest, 3600) . ' hours old'; }
+}
+
 $state = Config::root() . '/storage/health.state';
 $was = is_file($state) ? trim((string)file_get_contents($state)) : 'ok';
 $now = $problems === [] ? 'ok' : 'bad';

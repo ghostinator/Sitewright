@@ -221,3 +221,21 @@ test('bin/worker.php --once drains the queue and records a heartbeat; bin/health
     @unlink(dirname(__DIR__, 2) . '/storage/health.state');
     ok(str_contains($run('alert-test.php'), 'No alert channel'), 'alert-test explains how to configure');
 });
+
+test('bin/healthcheck.php flags a missing or stale database backup when SW_BACKUP_DIR is set, and passes with a fresh one', function () use ($wipe) {
+    $wipe(); $c = testDbConfig();
+    $dir = sys_get_temp_dir() . '/sw-backups-' . bin2hex(random_bytes(4)); mkdir($dir);
+    $env = sprintf('SW_DB_HOST=%s SW_DB_NAME=%s SW_DB_USER=%s SW_DB_PASS=%s SW_LOG_FILE=/dev/null SW_BACKUP_DIR=%s', escapeshellarg($c['host']), 'sw_test', escapeshellarg($c['user']), escapeshellarg($c['pass']), escapeshellarg($dir));
+    $run = fn () => (string)shell_exec('cd ' . escapeshellarg(dirname(__DIR__, 2)) . " && $env php bin/healthcheck.php 2>&1; echo \"exit=\$?\"");
+    $state = dirname(__DIR__, 2) . '/storage/health.state';
+    @unlink($state); $out = $run();
+    ok(str_contains($out, 'no database backup found') && str_contains($out, 'exit=1'), 'empty directory: ' . $out);
+    file_put_contents("$dir/sitewright-20200101-000000.sql.gz", 'x'); touch("$dir/sitewright-20200101-000000.sql.gz", time() - 3 * 86400);
+    file_put_contents("$dir/pre-deploy-keep-me.sql.gz", 'x');   // other files must not count as the nightly backup
+    @unlink($state); $out = $run();
+    ok(str_contains($out, 'newest database backup is') && str_contains($out, 'hours old') && str_contains($out, 'exit=1'), 'stale: ' . $out);
+    file_put_contents("$dir/sitewright-20991231-000000.sql.gz", 'x');
+    @unlink($state); $out = $run();
+    ok(str_contains($out, 'exit=0'), 'fresh: ' . $out);
+    foreach (glob("$dir/*") as $f) { unlink($f); } rmdir($dir); @unlink($state);
+});

@@ -48,6 +48,7 @@ For whoever installs, runs and secures Sitewright. Day-to-day use is in the [use
 | Read the audit log | `php bin/audit.php 100` |
 | Purge old data | `php bin/purge-404.php`, `php bin/purge-audit.php` (the worker also purges hourly) |
 | Back up / restore | `bin/db-backup.sh backup /var/backups/sitewright`; `SW_RESTORE_CONFIRM=yes bin/db-backup.sh restore <file>` |
+| Nightly backup (02:30, keeps 30) | `sudo cp deploy/sitewright-backup.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now sitewright-backup.timer`, then add `SW_BACKUP_DIR=/var/backups/sitewright` to `/etc/sitewright/worker.env` so the health check alerts when the newest backup is over 36 hours old |
 | Rehearse a restore | `tests/docker/backup-drill.sh mariadb:11.8` |
 | Set up file logging with rotation | `sudo deploy/setup-logging.sh [keep_days] [level]` (default 90 days, warn) |
 | Connect Uptime Kuma (push monitor) | `sudo sw-set-secrets uptime` |

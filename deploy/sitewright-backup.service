@@ -1,0 +1,10 @@
+# /etc/systemd/system/sitewright-backup.service  (triggered by sitewright-backup.timer)
+[Unit]
+Description=Sitewright nightly database backup
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sitewright/db.env
+Environment=SW_BACKUP_KEEP=30
+# db.env names the application account's password SW_DB_APP_PASS; the backup script expects SW_DB_PASS.
+ExecStart=/bin/sh -c 'SW_DB_NAME=sitewright SW_DB_USER=sw_app SW_DB_PASS="$SW_DB_APP_PASS" /srv/sitewright/bin/db-backup.sh backup /var/backups/sitewright'
