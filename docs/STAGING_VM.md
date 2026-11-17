@@ -11,6 +11,7 @@ Created 2026-11-15 on the Proxmox host `pve-pueblo-mini` (`100.106.88.45`). Noth
 | App | `/srv/sitewright` (document root `public/`), config `config/config.php` (0640 `sitewright:www-data`) |
 | Database | `sitewright`; runtime account `sw_app` (SELECT/INSERT/UPDATE/DELETE), migration account `sw_migrate`, test account `sw_tester` (only `sw_test`/`sw_inst`). Passwords: `/etc/sitewright/db.env` (root, 0600) |
 | TLS | `https://sitewright-staging.tail1d3605.ts.net/` uses a Let's Encrypt certificate from `tailscale cert` (expires in ~90 days: re-run `sudo tailscale cert` in `/etc/ssl/sitewright-ts` and `sudo systemctl reload nginx`). `https://192.168.0.147/` still uses a self-signed certificate (browsers warn) |
+| Links in e-mail and alerts | `base_url` is `https://sitewright-staging.tail1d3605.ts.net` (changed 2026-11-17, previous config in `/var/backups/sitewright/config.php.pre-baseurl`). It builds the reset and invitation links in e-mails and the Open Sitewright button in Teams alerts. `https://192.168.0.147/` still works: it stays in `allowed_hosts` |
 | Admin login | user `admin`; initial password in `/home/sitewright/admin-initial-credentials.txt` on the VM. Change it: `cd /srv/sitewright && php bin/user.php passwd admin` |
 
 ## Firewalls
