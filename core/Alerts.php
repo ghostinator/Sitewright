@@ -75,7 +75,9 @@ final class Alerts
         try {
             match ($channel) {
                 'email' => array_map(static fn (string $to) => Mailer::send($to, '[Sitewright] ' . $event . ' (' . $level . ')', "$title\n\n$message\n"), (array)$a['email_to']),
-                'teams' => self::post((string)$a['teams_webhook'], self::teamsCard($title, $message)),
+                'teams' => self::post((string)$a['teams_webhook'], self::teamsCard(
+                    ucfirst(str_replace('_', ' ', $event)), $message, $level,
+                    ['Event' => $event, 'Host' => $host, 'Time (UTC)' => gmdate('Y-m-d H:i:s')], (string)Config::get('base_url'))),
                 'telegram' => self::post('https://api.telegram.org/bot' . self::telegramToken((string)$a['telegram_token']) . '/sendMessage',
                     ['chat_id' => (string)$a['telegram_chat_id'], 'text' => $title . "\n\n" . $message, 'disable_web_page_preview' => true]),
                 default => throw new JobFailedException("Unknown alert channel", 500),
@@ -91,19 +93,31 @@ final class Alerts
         return $t;   // the Bot API takes the token verbatim in the path (":" is legal there)
     }
 
-    /** Teams "Workflows" webhook: a message with one Adaptive Card attachment (the retired connector format is not used). */
-    public static function teamsCard(string $title, string $message): array
+    /**
+     * Teams "Workflows" webhook: a message with one Adaptive Card attachment (the retired connector format is not used).
+     * The header colour shows severity (the Level fact says it in words too); the button opens Sitewright, and only for an http(s) address.
+     * @param array<string,string> $facts shown as a table under the message
+     */
+    public static function teamsCard(string $title, string $message, string $level = 'info', array $facts = [], string $url = ''): array
     {
-        return ['type' => 'message', 'attachments' => [[
-            'contentType' => 'application/vnd.microsoft.card.adaptive', 'contentUrl' => null,
-            'content' => [
-                '$schema' => 'http://adaptivecards.io/schemas/adaptive-card.json', 'type' => 'AdaptiveCard', 'version' => '1.4',
-                'body' => [
-                    ['type' => 'TextBlock', 'text' => $title, 'weight' => 'Bolder', 'size' => 'Medium', 'wrap' => true],
-                    ['type' => 'TextBlock', 'text' => $message, 'wrap' => true],
-                ],
+        $style = ['error' => 'attention', 'warning' => 'warning'][$level] ?? 'emphasis';
+        $label = in_array($level, ['error', 'warning', 'info'], true) ? ucfirst($level) : 'Info';
+        $rows = [['title' => 'Level', 'value' => $label]];
+        foreach ($facts as $k => $v) { $rows[] = ['title' => (string)$k, 'value' => (string)$v]; }
+        $content = [
+            '$schema' => 'http://adaptivecards.io/schemas/adaptive-card.json', 'type' => 'AdaptiveCard', 'version' => '1.4',
+            'msteams' => ['width' => 'Full'],
+            'body' => [
+                ['type' => 'Container', 'style' => $style, 'bleed' => false, 'items' => [
+                    ['type' => 'TextBlock', 'text' => $label . ': ' . $title, 'weight' => 'Bolder', 'size' => 'Medium', 'wrap' => true]]],
+                ['type' => 'TextBlock', 'text' => $message, 'wrap' => true, 'spacing' => 'Medium'],
+                ['type' => 'FactSet', 'facts' => $rows, 'spacing' => 'Medium'],
             ],
-        ]]];
+        ];
+        if (preg_match('#^https?://#i', $url) === 1) {
+            $content['actions'] = [['type' => 'Action.OpenUrl', 'title' => 'Open Sitewright', 'url' => $url]];
+        }
+        return ['type' => 'message', 'attachments' => [['contentType' => 'application/vnd.microsoft.card.adaptive', 'contentUrl' => null, 'content' => $content]]];
     }
 
     private static function post(string $url, array $json): void

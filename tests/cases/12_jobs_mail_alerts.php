@@ -171,6 +171,18 @@ test('alerts: Teams gets an Adaptive Card message; Telegram gets chat_id + text;
     $tg = json_decode($calls[1]['body'], true); eq($tg['chat_id'], '-100123'); ok(str_contains($tg['text'], 'HTTP 500'));
     eq($calls[0]['method'], 'POST'); eq($db->fetchOne("SELECT COUNT(*) n FROM sw_jobs WHERE status='done'")['n'], 2);
 });
+test('alerts: the Teams card shows severity, full width, a facts table and an Open Sitewright button (and never a button for an unsafe link)', function () {
+    $card = fn (string $level, string $url = 'https://sw.example/') => Alerts::teamsCard('Health down', 'disk low', $level, ['Event' => 'health_down', 'Host' => 'sw.example'], $url)['attachments'][0]['content'];
+    $c = $card('error');
+    eq($c['msteams']['width'], 'Full');
+    eq($c['body'][0]['type'], 'Container'); eq($c['body'][0]['style'], 'attention'); eq($c['body'][0]['items'][0]['text'], 'Error: Health down');
+    eq($c['body'][1]['text'], 'disk low');
+    eq($c['body'][2]['type'], 'FactSet'); eq($c['body'][2]['facts'][0], ['title' => 'Level', 'value' => 'Error']);
+    eq($c['body'][2]['facts'][1], ['title' => 'Event', 'value' => 'health_down']);
+    eq($c['actions'][0], ['type' => 'Action.OpenUrl', 'title' => 'Open Sitewright', 'url' => 'https://sw.example/']);
+    eq($card('warning')['body'][0]['style'], 'warning'); eq($card('info')['body'][0]['style'], 'emphasis'); eq($card('nonsense')['body'][0]['style'], 'emphasis');
+    ok(!isset($card('error', '')['actions']), 'no URL, no button'); ok(!isset($card('error', 'javascript:alert(1)')['actions']), 'only http(s) links become buttons');
+});
 test('alerts: cooldown suppresses repeats per event+key; a different key still alerts', function () use ($wipe, $alertCfg, $db) {
     $wipe(); $alertCfg(['teams_webhook' => 'https://example.webhook.office.com/x']);
     Alerts::notify('e', 'one'); Alerts::notify('e', 'two'); Alerts::notify('e', 'three', 'warning', 'other-key');
