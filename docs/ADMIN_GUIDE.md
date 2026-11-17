@@ -64,8 +64,11 @@ For whoever installs, runs and secures Sitewright. Day-to-day use is in the [use
 ### Logging and alerts
 JSON lines with a request id. Recommended for one VM: warnings and errors to a rotated, compressed file (`deploy/setup-logging.sh`) plus an Uptime Kuma push monitor fed by the health timer; Grafana Loki + Alloy if you later want search. E-mail alerts use your mail provider (Postal HTTP API or SMTP); Teams and Telegram are supported but not proven live. Details: [ALERTS_AND_LOGGING.md](ALERTS_AND_LOGGING.md). Which events send alerts is a setting.
 
+### Monitoring: watchlist, audits, search opportunities, Core Web Vitals
+The worker (every minute) starts due watchlist checks (at most `watch.max_per_tick`, one per site at a time, staggered), repeats audits every `audit.repeat_days` when set (one site per minute), and imports Search Console data daily. All of it is under **Settings → Monitoring** and **Integrations**. A watched page that is down or an audit of a dead site is *recorded*, never a failed job, so it cannot trigger `job_failed` alerts or the health check. Retention: scheduled analyses `watch.retention_days`, newest `audit.keep` audits per site (purged hourly by the worker). Search Console now also imports query+page rows (replaced each sync) for the opportunity finder; tie each connection to a site on the Analytics page, otherwise its data belongs to "not a site". **Core Web Vitals** are off by default; turning them on sends page addresses to Google, and in practice needs a free API key (an unkeyed request answered HTTP 429 when tested), stored encrypted and sent in a header. New alert events: `watch_down`, `watch_recovered`, `watch_regression`, `audit_new_issues`. Upgrading: run `php bin/migrate.php` (migrations 010-014) before the new code serves requests, then restart the worker.
+
 ### Connected WordPress sites
-Install the agent plugin (download it from the Sites page); Sitewright calls the site with signed requests (HMAC-SHA256, timestamp and nonce, replay-refused). The plugin stores no IPs or user agents. Needs `app_key`. Tested against WordPress 6 (`tests/docker/wordpress-e2e.sh`).
+Install the agent plugin (download it from the Sites page, version 1.0.1; 1.0.0 saved an empty secret and said "Saved." when the pasted value was not 64 hex characters); Sitewright calls the site with signed requests (HMAC-SHA256, timestamp and nonce, replay-refused). The plugin stores no IPs or user agents. Needs `app_key`. Tested against WordPress 6 (`tests/docker/wordpress-e2e.sh`).
 
 ### Google Search Console
 Create an OAuth client (Web application), enable the Search Console API, add `https://YOUR-HOST/api/gsc/callback` as a redirect URI, then enter the client under Settings → Integrations. The sign-in redirect happens in your browser, so the host need not be public. Read-only scope; refresh token encrypted. **Not yet proven against Google** (tested with scripted responses).
@@ -95,7 +98,7 @@ Hardening you still do on the server: firewall egress for the web/worker user (b
 | Jobs "waiting for a worker" | `systemctl status sitewright-worker`; `journalctl -u sitewright-worker`; the health check alerts when jobs wait over 5 minutes |
 | Every sign-in is HTTP 500 after an update | Migrations were not run before the new code; run `php bin/migrate.php` |
 | `mfa_required` on every page | "Require two-step verification" is on and the admin has none; use My Account, or the break-glass in section 3 |
-| Site sync "signature rejected" | The secret in the plugin does not match, or the clocks differ by over 5 minutes |
+| Site sync error | The message now says which: *does not match* (re-create the secret with **New secret**, paste only the 64 characters; a `SITEWRIGHT_SECRET` in wp-config.php wins over the settings page), *clocks differ* (UNIX time, so time zones are irrelevant), *no secret yet*, or an answer that did not come from the plugin (firewall/security plugin). `curl 'https://SITE/?rest_route=/sitewright/v1/status'` answering *Secret not set* means the site has no secret at all |
 | Site sync "plugin not found" | Plugin inactive, or the REST API is blocked by a security plugin or firewall |
 | E-mail "From address is not on a verified domain" | Verify the sender domain in Postal |
 | "Secrets can only be saved after app_key is set" | Generate `app_key` (section 2, step 5) |

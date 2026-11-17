@@ -56,6 +56,8 @@ Configure under **Settings → Mail & alerts** (there is a "Send test mail to me
 * Test every channel: `php bin/alert-test.php`. Alerts are queued and retried; a channel outage never slows a request.
 * **Firewall**: the web user may not open connections to private addresses. Allow your mail server explicitly (`deploy/egress-postal.nft.example`).
 
+Monitoring alerts (Settings → Monitoring): **watch_down** (a watched page could not be fetched N times in a row; sent once), **watch_recovered**, **watch_regression** (score drop, a new `noindex`, or the title gone) and **audit_new_issues** (a site audit found new high-priority problems compared with the previous audit). They fire on a change, never on a first check, and a dead watched site does not fail any job, so it cannot turn the health check red or raise `job_failed`. The Teams card is coloured by severity and has an *Open Sitewright* button. If you saved your own *Events that send an alert* list under Settings, add the new events to it (a saved list replaces the built-in one).
+
 What alerts fire: HTTP 5xx / unhandled errors, repeated failed sign-ins (`login_failures` within 10 minutes), failed background jobs, account/role/MFA changes, and `bin/healthcheck.php` state changes (database unreachable, worker dead, queue stuck, disk almost full). Each event has a cooldown (default 5 minutes) so a storm is one message.
 
 ## Worker and health check
