@@ -5,7 +5,7 @@ if (!dbAvailable()) { test('database available', fn () => ok(false, 'MariaDB not
 $db = freshDb();
 $H = ['Content-Type' => 'text/html; charset=utf-8'];
 $desc = 'A description for this page that is long enough to count as optimal for search results, with plenty of useful words in it for readers.';
-$pg = fn (string $title, string $links = '', int $words = 400, string $d = null, int $h1 = 1, string $head = '') => [200, $H, '<!doctype html><html lang="en"><head>' . ($title === '' ? '' : "<title>$title</title>")
+$pg = fn (string $title, string $links = '', int $words = 400, ?string $d = null, int $h1 = 1, string $head = '') => [200, $H, '<!doctype html><html lang="en"><head>' . ($title === '' ? '' : "<title>$title</title>")
     . '<meta name="description" content="' . ($d ?? $GLOBALS['__desc']) . '"><meta name="viewport" content="width=device-width">' . $head . '</head><body>' . str_repeat('<h1>Heading</h1>', $h1) . $links . '<p>' . str_repeat('word ', $words) . '</p></body></html>'];
 $GLOBALS['__desc'] = $desc;
 $site = function (array $over = []) use ($pg, $H) {
