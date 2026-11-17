@@ -68,6 +68,16 @@ return [
     // Search opportunities (from Search Console data)
     ['GET',    '/api/opportunities',             $C . 'OpportunityController@list', ['role' => 'viewer']],
 
+    // CSV downloads (read-only; none contains visitor addresses)
+    ['GET',    '/api/export/audit/{id}',           $C . 'ExportController@audit',              ['role' => 'viewer']],
+    ['GET',    '/api/export/watch',                $C . 'ExportController@watch',              ['role' => 'viewer']],
+    ['GET',    '/api/export/watch/{id}/history',   $C . 'ExportController@watchHistory',       ['role' => 'viewer']],
+    ['GET',    '/api/export/overview',             $C . 'ExportController@overview',           ['role' => 'viewer']],
+    ['GET',    '/api/export/opportunities',        $C . 'ExportController@opportunities',      ['role' => 'viewer']],
+    ['GET',    '/api/export/analyses',             $C . 'ExportController@analyses',           ['role' => 'viewer']],
+    ['GET',    '/api/export/keywords',             $C . 'ExportController@keywords',           ['role' => 'viewer']],
+    ['GET',    '/api/export/redirect-suggestions', $C . 'ExportController@redirectSuggestions', ['role' => 'viewer']],
+
     // Site audits (crawl + per-page checks)
     ['GET',    '/api/site-audits',               $C . 'SiteAuditController@list',   ['role' => 'viewer']],
     ['POST',   '/api/site-audits',               $C . 'SiteAuditController@start',  ['role' => 'editor', 'limit' => 'fetch']],

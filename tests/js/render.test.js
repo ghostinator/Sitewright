@@ -506,3 +506,19 @@ test('analysis result offers Web Vitals only when it is switched on and the pers
   assert.equal(rows[0].querySelector('[data-action="watch-psi"]').textContent, 'Web Vitals: on'); assert.equal(rows[1].querySelector('[data-action="watch-psi"]').textContent, 'Web Vitals: off');
   box.replaceChildren(); SW.renderWatchlist(box, { items: [watchItem()] }, true, false); assert.equal(box.querySelector('[data-action="watch-psi"]'), null, 'not offered while Settings has it off');
 });
+
+const exportsOf = box => [...box.querySelectorAll('a.export-link')].map(a => a.dataset.export + (a.dataset.scoped === '1' ? ' [site]' : ''));
+test('export and print: reports offer CSV downloads and a "Print or save as PDF" button; the link carries only a path, never user text', () => {
+  const { SW, box } = load();
+  SW.renderSiteAuditReport(box, { audit: { id: 8, base_url: 'https://c.example', status: 'done', pages: 3, stopped_early: 0, summary: { pages: 3, avg_score: 80, new: null, fixed: null, by_severity: { high: 0, medium: 0, low: 0 } } }, types: [] });
+  assert.deepEqual(exportsOf(box), ['/audit/8?part=issues', '/audit/8?part=pages']); const pr = box.querySelector('[data-action="print-report"]'); assert.ok(pr); assert.match(pr.dataset.title, /c\.example/); assert.match(pr.textContent, /PDF/);
+  box.replaceChildren(); SW.renderOpportunities(box, { has_data: true, summary: { potential_clicks: 5 }, note: '', items: [opp()] }); assert.deepEqual(exportsOf(box), ['/opportunities [site]']); assert.ok(box.querySelector('[data-action="print-report"]'));
+  box.replaceChildren(); SW.renderWatchlist(box, { items: [watchItem()] }, true, false); assert.deepEqual(exportsOf(box), ['/watch [site]']);
+  box.replaceChildren(); SW.renderWatchHistory(box, { points: [{ at: 'x', score: 1, load_time: 1, word_count: 1, noindex: false }] }, 3); assert.deepEqual(exportsOf(box), ['/watch/3/history']);
+  box.replaceChildren(); SW.renderWatchHistory(box, { points: [{ at: 'x', score: 1, load_time: 1, word_count: 1, noindex: false }] }); assert.deepEqual(exportsOf(box), [], 'without an id there is nothing to link to');
+  box.replaceChildren(); SW.renderOverview(box, { sites: [{ id: 1, name: 'A', base_url: 'u', plugin: true, last_score: 1, last_analyzed_at: null, impressions: 1, clicks: 1, not_found: 0, watched: 0, down: 0 }] }); assert.deepEqual(exportsOf(box), ['/overview']);
+  box.replaceChildren(); SW.renderRedirectSuggestions(box, { has_inventory: true, source: 'audit', unmatched: 0, items: [{ id: 1, project_id: 0, uri: '/a', hits: 1, suggestions: [{ target: '/b', score: 90, reason: 'r' }] }] }, true); assert.deepEqual(exportsOf(box), ['/redirect-suggestions [site]']);
+  box.replaceChildren(); SW.renderSeoResults(box, seoData('https://c.example/x')); const p2 = box.querySelector('[data-action="print-report"]'); assert.ok(p2); assert.match(p2.dataset.title, /c\.example\/x/);
+  for (const p of PAYLOADS) { box.replaceChildren(); SW.renderSiteAuditReport(box, { audit: { id: 1, base_url: p, status: 'done', pages: 1, stopped_early: 0, summary: { pages: 1, avg_score: 1, new: null, fixed: null, by_severity: { high: 0, medium: 0, low: 0 } } }, types: [] });
+    for (const a of box.querySelectorAll('a')) assert.ok(!/^\s*javascript:/i.test(a.getAttribute('href') || ''), 'no javascript: link for ' + p); }
+});

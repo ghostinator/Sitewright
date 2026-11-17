@@ -128,6 +128,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                 <div class="user-actions"><label class="visually-hidden" for="site-switch">Site</label><select id="site-switch" class="site-switch"><option value="0">All sites</option></select> <span class="user-name"><?= $h($user['username']) ?></span> <button type="button" class="btn btn-secondary btn-sm" data-action="logout">Sign out</button></div>
             </header>
 
+            <p id="print-title" class="print-only" aria-hidden="true"></p>
             <div class="content-area" id="content-area">
                 <div class="view" id="view-dashboard">
                     <div class="stats-grid">
@@ -153,6 +154,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <h3>Website SEO Analysis</h3>
                     <p class="text-muted">Fetches the page once from this server and runs heuristic on-page checks. Not a substitute for Lighthouse or Search Console.</p>
                     <?php if ($user && $user['role'] === 'admin'): ?><p class="text-muted settings-link-note"><small>Titles are judged against <?= (int)Config::get('seo.title_min') ?>–<?= (int)Config::get('seo.title_max') ?> characters and descriptions against <?= (int)Config::get('seo.meta_min') ?>–<?= (int)Config::get('seo.meta_max') ?>. <a href="<?= $h($base) ?>/settings#seo">Change in Settings</a></small></p><?php endif; ?>
+                    <p class="no-print"><a class="btn btn-secondary btn-sm export-link" data-export="/analyses" data-scoped="1" href="<?= $h($base) ?>/api/export/analyses">Download past analyses (CSV)</a></p>
                     <form id="seo-analysis-form" class="form"><div class="form-group"><label for="seo-url">Website URL</label><input type="url" id="seo-url" placeholder="https://example.com" required maxlength="2048"></div><button type="submit" class="btn btn-primary">Analyze Website</button></form>
                     <div id="seo-results" class="results-area"></div>
                 </div></div>
@@ -205,6 +207,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                 <div class="view" id="view-analytics"><div class="card">
                     <h3>Keyword Analytics</h3>
                     <p class="text-muted">Keyword data comes from Google Search Console (read-only, connect below) and from anything you add or import through the API.</p>
+                    <p class="no-print"><a class="btn btn-secondary btn-sm export-link" data-export="/keywords" data-scoped="1" href="<?= $h($base) ?>/api/export/keywords">Download keywords (CSV, last 28 days)</a></p>
                     <div id="gsc-box" class="list-area"></div>
                     <div id="analytics-dashboard"></div>
                 </div></div>

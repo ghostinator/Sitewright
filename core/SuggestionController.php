@@ -8,8 +8,13 @@ final class SuggestionController
 {
     public function redirects(array $params): never
     {
+        Response::success('Suggestions', self::compute(Request::queryInt('project_id', 0, 0, PHP_INT_MAX)));
+    }
+
+    /** @return array{has_inventory:bool,source:string,items:array,unmatched:int} */
+    public static function compute(int $project): array
+    {
         $db = Database::getInstance();
-        $project = Request::queryInt('project_id', 0, 0, PHP_INT_MAX);
         $rows = $db->fetchAll('SELECT id, project_id, uri, hits FROM `' . $db->t('404_monitor') . '`' . ($project > 0 ? ' WHERE project_id = :p' : '') . ' ORDER BY hits DESC, last_accessed DESC, id LIMIT 300', $project > 0 ? ['p' => $project] : []);
         $handled = [];
         foreach ($db->fetchAll('SELECT project_id, source_url FROM `' . $db->t('redirections') . "` WHERE status = 'active'") as $r) { $handled[(int)$r['project_id'] . '|' . strtolower($r['source_url'])] = true; }
@@ -24,6 +29,6 @@ final class SuggestionController
         }
         if ($project > 0 && !isset($sources[$project])) { $sources[$project] = RedirectSuggester::inventory($project)['source']; }
         $have = array_values(array_unique(array_diff($sources, ['none'])));
-        Response::success('Suggestions', ['has_inventory' => $have !== [], 'source' => count($have) === 0 ? 'none' : (count($have) === 1 ? $have[0] : 'mixed'), 'items' => $items, 'unmatched' => $unmatched]);
+        return ['has_inventory' => $have !== [], 'source' => count($have) === 0 ? 'none' : (count($have) === 1 ? $have[0] : 'mixed'), 'items' => $items, 'unmatched' => $unmatched];
     }
 }

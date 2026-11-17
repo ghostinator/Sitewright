@@ -83,6 +83,7 @@
                 resultRow('Structured data (JSON-LD)', yn(r.structured_data.has_schema)), resultRow('Word count', r.basic.word_count),
                 resultRow('Canonical', r.basic.canonical || 'none'), resultRow('Language', r.basic.lang || 'not set'), resultRow('noindex', yn(r.basic.noindex))),
             muted('Heuristic checks based on one server-side fetch.'),
+            el('p', { class: 'no-print' }, printButton('SEO analysis: ' + data.url)),
             opts && opts.canWatch ? el('p', {}, el('button', { class: 'btn btn-secondary', text: 'Watch this page', attrs: { type: 'button' }, data: { action: 'watch-add', url: data.url } }),
                 ' ', el('small', { class: 'text-muted', text: 'Re-checks it on a schedule and alerts you if it gets worse or goes down.' })) : null,
             opts && opts.canPsi ? el('p', {}, el('button', { class: 'btn btn-secondary', text: 'Measure Core Web Vitals', attrs: { type: 'button' }, data: { action: 'psi-run', url: data.url } }),
@@ -205,22 +206,27 @@
                 el('td', { text: w.last_run_at || 'never' }),
                 el('td', { class: 'row-actions' }, ...actions.flatMap((a, i) => i ? [' ', a] : [a])));
         }));
-        setContent(container, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
+        setContent(container, el('p', { class: 'no-print' }, exportLink('/watch', 'Download CSV', true)), el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
     }
 
-    function renderWatchHistory(container, data) {
+    function renderWatchHistory(container, data, watchId) {
         const pts = (data.points || []).slice().reverse();
         if (!pts.length) return setContent(container, muted('No checks yet.'));
         const head = el('thead', {}, el('tr', {}, ...['Checked', 'Score', 'Fetch time', 'Words', 'Notes'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
         const body = el('tbody', {}, ...pts.map(p => el('tr', {}, el('td', { text: p.at }), el('td', { text: p.score === null ? '–' : String(p.score) }),
             el('td', { text: p.load_time === null || p.load_time === undefined ? '–' : p.load_time + 's' }), el('td', { text: p.word_count === null || p.word_count === undefined ? '–' : fmtInt(p.word_count) }),
             el('td', { text: p.noindex ? 'noindex' : '' }))));
-        setContent(container, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
+        setContent(container, watchId ? el('p', { class: 'no-print' }, exportLink('/watch/' + watchId + '/history', 'Download history (CSV)')) : null, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
     }
 
     const sevBadge = sev => el('span', { class: 'badge ' + (sev === 'high' ? 'badge-bad' : ''), text: sev.charAt(0).toUpperCase() + sev.slice(1) });
     const tableOf = (heads, rows) => el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' },
         el('thead', {}, el('tr', {}, ...heads.map(h => el('th', { text: h, attrs: { scope: 'col' } })))), el('tbody', {}, ...rows)));
+
+    /** A CSV download. The real address is filled in by syncExportLinks() (it needs the base path and the chosen site). */
+    const exportLink = (path, label, scoped) => el('a', { class: 'btn btn-secondary btn-sm export-link no-print', text: label, attrs: { href: '#' }, data: { export: path, scoped: scoped ? '1' : '0' } });
+    /** Opens the browser's print dialog on the visible report (Save as PDF there). */
+    const printButton = title => el('button', { class: 'btn btn-secondary btn-sm no-print', text: 'Print or save as PDF', attrs: { type: 'button' }, data: { action: 'print-report', title } });
 
     /** Audit history. A running audit has nothing to view yet; a failed one shows why. */
     function renderSiteAudits(container, data, canEdit) {
@@ -245,7 +251,8 @@
 
     function renderSiteAuditReport(container, data) {
         const a = data.audit, s = a.summary || {};
-        const lines = [el('p', {}, el('strong', { text: a.base_url }), ' ' + a.pages + ' pages checked, average score ' + (s.avg_score === null || s.avg_score === undefined ? '–' : s.avg_score) + '/100.'
+        const lines = [el('p', { class: 'no-print' }, exportLink('/audit/' + a.id + '?part=issues', 'Download issues (CSV)'), ' ', exportLink('/audit/' + a.id + '?part=pages', 'Download pages (CSV)'), ' ', printButton('Site audit: ' + a.base_url)),
+            el('p', {}, el('strong', { text: a.base_url }), ' ' + a.pages + ' pages checked, average score ' + (s.avg_score === null || s.avg_score === undefined ? '–' : s.avg_score) + '/100.'
             + (s.new !== null && s.new !== undefined ? ' Since the previous audit: ' + s.new + ' new, ' + s.fixed + ' fixed.' : ' This is the first audit of this site, so there is nothing to compare with yet.'))];
         if (Number(a.stopped_early)) lines.push(el('div', { class: 'alert alert-warn', text: 'The audit stopped early at its page or time limit, so some pages were not checked. Raise the limits under Settings → Monitoring to cover more.' }));
         if (s.issues_truncated) lines.push(muted('There were more issues than are stored; the list shows the first 5,000.'));
@@ -278,7 +285,7 @@
             el('td', {}, ...i.suggestions.flatMap(s => [el('div', { class: 'suggestion' },
                 canEdit ? el('button', { class: 'btn btn-secondary btn-sm', text: 'Redirect to ' + s.target, attrs: { type: 'button' }, data: { action: 'redirect-accept', uri: i.uri, target: s.target, project: i.project_id } }) : el('span', { class: 'break-all', text: s.target }),
                 ' ', el('span', { class: 'badge', text: s.score + '% match' + (s.score < 55 ? ', low confidence' : '') }), ' ', el('small', { class: 'text-muted', text: s.reason }))]))));
-        setContent(container, tableOf(['404 address', 'Suggested pages'], rows), more);
+        setContent(container, el('p', { class: 'no-print' }, exportLink('/redirect-suggestions', 'Download CSV', true)), tableOf(['404 address', 'Suggested pages'], rows), more);
     }
 
     const rate = (v, good, ok) => v <= good ? ['Good', 'check-ok'] : v <= ok ? ['Needs work', 'check-warn'] : ['Poor', 'check-bad'];
@@ -317,7 +324,7 @@
                 ...(i.other_pages || []).flatMap(p => [el('br'), el('small', { class: 'text-muted', text: 'also: ' + p })]), el('br'), el('small', { class: 'text-muted', text: i.advice })),
             el('td', { text: fmtInt(i.impressions) }), el('td', { text: i.type === 'falling' ? fmtInt(i.previous_clicks) + ' → ' + fmtInt(i.clicks) : fmtInt(i.clicks) }),
             el('td', { text: i.type === 'falling' ? '–' : i.ctr + '% at #' + i.position }), el('td', { text: i.potential_clicks > 0 ? '+' + fmtInt(i.potential_clicks) : '–' })));
-        setContent(container, lead, tableOf(['Type', 'Query and page', 'Views', 'Clicks', 'Click-through', 'Could gain'], rows), data.note ? muted(data.note) : null);
+        setContent(container, el('p', { class: 'no-print' }, exportLink('/opportunities', 'Download CSV', true), ' ', printButton('Search opportunities')), lead, tableOf(['Type', 'Query and page', 'Views', 'Clicks', 'Click-through', 'Could gain'], rows), data.note ? muted(data.note) : null);
     }
 
     /** "All sites" dashboard table. A missing number is a dash, never 0. */
@@ -332,7 +339,7 @@
             el('td', { text: s.last_score === null || s.last_score === undefined ? '–' : String(s.last_score) }),
             el('td', {}, s.watched ? String(s.watched) : '–', ...(Number(s.down) > 0 ? [' ', el('span', { class: 'badge badge-bad', text: s.down + ' down' })] : [])),
             el('td', { text: num(s.impressions) }), el('td', { text: num(s.clicks) }), el('td', { text: num(s.not_found) }))));
-        setContent(container, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
+        setContent(container, el('p', { class: 'no-print' }, exportLink('/overview', 'Download CSV'), ' ', printButton('All sites overview')), el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
     }
 
     /** Search Console panel. state = {configured, redirect_uri, connections:[...]}; properties = {id: [{site_url}]} for connections being set up. */
@@ -717,6 +724,7 @@
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
         const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, 'site-audit': loadSiteAudits, opportunities: loadOpportunities, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
+        syncExportLinks();
         if (loaders[view]) loaders[view]();
     }
 
@@ -729,7 +737,7 @@
     async function loadInto(containerId, path, render, label) {
         const box = document.getElementById(containerId);
         setContent(box, muted('Loading…'));
-        try { render(box, await apiRequest('GET', path)); } catch (e) { showError(box, 'Could not load ' + label + ': ' + e.message); }
+        try { render(box, await apiRequest('GET', path)); syncExportLinks(); } catch (e) { showError(box, 'Could not load ' + label + ': ' + e.message); }
     }
 
     async function loadDashboard() {
@@ -759,6 +767,13 @@
     }
     const siteQuery = sep => (siteId > 0 ? sep + 'project_id=' + siteId : '');
     function syncExportLinks() {
+        document.querySelectorAll('a.export-link').forEach(a => {
+            const path = a.dataset.export; const sep = path.includes('?') ? '&' : '?';
+            let q = a.dataset.scoped === '1' ? siteQuery(sep) : '';
+            const t = document.getElementById('opp-type');
+            if (path === '/opportunities' && t && t.value) q += (q ? '&' : '?') + 'type=' + encodeURIComponent(t.value);
+            a.href = BASE + '/api/export' + path + q;
+        });
         const e404 = document.getElementById('export-404'); if (e404) e404.href = BASE + '/api/404-monitor/export' + siteQuery('?');
         document.querySelectorAll('.export-rules').forEach(a => { a.href = BASE + '/api/redirections/export?format=' + a.dataset.format + siteQuery('&'); });
     }
@@ -1100,6 +1115,11 @@
             await apiRequest('POST', '/redirections', { source_url: t.dataset.uri, target_url: t.dataset.target, redirect_type: '301', project_id: Number(t.dataset.project) || 0 });
             showToast('Redirect created: ' + t.dataset.uri + ' → ' + t.dataset.target); load404();
         },
+        'print-report': t => {
+            const pt = document.getElementById('print-title');
+            if (pt) pt.textContent = (t.dataset.title || 'Report') + ' – ' + new Date().toISOString().slice(0, 10);
+            window.print();
+        },
         'psi-run': async t => {
             const box = document.getElementById('psi-result');
             await runJob('/pagespeed/run', { url: t.dataset.url, project_id: siteId }, box, 'Measuring with Google PageSpeed Insights (up to a minute)');
@@ -1115,8 +1135,8 @@
             const box = document.getElementById('watch-history');
             setContent(box, muted('Loading…'));
             const d = await apiRequest('GET', '/watch/' + encodeURIComponent(t.dataset.id) + '/history');
-            const tmp = el('div'); renderWatchHistory(tmp, d);
-            setContent(box, el('h4', { text: 'Check history' }), tmp);
+            const tmp = el('div'); renderWatchHistory(tmp, d, t.dataset.id);
+            setContent(box, el('h4', { text: 'Check history' }), tmp); syncExportLinks();
         },
         'audit-view': async t => {
             const box = document.getElementById('audit-report');
@@ -1124,7 +1144,7 @@
             const id = encodeURIComponent(t.dataset.id);
             const [d, pages] = await Promise.all([apiRequest('GET', '/site-audits/' + id), apiRequest('GET', '/site-audits/' + id + '/pages?limit=20')]);
             const rep = el('div'), worst = el('div'); renderSiteAuditReport(rep, d); renderSiteAuditPages(worst, pages);
-            setContent(box, el('h4', { text: 'Report' }), rep, el('div', { attrs: { id: 'audit-issue-list' } }), el('h4', { text: 'Lowest-scoring pages' }), worst);
+            setContent(box, el('h4', { text: 'Report' }), rep, el('div', { attrs: { id: 'audit-issue-list' } }), el('h4', { text: 'Lowest-scoring pages' }), worst); syncExportLinks();
         },
         'audit-issues': async t => {
             const box = document.getElementById('audit-issue-list');

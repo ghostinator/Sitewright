@@ -11,12 +11,18 @@ final class OverviewController
 {
     public function sites(array $params): never
     {
+        Response::success('Overview', ['sites' => self::rows()]);
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public static function rows(): array
+    {
         $db = Database::getInstance();
         $sites = $db->fetchAll('SELECT id, name, base_url, sync_enabled FROM `' . $db->t('sites') . '` ORDER BY name');
-        $score = $this->byProject("SELECT project_id, SUBSTRING_INDEX(GROUP_CONCAT(score ORDER BY analyzed_at DESC, id DESC), ',', 1) v, MAX(analyzed_at) at FROM `{$db->t('seo_analysis')}` WHERE analysis_type = 'site' AND project_id > 0 AND score IS NOT NULL GROUP BY project_id");
-        $search = $this->byProject("SELECT project_id, SUM(impressions) imp, SUM(clicks) clk FROM `{$db->t('analytics_keywords')}` WHERE project_id > 0 AND `date` >= CURDATE() - INTERVAL 28 DAY GROUP BY project_id");
-        $nf = $this->byProject("SELECT project_id, COUNT(*) n FROM `{$db->t('404_monitor')}` WHERE project_id > 0 AND last_accessed >= NOW() - INTERVAL 30 DAY GROUP BY project_id");
-        $watch = $this->byProject("SELECT project_id, COUNT(*) n, SUM(last_status = 'down') d FROM `{$db->t('watch_items')}` WHERE enabled = 1 AND project_id > 0 GROUP BY project_id");
+        $score = self::byProject("SELECT project_id, SUBSTRING_INDEX(GROUP_CONCAT(score ORDER BY analyzed_at DESC, id DESC), ',', 1) v, MAX(analyzed_at) at FROM `{$db->t('seo_analysis')}` WHERE analysis_type = 'site' AND project_id > 0 AND score IS NOT NULL GROUP BY project_id");
+        $search = self::byProject("SELECT project_id, SUM(impressions) imp, SUM(clicks) clk FROM `{$db->t('analytics_keywords')}` WHERE project_id > 0 AND `date` >= CURDATE() - INTERVAL 28 DAY GROUP BY project_id");
+        $nf = self::byProject("SELECT project_id, COUNT(*) n FROM `{$db->t('404_monitor')}` WHERE project_id > 0 AND last_accessed >= NOW() - INTERVAL 30 DAY GROUP BY project_id");
+        $watch = self::byProject("SELECT project_id, COUNT(*) n, SUM(last_status = 'down') d FROM `{$db->t('watch_items')}` WHERE enabled = 1 AND project_id > 0 GROUP BY project_id");
         $out = [];
         foreach ($sites as $s) {
             $id = (int)$s['id'];
@@ -27,11 +33,11 @@ final class OverviewController
                 'not_found' => (int)($nf[$id]['n'] ?? 0), 'watched' => (int)($watch[$id]['n'] ?? 0), 'down' => (int)($watch[$id]['d'] ?? 0),
             ];
         }
-        Response::success('Overview', ['sites' => $out]);
+        return $out;
     }
 
     /** @return array<int,array<string,mixed>> rows keyed by project_id */
-    private function byProject(string $sql): array
+    private static function byProject(string $sql): array
     {
         $by = [];
         foreach (Database::getInstance()->fetchAll($sql) as $r) { $by[(int)$r['project_id']] = $r; }

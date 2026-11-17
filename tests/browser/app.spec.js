@@ -1,6 +1,7 @@
 // Browser suite against the real Apache + MariaDB + worker stack from tests/docker/smoke.sh. Serial: later tests use accounts made earlier.
 const { test, expect } = require('@playwright/test');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 
 const ADMIN = { user: 'admin', pass: 'smoke-test-passphrase' };
 const ED = { user: 'edie', pass: 'editor passphrase 12345', email: 'edie@example.test' };
@@ -317,6 +318,13 @@ test('site audit: run one through the worker, read the report, list the pages be
   await expect(page.locator('#audit-report')).toContainText('Lowest-scoring pages');
   const show = page.locator('#audit-report [data-action=audit-issues]').first();
   if (await show.count()) { await show.click(); await expect(page.locator('#audit-issue-list table')).toBeVisible(); }
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#audit-report a.export-link >> text=Download issues')]);
+  expect(dl.suggestedFilename()).toMatch(/^audit-issues-\d{4}-\d{2}-\d{2}\.csv$/);
+  const csv = fs.readFileSync(await dl.path(), 'utf8'); expect(csv.charCodeAt(0)).toBe(0xFEFF); expect(csv).toContain('Priority,Problem,Page,Detail');
+  await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
+  await page.click('#audit-report [data-action=print-report]');
+  await expect(page.locator('#print-title')).toContainText('Site audit: http://sw-fixture');
+  expect(await page.evaluate(() => window.__printed)).toBe(1);
   page.once('dialog', d => d.accept());
   await page.click('#audit-runs [data-action=delete-audit]');
   await expect(page.locator('#audit-runs')).toContainText('No audits yet');
