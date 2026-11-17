@@ -48,7 +48,7 @@ Owner request (2026-11-17): build all seven proposed features, "in full", includ
 | 7 | Per-site scoping, site switcher, overview; sites without the plugin (`sync_enabled`) | done | (next commit) | PHP 466, JS 33, browser 13 |
 | 1 | Watchlist, score history, regression alerts (migration 011, Watchlist/WatchController, settings group Monitoring) | done | (next commit) | PHP 482, JS 37, browser 14 |
 | 2 | Site audit (+ scheduled repeat, diff; migration 012) | done | (next commit) | PHP 502, JS 40, browser 15, WP e2e green |
-| 3 | Redirect suggestions from the 404 log | not started | | |
+| 3 | Redirect suggestions from the 404 log (RedirectSuggester; no migration) | done | (next commit) | PHP 512, JS 42, browser 16 |
 | 4 | Search Console: pages import, opportunities | not started | | |
 | 6 | PageSpeed / Core Web Vitals (opt-in) | not started | | |
 | 5 | Export: CSV everywhere + print report | not started | | |

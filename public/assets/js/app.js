@@ -262,6 +262,20 @@
         setContent(container, rows.length ? tableOf(['Page (worst first)', 'Score', 'Words', 'Fetch time', 'Linked from', 'Notes'], rows) : muted('No pages.'));
     }
 
+    /** Suggested redirects for the 404 log. Accepting creates a 301 rule; viewers can read but not accept. */
+    function renderRedirectSuggestions(container, data, canEdit) {
+        if (!data.has_inventory) return setContent(container, muted('No list of your live pages yet. Run a site audit (or crawl a sitemap) for this site, then come back: suggestions are matched against it.'),
+            el('p', {}, el('button', { class: 'btn btn-secondary btn-sm', text: 'Go to Site Audit', attrs: { type: 'button' }, data: { goto: 'site-audit' } })));
+        const items = data.items || [];
+        const more = data.unmatched ? muted(data.unmatched + ' more 404 address' + (data.unmatched === 1 ? ' has' : 'es have') + ' no good match; add a rule for those by hand.') : null;
+        if (!items.length) return setContent(container, muted('Nothing to suggest right now.'), more);
+        const rows = items.map(i => el('tr', {}, el('td', { class: 'break-all' }, el('strong', { text: i.uri }), el('br'), el('small', { class: 'text-muted', text: fmtInt(i.hits) + ' hit' + (Number(i.hits) === 1 ? '' : 's') })),
+            el('td', {}, ...i.suggestions.flatMap(s => [el('div', { class: 'suggestion' },
+                canEdit ? el('button', { class: 'btn btn-secondary btn-sm', text: 'Redirect to ' + s.target, attrs: { type: 'button' }, data: { action: 'redirect-accept', uri: i.uri, target: s.target, project: i.project_id } }) : el('span', { class: 'break-all', text: s.target }),
+                ' ', el('span', { class: 'badge', text: s.score + '% match' + (s.score < 55 ? ', low confidence' : '') }), ' ', el('small', { class: 'text-muted', text: s.reason }))]))));
+        setContent(container, tableOf(['404 address', 'Suggested pages'], rows), more);
+    }
+
     /** "All sites" dashboard table. A missing number is a dash, never 0. */
     function renderOverview(container, data) {
         const sites = data.sites || [];
@@ -523,7 +537,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -704,7 +718,8 @@
         const e404 = document.getElementById('export-404'); if (e404) e404.href = BASE + '/api/404-monitor/export' + siteQuery('?');
         document.querySelectorAll('.export-rules').forEach(a => { a.href = BASE + '/api/redirections/export?format=' + a.dataset.format + siteQuery('&'); });
     }
-    const load404 = () => { syncExportLinks(); return loadInto('404-logs', '/404-monitor/logs?per_page=100' + siteQuery('&'), render404Logs, '404 log'); };
+    const loadSuggestions = () => loadInto('redirect-suggestions', '/404-monitor/suggestions' + siteQuery('?'), (box, d) => renderRedirectSuggestions(box, d, canEdit()), 'redirect suggestions');
+    const load404 = () => { syncExportLinks(); loadSuggestions(); return loadInto('404-logs', '/404-monitor/logs?per_page=100' + siteQuery('&'), render404Logs, '404 log'); };
     const loadRedirections = () => { syncExportLinks(); return loadInto('redirections-list', '/redirections' + siteQuery('?'), renderRedirections, 'redirect rules'); };
     const loadLocations = () => loadInto('locations-list', '/local-seo/locations', (box, locs) => { locationsById = {}; locs.forEach(l => { locationsById[l.id] = l; }); renderLocations(box, locs); }, 'locations');
     const gscProps = {};
@@ -1033,6 +1048,10 @@
         'delete-location': async t => { if (confirm('Delete this location?')) { await apiRequest('DELETE', '/local-seo/locations/' + encodeURIComponent(t.dataset.id)); showToast('Location deleted'); loadLocations(); } },
         'site-sync': async t => { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/sync', {}); showToast('Sync started'); await new Promise(r => setTimeout(r, 2500)); loadSites(); return d; },
         'site-rotate': async t => { if (confirm('Create a new secret? Syncing stops until the plugin has it.')) { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/rotate-secret', {}); const box = document.getElementById('site-secret'); setContent(box, el('div', { class: 'alert alert-error', text: 'New secret (shown once): put it into the plugin.' }), el('pre', { class: 'break-all', text: d.secret })); box.classList.remove('hidden'); loadSites(); } },
+        'redirect-accept': async t => {
+            await apiRequest('POST', '/redirections', { source_url: t.dataset.uri, target_url: t.dataset.target, redirect_type: '301', project_id: Number(t.dataset.project) || 0 });
+            showToast('Redirect created: ' + t.dataset.uri + ' → ' + t.dataset.target); load404();
+        },
         'watch-add': async t => { await apiRequest('POST', '/watch', { url: t.dataset.url, project_id: siteId }); showToast('Added to the watchlist'); },
         'watch-run': async t => { await apiRequest('POST', '/watch/' + encodeURIComponent(t.dataset.id) + '/run', {}); showToast('Check queued'); setTimeout(loadWatchlist, 6000); },
         'watch-toggle': async t => { await apiRequest('PATCH', '/watch/' + encodeURIComponent(t.dataset.id), { enabled: t.dataset.enabled !== '1' }); loadWatchlist(); },

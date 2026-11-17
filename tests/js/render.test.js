@@ -432,3 +432,26 @@ test('audit issues and worst pages render as tables; hostile text stays text', (
   assert.match(box.textContent, /55/); assert.match(box.textContent, /1,000/); assert.match(box.textContent, /noindex/i);
   box.replaceChildren(); SW.renderSiteAuditIssues(box, { issues: [] }); assert.match(box.textContent, /Nothing to list/);
 });
+
+test('redirect suggestions: one button per suggested page with its match strength, the data an Accept needs, and clear messages when there is nothing to show', () => {
+  const { SW, box } = load();
+  const data = { has_inventory: true, source: 'audit', unmatched: 4, items: [{ id: 1, project_id: 2, uri: '/old/blue-widget', hits: 9,
+    suggestions: [{ target: '/products/blue-widget', score: 85, reason: 'Same page name in a different folder' }, { target: '/products', score: 40, reason: 'Closest section page (low confidence)' }] }] };
+  SW.renderRedirectSuggestions(box, data, true);
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 1);
+  assert.match(rows[0].textContent, /\/old\/blue-widget/); assert.match(rows[0].textContent, /9/);
+  const btns = [...rows[0].querySelectorAll('[data-action="redirect-accept"]')]; assert.equal(btns.length, 2);
+  assert.equal(btns[0].dataset.uri, '/old/blue-widget'); assert.equal(btns[0].dataset.target, '/products/blue-widget'); assert.equal(btns[0].dataset.project, '2');
+  assert.match(rows[0].textContent, /85%/); assert.match(rows[0].textContent, /low confidence/i); assert.match(box.textContent, /4 more.*no good match/i);
+  box.replaceChildren(); SW.renderRedirectSuggestions(box, data, false); assert.equal(box.querySelectorAll('[data-action="redirect-accept"]').length, 0, 'viewers see the suggestion but cannot accept'); assert.match(box.textContent, /\/products\/blue-widget/);
+  box.replaceChildren(); SW.renderRedirectSuggestions(box, { has_inventory: false, source: 'none', unmatched: 0, items: [] }, true);
+  assert.match(box.textContent, /run a site audit/i); assert.ok(box.querySelector('[data-goto="site-audit"]'));
+  box.replaceChildren(); SW.renderRedirectSuggestions(box, { has_inventory: true, source: 'sitemap', unmatched: 0, items: [] }, true); assert.match(box.textContent, /Nothing to suggest/);
+});
+test('redirect suggestions: hostile paths stay text', () => {
+  const { SW, box } = load();
+  for (const p of PAYLOADS) {
+    box.replaceChildren(); SW.renderRedirectSuggestions(box, { has_inventory: true, source: 'audit', unmatched: 0, items: [{ id: 1, project_id: 0, uri: p, hits: 1, suggestions: [{ target: p, score: 70, reason: p }] }] }, true);
+    assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p));
+  }
+});

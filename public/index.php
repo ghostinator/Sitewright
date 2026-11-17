@@ -276,6 +276,11 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <button type="button" class="btn btn-danger" data-action="clear-404">Clear All</button>
                     <form id="log404-form" class="form form-inline"><div class="form-group"><label for="log404-uri">Add entry (path)</label><input id="log404-uri" placeholder="/missing-page" required maxlength="1000"></div><button type="submit" class="btn btn-primary">Add</button></form>
                     <div id="404-logs" class="list-area"></div>
+                </div>
+                <div class="card">
+                    <h3>Suggested redirects</h3>
+                    <p class="text-muted">Each 404 address is matched against the live pages found by the newest site audit and the sitemap list. One click creates a permanent (301) rule.</p>
+                    <div id="redirect-suggestions" class="list-area"></div>
                 </div></div>
 
                 <div class="view" id="view-redirections"><div class="card">

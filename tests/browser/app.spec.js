@@ -322,6 +322,20 @@ test('site audit: run one through the worker, read the report, list the pages be
   await expect(page.locator('#audit-runs')).toContainText('No audits yet');
 });
 
+test('404 log: a 404 gets a suggested page from the crawled sitemap list, and one click turns it into a 301 rule', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.goto('/404-monitor');
+  await page.fill('#log404-uri', '/ABOUT.html'); await page.click('#log404-form button[type=submit]');
+  const box = page.locator('#redirect-suggestions');
+  await expect(box).toContainText('Redirect to /about.html');
+  await expect(box).toContainText('100% match');
+  await box.locator('[data-action=redirect-accept]').first().click();
+  await expect(page.locator('#toast')).toContainText('Redirect created');
+  await expect(box).not.toContainText('/ABOUT.html');
+  await page.goto('/redirections');
+  await expect(page.locator('#redirections-list')).toContainText('/ABOUT.html');
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {

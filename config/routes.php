@@ -81,6 +81,7 @@ return [
     // 404 log (manual / imported entries; this app does not capture 404s by itself)
     ['GET',    '/api/404-monitor/logs',   $M . 'Monitor\\MonitorController@getLogs',   ['role' => 'editor']],   // contains visitor IPs and user agents
     ['POST',   '/api/404-monitor/log',    $M . 'Monitor\\MonitorController@log404'],
+    ['GET',    '/api/404-monitor/suggestions', $C . 'SuggestionController@redirects', ['role' => 'viewer']],
     ['GET',    '/api/404-monitor/export', $M . 'Monitor\\MonitorController@exportCSV', ['role' => 'editor']],
     ['POST',   '/api/404-monitor/clear',  $M . 'Monitor\\MonitorController@clearLogs'],
     ['DELETE', '/api/404-monitor/{id}',   $M . 'Monitor\\MonitorController@deleteLog'],
