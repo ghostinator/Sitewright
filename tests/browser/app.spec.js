@@ -306,6 +306,22 @@ test('watchlist: add a page, run a check through the worker, see its score and h
   await expect(page.locator('#watch-list')).toContainText('Nothing is watched yet');
 });
 
+test('site audit: run one through the worker, read the report, list the pages behind an issue, then delete it', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.goto('/site-audit');
+  await page.fill('#audit-url', 'http://sw-fixture/');
+  await page.click('#audit-form button[type=submit]');
+  await expect(async () => { await page.reload(); await expect(page.locator('#audit-runs tbody tr').first()).toContainText(/\d+ pages|issues|high|No issues/i); await expect(page.locator('#audit-runs [data-action=audit-view]')).toHaveCount(1); }).toPass({ timeout: 60000 });
+  await page.click('#audit-runs [data-action=audit-view]');
+  await expect(page.locator('#audit-report')).toContainText(/pages checked, average score/);
+  await expect(page.locator('#audit-report')).toContainText('Lowest-scoring pages');
+  const show = page.locator('#audit-report [data-action=audit-issues]').first();
+  if (await show.count()) { await show.click(); await expect(page.locator('#audit-issue-list table')).toBeVisible(); }
+  page.once('dialog', d => d.accept());
+  await page.click('#audit-runs [data-action=delete-audit]');
+  await expect(page.locator('#audit-runs')).toContainText('No audits yet');
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {

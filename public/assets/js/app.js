@@ -1050,7 +1050,7 @@
             const id = encodeURIComponent(t.dataset.id);
             const [d, pages] = await Promise.all([apiRequest('GET', '/site-audits/' + id), apiRequest('GET', '/site-audits/' + id + '/pages?limit=20')]);
             const rep = el('div'), worst = el('div'); renderSiteAuditReport(rep, d); renderSiteAuditPages(worst, pages);
-            setContent(box, el('h4', { text: 'Report' }), rep, el('div', { id: 'audit-issue-list' }), el('h4', { text: 'Lowest-scoring pages' }), worst);
+            setContent(box, el('h4', { text: 'Report' }), rep, el('div', { attrs: { id: 'audit-issue-list' } }), el('h4', { text: 'Lowest-scoring pages' }), worst);
         },
         'audit-issues': async t => {
             const box = document.getElementById('audit-issue-list');
