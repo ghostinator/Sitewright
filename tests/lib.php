@@ -87,6 +87,14 @@ function startServer(array $env = []): array
     $proc = proc_open([PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=1', '-S', "127.0.0.1:$port", '-t', dirname(__DIR__) . '/public', __DIR__ . '/router.php'],
         [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/tmp/sw-server.log', 'a']], $pipes, dirname(__DIR__), $env);
     for ($i = 0; $i < 60; $i++) { if (@fsockopen('127.0.0.1', $port)) { break; } usleep(100000); }
+    // Many tests never call stopServer(). In Docker the container's exit cleaned up; on a real machine each run leaked dozens of servers (178 were found
+    // eating 2.4 GB on the staging VM). Stop every server this process started when it ends.
+    static $registered = false; static $all = [];
+    $all[] = $proc;
+    if (!$registered) {
+        $registered = true;
+        register_shutdown_function(static function () use (&$all): void { foreach ($all as $p) { if (is_resource($p)) { @proc_terminate($p); @proc_close($p); } } });
+    }
     return ['port' => $port, 'proc' => $proc, 'base' => "http://127.0.0.1:$port"];
 }
 
