@@ -86,6 +86,9 @@ final class Settings
         $add('audit.external_links_max', 'monitoring', 'External links to check', 'How many different outside links an audit tests for 404/410 (one request each). 0 turns the check off.', 'int', ['min' => 0, 'max' => 500]);
         $add('audit.repeat_days', 'monitoring', 'Repeat audits every', 'Audit every site automatically this often, one site per minute at most. 0 means only when you start one.', 'int', ['min' => 0, 'max' => 90, 'unit' => 'days']);
         $add('audit.keep', 'monitoring', 'Audits kept per site', 'Older audits (with their pages and issues) are deleted.', 'int', ['min' => 1, 'max' => 100]);
+        $add('search.min_impressions', 'dashboard', 'Smallest search opportunity', 'Queries with fewer impressions than this over the last 28 days are not listed as opportunities.', 'int', ['min' => 1, 'max' => 100000, 'unit' => 'impressions']);
+        $add('search.striking_from', 'dashboard', '"Striking distance" starts at position', 'A query ranking from this position down to the next setting is listed as within reach of page one.', 'int', ['min' => 2, 'max' => 50]);
+        $add('search.striking_to', 'dashboard', '"Striking distance" ends at position', 'See above.', 'int', ['min' => 3, 'max' => 100]);
         // ---- Integrations
         $add('gemini.api_key', 'integrations', 'Gemini API key', 'Content AI uses templates when this is empty.', 'secret', ['env' => 'SW_GEMINI_API_KEY']);
         $add('gemini.model', 'integrations', 'Gemini model', 'For example gemini-3.6-flash.', 'string', ['pattern' => '/^[A-Za-z0-9._\-]{1,80}$/D', 'env' => 'SW_GEMINI_MODEL']);

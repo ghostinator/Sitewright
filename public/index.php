@@ -16,7 +16,7 @@ if (!Config::hostAllowed((string)($_SERVER['HTTP_HOST'] ?? ''))) {
 foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 
 $views = [
-    'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'watchlist' => 'Watchlist', 'site-audit' => 'Site Audit', 'analytics' => 'Analytics',
+    'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'watchlist' => 'Watchlist', 'site-audit' => 'Site Audit', 'opportunities' => 'Search Opportunities', 'analytics' => 'Analytics',
     'content-ai' => 'Content AI', 'local-seo' => 'Local SEO', 'image-seo' => 'Image SEO', 'sitemaps' => 'Sitemaps',
     '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'users' => 'Users', 'audit' => 'Audit Log', 'settings' => 'Settings',
 ];
@@ -191,6 +191,14 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <?php endif; ?>
                     <div id="audit-runs" class="list-area"></div>
                     <div id="audit-report" class="list-area"></div>
+                </div></div>
+
+                <div class="view" id="view-opportunities"><div class="card">
+                    <h3>Search opportunities</h3>
+                    <p class="text-muted">Found in your Search Console data (last 28 days): results people see but rarely click, queries just below page one, pages competing for the same query, and keywords losing clicks. The site chosen in the header decides which data is used.</p>
+                    <label class="inline-label" for="opp-type">Show</label>
+                    <select id="opp-type"><option value="">All types</option><option value="ctr_gap">Low click-through</option><option value="striking_distance">Within reach of page one</option><option value="cannibalisation">Pages competing</option><option value="falling">Losing clicks</option></select>
+                    <div id="opp-list" class="list-area"></div>
                 </div></div>
 
                 <div class="view" id="view-analytics"><div class="card">

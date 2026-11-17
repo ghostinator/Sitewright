@@ -200,14 +200,49 @@ final class Gsc
                 if (count($batch) < 25000) { break; }
             }
             self::store($rows, (int)$conn['site_id']);
+            $pageRows = self::importPages($url, $token, $start, $end, $id, (int)$conn['site_id']);
             $db->update('gsc_connections', ['last_sync_at' => gmdate('Y-m-d H:i:s'), 'last_status' => 'ok', 'last_error' => null, 'rows_synced' => count($rows)], ['id' => $id]);
-            return ['message' => 'Search Console synced', 'data' => ['rows' => count($rows), 'from' => $start, 'to' => $end]];
+            return ['message' => 'Search Console synced', 'data' => ['rows' => count($rows), 'page_rows' => $pageRows, 'from' => $start, 'to' => $end]];
         } catch (GscException $e) {
             $msg = mb_substr($e->getMessage(), 0, 250);
             $db->query('UPDATE `' . $db->t('gsc_connections') . "` SET last_sync_at = NOW(), last_status = IF(last_status = 'reauth', 'reauth', 'error'), last_error = :e WHERE id = :i", ['e' => $msg, 'i' => $id]);
             Alerts::notify('gsc_sync_failed', 'Search Console sync failed: ' . $msg, 'warning', 'gsc' . $id);
             throw new JobFailedException($msg, 502);
         }
+    }
+
+    /** Query+page rows for the whole window (no date), replacing this connection's previous ones. @return int rows stored */
+    private static function importPages(string $url, string $token, string $start, string $end, int $connId, int $siteId): int
+    {
+        $rows = [];
+        for ($offset = 0; $offset < self::MAX_ROWS; $offset += 25000) {
+            $j = self::api('POST', $url, $token, ['startDate' => $start, 'endDate' => $end, 'dimensions' => ['query', 'page'], 'rowLimit' => 25000, 'startRow' => $offset]);
+            $batch = (array)($j['rows'] ?? []);
+            foreach ($batch as $r) {
+                $k = $r['keys'] ?? null;
+                if (!is_array($k) || count($k) < 2) { continue; }
+                $q = mb_substr(trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', (string)$k[0]) ?? ''), 0, 500);
+                $page = (string)$k[1];
+                if ($q === '' || strlen($page) > 1000 || !preg_match('#^https?://#i', $page)) { continue; }
+                $rows[] = [$q, $page, max(0, (int)($r['impressions'] ?? 0)), max(0, (int)($r['clicks'] ?? 0)), round(min(999.99, max(0.0, (float)($r['ctr'] ?? 0) * 100)), 2), round(min(9999.99, max(0.0, (float)($r['position'] ?? 0))), 2)];
+            }
+            if (count($batch) < 25000) { break; }
+        }
+        $db = Database::getInstance();
+        $t = $db->t('search_pages');
+        $db->transaction(function (Database $db) use ($rows, $t, $connId, $siteId, $start, $end): void {
+            $db->query("DELETE FROM `$t` WHERE connection_id = :c", ['c' => $connId]);
+            foreach (array_chunk($rows, 500) as $chunk) {
+                $ph = []; $bind = [];
+                foreach ($chunk as $i => [$q, $page, $imp, $clk, $ctr, $pos]) {
+                    $ph[] = "(:s$i, :c$i, :pg$i, :q$i, :i$i, :k$i, :r$i, :p$i, :ws$i, :we$i)";
+                    $bind += ["s$i" => $siteId, "c$i" => $connId, "pg$i" => $page, "q$i" => $q, "i$i" => $imp, "k$i" => $clk, "r$i" => $ctr, "p$i" => $pos, "ws$i" => $start, "we$i" => $end];
+                }
+                $db->query("INSERT INTO `$t` (project_id, connection_id, page, query, impressions, clicks, ctr, position, window_start, window_end) VALUES " . implode(',', $ph)
+                    . ' ON DUPLICATE KEY UPDATE impressions = VALUES(impressions), clicks = VALUES(clicks), ctr = VALUES(ctr), position = VALUES(position)', $bind);
+            }
+        });
+        return count($rows);
     }
 
     /** @param array<int,array{0:string,1:int,2:int,3:float,4:float,5:string}> $rows */

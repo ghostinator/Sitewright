@@ -123,6 +123,9 @@ The date window and the cards shown on the dashboard.
 
 | Setting | Key | Default | Allowed | Environment variable | Notes |
 |---|---|---|---|---|---|
+| Smallest search opportunity | `search.min_impressions` | 100 | 1 to 100000 impressions |  | Queries with fewer impressions than this over the last 28 days are not listed as opportunities. |
+| "Striking distance" starts at position | `search.striking_from` | 8 | 2 to 50 |  | A query ranking from this position down to the next setting is listed as within reach of page one. |
+| "Striking distance" ends at position | `search.striking_to` | 20 | 3 to 100 |  | See above. |
 | Dashboard date window | `dashboard.window_days` | 30 | 7 to 365 days |  | The dashboard and analytics look back this many days. |
 | Cards shown, in order | `dashboard.cards` | seo, keywords, impressions, clicks | seo / keywords / impressions / clicks |  | One per line: seo, keywords, impressions, clicks. At least one. |
 

@@ -455,3 +455,26 @@ test('redirect suggestions: hostile paths stay text', () => {
     assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p));
   }
 });
+
+const opp = (o = {}) => Object.assign({ type: 'ctr_gap', project_id: 1, site: 'Shop', query: 'blue widgets', page: 'https://s.example/blue', impressions: 1000, clicks: 30, ctr: 3, position: 3, potential_clicks: 80, advice: 'Rewrite the title.' }, o);
+test('opportunities: a plain-words label per type, what could be gained, the numbers, advice; the note says it is an estimate', () => {
+  const { SW, box } = load();
+  SW.renderOpportunities(box, { has_data: true, summary: { ctr_gap: 1, striking_distance: 1, cannibalisation: 1, falling: 1, potential_clicks: 190 }, note: 'Potential clicks are a rough estimate.', last_sync_at: '2026-11-17 02:00:00',
+    items: [opp(), opp({ type: 'striking_distance', query: 'green widgets', position: 12, potential_clicks: 60 }),
+      opp({ type: 'cannibalisation', query: 'red widgets', other_pages: ['https://s.example/r2'], potential_clicks: 0 }), opp({ type: 'falling', query: 'old kw', page: '', previous_clicks: 100, clicks: 30, ctr: 0, position: 0, potential_clicks: 70 })] });
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 4);
+  assert.match(box.textContent, /4 opportunities/); assert.match(box.textContent, /190 more clicks/);
+  assert.match(rows[0].textContent, /Low click-through/); assert.match(rows[0].textContent, /blue widgets/); assert.match(rows[0].textContent, /1,000/); assert.match(rows[0].textContent, /\+80/); assert.match(rows[0].textContent, /Rewrite the title/);
+  assert.match(rows[1].textContent, /Within reach of page one/); assert.match(rows[2].textContent, /Pages competing/); assert.match(rows[2].textContent, /s\.example\/r2/);
+  assert.match(rows[3].textContent, /Losing clicks/); assert.match(rows[3].textContent, /100.*30/); assert.doesNotMatch(rows[3].textContent, /\+0/);
+  assert.match(box.textContent, /rough estimate/);
+});
+test('opportunities: no data explains how to get some; no findings says so; hostile text stays text', () => {
+  const { SW, box } = load();
+  SW.renderOpportunities(box, { has_data: false, items: [], summary: {}, note: '' }); assert.match(box.textContent, /Search Console/); assert.ok(box.querySelector('[data-goto="analytics"]'));
+  box.replaceChildren(); SW.renderOpportunities(box, { has_data: true, items: [], summary: { potential_clicks: 0 }, note: '' }); assert.match(box.textContent, /Nothing stands out/);
+  for (const p of PAYLOADS) {
+    box.replaceChildren(); SW.renderOpportunities(box, { has_data: true, summary: { ctr_gap: 1, potential_clicks: 1 }, note: p, items: [opp({ query: p, page: p, site: p, advice: p, other_pages: [p], type: 'cannibalisation' })] });
+    assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p));
+  }
+});

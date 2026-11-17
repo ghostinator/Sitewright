@@ -49,7 +49,7 @@ Owner request (2026-11-17): build all seven proposed features, "in full", includ
 | 1 | Watchlist, score history, regression alerts (migration 011, Watchlist/WatchController, settings group Monitoring) | done | (next commit) | PHP 482, JS 37, browser 14 |
 | 2 | Site audit (+ scheduled repeat, diff; migration 012) | done | (next commit) | PHP 502, JS 40, browser 15, WP e2e green |
 | 3 | Redirect suggestions from the 404 log (RedirectSuggester; no migration) | done | (next commit) | PHP 512, JS 42, browser 16 |
-| 4 | Search Console: pages import, opportunities | not started | | |
+| 4 | Search Console: query+page import, opportunity finder (migration 013) | done (mock-tested only: Google not connected) | (next commit) | PHP 520, JS 44 |
 | 6 | PageSpeed / Core Web Vitals (opt-in) | not started | | |
 | 5 | Export: CSV everywhere + print report | not started | | |
 | - | Docs, deploy to VM, full matrix | not started | | |

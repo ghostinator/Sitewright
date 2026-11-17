@@ -60,6 +60,9 @@ return [
     ['PATCH',  '/api/watch/{id}',           $C . 'WatchController@update',  ['role' => 'editor']],
     ['DELETE', '/api/watch/{id}',           $C . 'WatchController@delete',  ['role' => 'editor']],
 
+    // Search opportunities (from Search Console data)
+    ['GET',    '/api/opportunities',             $C . 'OpportunityController@list', ['role' => 'viewer']],
+
     // Site audits (crawl + per-page checks)
     ['GET',    '/api/site-audits',               $C . 'SiteAuditController@list',   ['role' => 'viewer']],
     ['POST',   '/api/site-audits',               $C . 'SiteAuditController@start',  ['role' => 'editor', 'limit' => 'fetch']],

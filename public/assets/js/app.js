@@ -276,6 +276,23 @@
         setContent(container, tableOf(['404 address', 'Suggested pages'], rows), more);
     }
 
+    const OPP_LABELS = { ctr_gap: 'Low click-through', striking_distance: 'Within reach of page one', cannibalisation: 'Pages competing', falling: 'Losing clicks' };
+    /** Search opportunities: what to fix first, ranked by the clicks it could win back (a rough estimate). */
+    function renderOpportunities(container, data) {
+        if (!data.has_data) return setContent(container, muted('No Search Console data for this view yet. Connect Search Console on the Analytics page and choose which site each connection belongs to; the first import runs within a day (or press Sync now there).'),
+            el('p', {}, el('button', { class: 'btn btn-secondary btn-sm', text: 'Go to Analytics', attrs: { type: 'button' }, data: { goto: 'analytics' } })));
+        const items = data.items || [];
+        if (!items.length) return setContent(container, muted('Nothing stands out right now. Opportunities need at least the minimum number of impressions set under Settings.'));
+        const lead = el('p', {}, el('strong', { text: items.length + ' opportunit' + (items.length === 1 ? 'y' : 'ies') }), ' worth roughly ' + fmtInt((data.summary && data.summary.potential_clicks) || 0) + ' more clicks over 28 days.' + (data.last_sync_at ? ' Data from ' + data.last_sync_at + '.' : ''));
+        const rows = items.map(i => el('tr', {},
+            el('td', {}, el('span', { class: 'badge' + (i.type === 'falling' ? ' badge-bad' : ''), text: OPP_LABELS[i.type] || i.type })),
+            el('td', { class: 'break-all' }, el('strong', { text: i.query }), i.site ? el('small', { class: 'text-muted', text: '  ' + i.site }) : null, i.page ? el('br') : null, i.page ? el('small', { class: 'text-muted', text: i.page }) : null,
+                ...(i.other_pages || []).flatMap(p => [el('br'), el('small', { class: 'text-muted', text: 'also: ' + p })]), el('br'), el('small', { class: 'text-muted', text: i.advice })),
+            el('td', { text: fmtInt(i.impressions) }), el('td', { text: i.type === 'falling' ? fmtInt(i.previous_clicks) + ' → ' + fmtInt(i.clicks) : fmtInt(i.clicks) }),
+            el('td', { text: i.type === 'falling' ? '–' : i.ctr + '% at #' + i.position }), el('td', { text: i.potential_clicks > 0 ? '+' + fmtInt(i.potential_clicks) : '–' })));
+        setContent(container, lead, tableOf(['Type', 'Query and page', 'Views', 'Clicks', 'Click-through', 'Could gain'], rows), data.note ? muted(data.note) : null);
+    }
+
     /** "All sites" dashboard table. A missing number is a dash, never 0. */
     function renderOverview(container, data) {
         const sites = data.sites || [];
@@ -537,7 +554,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -655,7 +672,7 @@
 
     // ------------------------------------------------------------------ navigation
 
-    const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', watchlist: 'Watchlist', 'site-audit': 'Site Audit', analytics: 'Analytics', 'content-ai': 'Content AI',
+    const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', watchlist: 'Watchlist', 'site-audit': 'Site Audit', opportunities: 'Search Opportunities', analytics: 'Analytics', 'content-ai': 'Content AI',
         'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules',
         account: 'My Account', sites: 'Sites', users: 'Users', audit: 'Audit Log', settings: 'Settings' };
     const viewUrl = v => BASE + (v === 'dashboard' ? '/' : '/' + v);
@@ -672,7 +689,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, 'site-audit': loadSiteAudits, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
+        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, 'site-audit': loadSiteAudits, opportunities: loadOpportunities, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
         if (loaders[view]) loaders[view]();
     }
 
@@ -730,6 +747,7 @@
     }
     const canEdit = () => !!(cfg.user && cfg.user.role !== 'viewer');
     const loadWatchlist = () => { setContent(document.getElementById('watch-history'), null); return loadInto('watch-list', '/watch' + siteQuery('?'), (box, d) => renderWatchlist(box, d, canEdit()), 'the watchlist'); };
+    const loadOpportunities = () => { const t = document.getElementById('opp-type'); return loadInto('opp-list', '/opportunities' + siteQuery('?') + (t && t.value ? (siteId > 0 ? '&' : '?') + 'type=' + encodeURIComponent(t.value) : ''), renderOpportunities, 'search opportunities'); };
     let auditPoll = null;
     async function loadSiteAudits() {
         clearTimeout(auditPoll);
@@ -943,6 +961,7 @@
     });
 
     document.addEventListener('change', async e => {
+        if (e.target.closest('#opp-type')) { loadOpportunities(); return; }
         const sw = e.target.closest('#site-switch');
         if (sw) { setSite(sw.value, true); return; }
         const gs = e.target.closest('[data-change="gsc-site"]');
