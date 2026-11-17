@@ -97,7 +97,7 @@ final class SiteSync
         }
         $s = (int)$res['status'];
         if ($s >= 300 && $s < 400) { throw new JobFailedException('The site redirected the API call (check the site URL: http vs https, www, trailing path)', 502); }
-        if ($s === 401 || $s === 403) { throw new JobFailedException('The plugin rejected the signature (secret mismatch, or clock more than 5 minutes off)', 502); }
+        if ($s === 401 || $s === 403) { self::explainDenied((string)$res['body']); }
         if ($s === 404) { throw new JobFailedException('Plugin not found at that URL (is it installed and active, and is the REST API reachable?)', 502); }
         if ($s >= 500 || $s === 429) { throw new JobRetryException("The site answered HTTP $s", 300); }
         if ($s !== 200) { throw new JobFailedException("The site answered HTTP $s", 502); }
@@ -109,6 +109,19 @@ final class SiteSync
     private static function cleanText(mixed $v, int $max): string
     {
         return is_string($v) ? mb_substr(trim(preg_replace('/[\x00-\x1F\x7F]+/u', '', $v) ?? ''), 0, $max) : '';
+    }
+
+    /** Turn the plugin's refusal into the actual cause. A body that is not the plugin's own (firewall, security plugin) is named as such. @throws JobFailedException|JobRetryException */
+    private static function explainDenied(string $body): never
+    {
+        $msg = (string)((json_decode($body, true) ?: [])['message'] ?? '');
+        throw match ($msg) {
+            'Bad signature' => new JobFailedException('The secret in WordPress does not match this site\'s secret. Press New secret here, paste the new one into WordPress (no spaces or quotes; if wp-config.php defines an older SITEWRIGHT_SECRET, that one wins), then sync again.', 502),
+            'Stale signature' => new JobFailedException('The clocks differ by more than 5 minutes. Sitewright\'s clock says ' . gmdate('H:i:s') . ' UTC; check the date and time of the WordPress server.', 502),
+            'Secret not set' => new JobFailedException('The plugin has no secret yet. Add define(\'SITEWRIGHT_SECRET\', \'...\'); to wp-config.php, or paste it under Settings, Sitewright in WordPress.', 502),
+            'Replay' => new JobRetryException('The plugin saw the same signature twice; trying again.', 60),
+            default => new JobFailedException('The site refused the request, and the answer did not come from the Sitewright plugin: a firewall or security plugin (for example Wordfence or Cloudflare) may be blocking the REST API. Allow this server, or check the secret.', 502),
+        };
     }
 
     // ------------------------------------------------------------------ scheduling

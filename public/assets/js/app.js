@@ -213,6 +213,55 @@
         setContent(container, el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, body)));
     }
 
+    const sevBadge = sev => el('span', { class: 'badge ' + (sev === 'high' ? 'badge-bad' : ''), text: sev.charAt(0).toUpperCase() + sev.slice(1) });
+    const tableOf = (heads, rows) => el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' },
+        el('thead', {}, el('tr', {}, ...heads.map(h => el('th', { text: h, attrs: { scope: 'col' } })))), el('tbody', {}, ...rows)));
+
+    /** Audit history. A running audit has nothing to view yet; a failed one shows why. */
+    function renderSiteAudits(container, data, canEdit) {
+        const audits = data.audits || [];
+        if (!audits.length) return setContent(container, muted('No audits yet. Run one above.'));
+        const rows = audits.map(a => {
+            const sev = a.by_severity;
+            const state = a.status === 'done' ? (sev && (sev.high + sev.medium + sev.low) === 0 ? [el('span', { class: 'badge badge-ok', text: 'No issues' })]
+                    : sev ? [el('span', { class: 'badge badge-bad', text: sev.high + ' high' }), ' ', el('span', { class: 'badge', text: sev.medium + ' medium' }), ' ', el('span', { class: 'badge', text: sev.low + ' low' })] : [])
+                : a.status === 'failed' ? [el('span', { class: 'badge badge-bad', text: 'Failed' }), el('div', { class: 'text-muted', text: a.error || '' })]
+                : [el('span', { class: 'badge', text: a.status === 'queued' ? 'Waiting for a worker' : 'Running…' })];
+            const change = a.status === 'done' && a.new !== null && a.new !== undefined ? el('div', { class: 'text-muted', text: a.new + ' new, ' + a.fixed + ' fixed since the previous audit' }) : null;
+            const actions = [];
+            if (a.status === 'done') actions.push(smallButton('View', 'audit-view', a.id));
+            if (canEdit && a.status !== 'queued' && a.status !== 'running') actions.push(smallButton('Delete', 'delete-audit', a.id, 'btn-danger'));
+            return el('tr', {}, el('td', {}, el('strong', { text: a.site || a.base_url }), el('br'), el('small', { class: 'text-muted break-all', text: (a.site ? a.base_url + ' | ' : '') + a.created_at })),
+                el('td', {}, ...state, change), el('td', { text: a.status === 'done' ? String(a.pages) : '–' }), el('td', { text: a.avg_score === null || a.avg_score === undefined ? '–' : String(a.avg_score) }),
+                el('td', { class: 'row-actions' }, ...actions.flatMap((x, i) => i ? [' ', x] : [x])));
+        });
+        setContent(container, tableOf(['Site', 'Result', 'Pages', 'Average score', 'Actions'], rows));
+    }
+
+    function renderSiteAuditReport(container, data) {
+        const a = data.audit, s = a.summary || {};
+        const lines = [el('p', {}, el('strong', { text: a.base_url }), ' ' + a.pages + ' pages checked, average score ' + (s.avg_score === null || s.avg_score === undefined ? '–' : s.avg_score) + '/100.'
+            + (s.new !== null && s.new !== undefined ? ' Since the previous audit: ' + s.new + ' new, ' + s.fixed + ' fixed.' : ' This is the first audit of this site, so there is nothing to compare with yet.'))];
+        if (Number(a.stopped_early)) lines.push(el('div', { class: 'alert alert-warn', text: 'The audit stopped early at its page or time limit, so some pages were not checked. Raise the limits under Settings → Monitoring to cover more.' }));
+        if (s.issues_truncated) lines.push(muted('There were more issues than are stored; the list shows the first 5,000.'));
+        const types = data.types || [];
+        if (!types.length) { lines.push(el('div', { class: 'alert alert-info', text: 'No issues found.' })); return setContent(container, ...lines); }
+        const rows = types.map(t => el('tr', {}, el('td', {}, sevBadge(t.severity)), el('td', {}, el('strong', { text: t.title }), el('br'), el('small', { class: 'text-muted', text: t.advice })), el('td', { text: String(t.count) }),
+            el('td', {}, el('button', { class: 'btn btn-secondary btn-sm', text: 'Show pages', attrs: { type: 'button' }, data: { action: 'audit-issues', id: a.id, code: t.code } }))));
+        setContent(container, ...lines, tableOf(['Priority', 'Problem', 'Count', ''], rows));
+    }
+
+    function renderSiteAuditIssues(container, data) {
+        const rows = (data.issues || []).map(i => el('tr', {}, el('td', {}, sevBadge(i.severity)), el('td', { class: 'break-all', text: i.url }), el('td', { text: i.detail || '' })));
+        setContent(container, rows.length ? tableOf(['Priority', 'Page', 'Detail'], rows) : muted('Nothing to list.'));
+    }
+
+    function renderSiteAuditPages(container, data) {
+        const rows = (data.pages || []).map(p => el('tr', {}, el('td', { class: 'break-all' }, p.url, p.title ? el('br') : null, p.title ? el('small', { class: 'text-muted', text: p.title }) : null),
+            el('td', { text: p.score === null ? '–' : String(p.score) }), el('td', { text: fmtInt(p.word_count) }), el('td', { text: p.load_ms + ' ms' }), el('td', { text: String(p.inbound) }), el('td', { text: Number(p.noindex) ? 'noindex' : '' })));
+        setContent(container, rows.length ? tableOf(['Page (worst first)', 'Score', 'Words', 'Fetch time', 'Linked from', 'Notes'], rows) : muted('No pages.'));
+    }
+
     /** "All sites" dashboard table. A missing number is a dash, never 0. */
     function renderOverview(container, data) {
         const sites = data.sites || [];
@@ -474,7 +523,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -592,7 +641,7 @@
 
     // ------------------------------------------------------------------ navigation
 
-    const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', watchlist: 'Watchlist', analytics: 'Analytics', 'content-ai': 'Content AI',
+    const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', watchlist: 'Watchlist', 'site-audit': 'Site Audit', analytics: 'Analytics', 'content-ai': 'Content AI',
         'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules',
         account: 'My Account', sites: 'Sites', users: 'Users', audit: 'Audit Log', settings: 'Settings' };
     const viewUrl = v => BASE + (v === 'dashboard' ? '/' : '/' + v);
@@ -609,7 +658,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
+        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, 'site-audit': loadSiteAudits, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
         if (loaders[view]) loaders[view]();
     }
 
@@ -666,6 +715,18 @@
     }
     const canEdit = () => !!(cfg.user && cfg.user.role !== 'viewer');
     const loadWatchlist = () => { setContent(document.getElementById('watch-history'), null); return loadInto('watch-list', '/watch' + siteQuery('?'), (box, d) => renderWatchlist(box, d, canEdit()), 'the watchlist'); };
+    let auditPoll = null;
+    async function loadSiteAudits() {
+        clearTimeout(auditPoll);
+        const box = document.getElementById('audit-runs');
+        const url = document.getElementById('audit-url'), site = siteList.find(s => s.id === siteId);
+        if (url) { url.readOnly = !!site; if (site) url.value = site.base_url; }
+        try {
+            const d = await apiRequest('GET', '/site-audits' + siteQuery('?'));
+            renderSiteAudits(box, d, canEdit());
+            if (d.audits.some(a => a.status === 'queued' || a.status === 'running') && viewFromLocation() === 'site-audit') auditPoll = setTimeout(loadSiteAudits, 4000);
+        } catch (e) { showError(box, 'Could not load audits: ' + e.message); }
+    }
     const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
     const loadSitemaps = () => loadInto('sitemap-list', '/sitemap' + siteQuery('?'), (box, rows) => setContent(box,
         rows.length ? el('p', { class: 'text-muted', text: rows.length + ' URL(s) stored. ' }, el('a', { text: 'Download XML', attrs: { href: BASE + '/api/sitemap/generate-xml', target: '_blank', rel: 'noopener' } })) : muted('No sitemap URLs stored yet.')), 'sitemap');
@@ -739,6 +800,12 @@
     const submitHandlers = {
         'seo-analysis-form': form => analyse(form, 'seo-url', 'seo-results', false),
         'competitor-form': form => analyse(form, 'competitor-url', 'competitor-results', true),
+        'audit-form': async form => {
+            try {
+                await apiRequest('POST', '/site-audits', siteId > 0 ? { project_id: siteId } : { base_url: form.querySelector('#audit-url').value.trim() });
+                showToast('Audit started. It can take a few minutes.'); loadSiteAudits();
+            } catch (e) { showToast(e.message, 'error'); }
+        },
         'watch-form': async form => {
             try {
                 await apiRequest('POST', '/watch', { url: form.querySelector('#watch-url').value.trim(), label: form.querySelector('#watch-label').value.trim(), interval_hours: Number(form.querySelector('#watch-interval').value), project_id: siteId });
@@ -977,6 +1044,22 @@
             const tmp = el('div'); renderWatchHistory(tmp, d);
             setContent(box, el('h4', { text: 'Check history' }), tmp);
         },
+        'audit-view': async t => {
+            const box = document.getElementById('audit-report');
+            setContent(box, muted('Loading…'));
+            const id = encodeURIComponent(t.dataset.id);
+            const [d, pages] = await Promise.all([apiRequest('GET', '/site-audits/' + id), apiRequest('GET', '/site-audits/' + id + '/pages?limit=20')]);
+            const rep = el('div'), worst = el('div'); renderSiteAuditReport(rep, d); renderSiteAuditPages(worst, pages);
+            setContent(box, el('h4', { text: 'Report' }), rep, el('div', { id: 'audit-issue-list' }), el('h4', { text: 'Lowest-scoring pages' }), worst);
+        },
+        'audit-issues': async t => {
+            const box = document.getElementById('audit-issue-list');
+            setContent(box, muted('Loading…'));
+            const d = await apiRequest('GET', '/site-audits/' + encodeURIComponent(t.dataset.id) + '/issues?code=' + encodeURIComponent(t.dataset.code) + '&limit=200');
+            const tmp = el('div'); renderSiteAuditIssues(tmp, d); setContent(box, tmp);
+            box.scrollIntoView && box.scrollIntoView({ block: 'nearest' });
+        },
+        'delete-audit': async t => { if (confirm('Delete this audit and its results?')) { await apiRequest('DELETE', '/site-audits/' + encodeURIComponent(t.dataset.id)); showToast('Audit deleted'); setContent(document.getElementById('audit-report'), null); loadSiteAudits(); } },
         'delete-site': async t => { if (confirm('Remove this site from Sitewright? Its rules and 404 entries are kept.')) { await apiRequest('DELETE', '/sites/' + encodeURIComponent(t.dataset.id)); showToast('Site removed'); loadSites(); loadSiteOptions(); } },
         'gsc-connect': async () => { const d = await apiRequest('POST', '/gsc/connect', {}); window.location.assign(d.url); },
         'gsc-properties': async t => { gscProps[t.dataset.id] = await apiRequest('GET', '/gsc/' + encodeURIComponent(t.dataset.id) + '/properties'); loadGsc(); },

@@ -393,3 +393,42 @@ test('analysis result offers "Watch this page" to people who can edit, with the 
   box.replaceChildren(); SW.renderSeoResults(box, seoData('x'));
   assert.equal(box.querySelector('[data-action="watch-add"]'), null);
 });
+
+const auditRow = (o = {}) => Object.assign({ id: 8, project_id: 2, site: 'Corner', base_url: 'https://c.example', status: 'done', pages: 41, error: null, created_at: '2026-11-17 02:00:00',
+  finished_at: '2026-11-17 02:03:00', by_severity: { high: 2, medium: 5, low: 9 }, new: 3, fixed: 1, avg_score: 74 }, o);
+test('audit list: counts by severity, what changed since last time, state of a running or failed audit, and actions by role', () => {
+  const { SW, box } = load();
+  SW.renderSiteAudits(box, { audits: [auditRow(), auditRow({ id: 9, status: 'running', by_severity: null, new: null, fixed: null, pages: 0 }), auditRow({ id: 10, status: 'failed', error: 'No page of the site could be read.', by_severity: null }),
+    auditRow({ id: 11, by_severity: { high: 0, medium: 0, low: 0 }, new: null, fixed: null })] }, true);
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 4);
+  assert.match(rows[0].textContent, /Corner/); assert.match(rows[0].textContent, /41/); assert.match(rows[0].textContent, /2 high/); assert.match(rows[0].textContent, /3 new.*1 fixed/);
+  assert.match(rows[1].textContent, /Running/i); assert.match(rows[2].textContent, /Failed/); assert.match(rows[2].textContent, /No page of the site could be read/);
+  assert.match(rows[3].textContent, /No issues/); assert.doesNotMatch(rows[3].textContent, /new/);
+  for (const a of ['audit-view', 'delete-audit']) assert.ok(rows[0].querySelector('[data-action="' + a + '"]'), a);
+  assert.equal(rows[1].querySelector('[data-action="audit-view"]'), null, 'nothing to view yet while it runs');
+  box.replaceChildren(); SW.renderSiteAudits(box, { audits: [auditRow()] }, false); assert.ok(box.querySelector('[data-action="audit-view"]')); assert.equal(box.querySelector('[data-action="delete-audit"]'), null);
+  box.replaceChildren(); SW.renderSiteAudits(box, { audits: [] }, true); assert.match(box.textContent, /No audits yet/);
+});
+test('audit report: summary, issue types worst first with advice and a button to list them, note when it stopped early', () => {
+  const { SW, box } = load();
+  const data = { audit: { id: 8, base_url: 'https://c.example', status: 'done', pages: 41, stopped_early: 1, summary: { pages: 41, avg_score: 74, new: 3, fixed: 1, by_severity: { high: 2, medium: 5, low: 9 } } },
+    types: [{ code: 'broken_link', severity: 'high', title: 'Broken internal link', advice: 'Fix or remove the link.', count: 2 }, { code: 'thin_content', severity: 'medium', title: 'Very little content', advice: 'Add content.', count: 5 }] };
+  SW.renderSiteAuditReport(box, data);
+  assert.match(box.textContent, /41 pages/); assert.match(box.textContent, /74/); assert.match(box.textContent, /stopped early/i); assert.match(box.textContent, /3 new/);
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 2); assert.match(rows[0].textContent, /High/); assert.match(rows[0].textContent, /Broken internal link/); assert.match(rows[0].textContent, /Fix or remove the link/);
+  const b = rows[0].querySelector('[data-action="audit-issues"]'); assert.ok(b); assert.equal(b.dataset.code, 'broken_link'); assert.equal(b.dataset.id, '8');
+  box.replaceChildren(); SW.renderSiteAuditReport(box, { audit: { id: 1, status: 'done', pages: 3, stopped_early: 0, summary: { pages: 3, avg_score: 90, new: null, fixed: null, by_severity: { high: 0, medium: 0, low: 0 } } }, types: [] });
+  assert.match(box.textContent, /No issues found/); assert.doesNotMatch(box.textContent, /stopped early/i);
+});
+test('audit issues and worst pages render as tables; hostile text stays text', () => {
+  const { SW, box } = load();
+  for (const p of PAYLOADS) {
+    box.replaceChildren(); SW.renderSiteAuditIssues(box, { issues: [{ code: 'broken_link', severity: 'high', url: p, detail: p }] });
+    assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p));
+    box.replaceChildren(); SW.renderSiteAuditPages(box, { pages: [{ url: p, title: p, title_len: 1, desc_len: 1, h1_count: 1, word_count: 1000, noindex: 1, score: 55, load_ms: 300, inbound: 0 }] });
+    assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p));
+  }
+  box.replaceChildren(); SW.renderSiteAuditPages(box, { pages: [{ url: 'https://c.example/', title: 'T', title_len: 1, desc_len: 1, h1_count: 1, word_count: 1000, noindex: 1, score: 55, load_ms: 300, inbound: 4 }] });
+  assert.match(box.textContent, /55/); assert.match(box.textContent, /1,000/); assert.match(box.textContent, /noindex/i);
+  box.replaceChildren(); SW.renderSiteAuditIssues(box, { issues: [] }); assert.match(box.textContent, /Nothing to list/);
+});

@@ -25,6 +25,11 @@ for i in $(seq 1 30); do docker run --rm --network $NET curlimages/curl -s -o /d
 docker image inspect sw-php:8.3 >/dev/null 2>&1 || docker build -q -t sw-php:8.3 --build-arg PHP_VERSION=8.3 tests/docker >/dev/null
 docker ps --format '{{.Names}}' | grep -qx sw-db-mariadb-10-11 || docker run -d --name sw-db-mariadb-10-11 --network $NET -e MARIADB_ROOT_PASSWORD=test-root-pw -e MARIADB_DATABASE=sw_test mariadb:10.11 >/dev/null
 for i in $(seq 1 40); do docker exec sw-db-mariadb-10-11 mariadb -uroot -ptest-root-pw -e 'select 1' >/dev/null 2>&1 && break; sleep 1; done
+# a pasted secret must be exactly 64 hex characters: tidy quotes/spaces are accepted, anything else is refused instead of being silently shortened
+got=$($CLI wp eval 'echo json_encode([Sitewright_Agent::normalise_secret(" \"" . strtoupper(str_repeat("ab", 32)) . "\" "), Sitewright_Agent::normalise_secret("not a secret"), Sitewright_Agent::normalise_secret(str_repeat("a", 63)), Sitewright_Agent::normalise_secret(str_repeat("a", 65)), Sitewright_Agent::normalise_secret("")]);' 2>&1)
+want='["abababababababababababababababababababababababababababababababab",null,null,null,null]'
+[ "$got" = "$want" ] || { echo "FAIL plugin secret validation: $got"; exit 1; }
+echo "plugin secret validation: ok"
 docker run --rm --network $NET -v "$PWD":/app -w /app -e WP_URL=http://sw-wp -e WP_SECRET=$SECRET \
   -e SW_TEST_DB_HOST=sw-db-mariadb-10-11 -e SW_TEST_DB_USER=root -e SW_TEST_DB_PASS=test-root-pw sw-php:8.3 php tests/e2e/wordpress.php
 rc=$?

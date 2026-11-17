@@ -16,7 +16,7 @@ if (!Config::hostAllowed((string)($_SERVER['HTTP_HOST'] ?? ''))) {
 foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 
 $views = [
-    'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'watchlist' => 'Watchlist', 'analytics' => 'Analytics',
+    'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'watchlist' => 'Watchlist', 'site-audit' => 'Site Audit', 'analytics' => 'Analytics',
     'content-ai' => 'Content AI', 'local-seo' => 'Local SEO', 'image-seo' => 'Image SEO', 'sitemaps' => 'Sitemaps',
     '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'users' => 'Users', 'audit' => 'Audit Log', 'settings' => 'Settings',
 ];
@@ -177,6 +177,20 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <?php endif; ?>
                     <div id="watch-list" class="list-area"></div>
                     <div id="watch-history" class="list-area"></div>
+                </div></div>
+
+                <div class="view" id="view-site-audit"><div class="card">
+                    <h3>Site audit</h3>
+                    <p class="text-muted">Crawls a whole site politely, checks every page and lists what to fix: broken links, missing titles and descriptions, duplicates, thin pages, slow pages, pages nothing links to. Each audit is compared with the previous one, and new high-priority problems raise an alert.</p>
+                    <?php if ($user && $user['role'] !== 'viewer'): ?>
+                    <form id="audit-form" class="form form-inline" autocomplete="off">
+                        <div class="form-group"><label for="audit-url">Site address</label><input type="url" id="audit-url" placeholder="https://example.com" required maxlength="500"></div>
+                        <button type="submit" class="btn btn-primary">Run audit</button>
+                    </form>
+                    <p class="text-muted"><small>With a site chosen in the header its address is used. A site is audited by one run at a time.</small></p>
+                    <?php endif; ?>
+                    <div id="audit-runs" class="list-area"></div>
+                    <div id="audit-report" class="list-area"></div>
                 </div></div>
 
                 <div class="view" id="view-analytics"><div class="card">

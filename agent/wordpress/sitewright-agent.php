@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sitewright Agent
  * Description: Lets a Sitewright server (which calls this site; this site never calls out) read the 404 log and push redirect rules that this plugin enforces locally.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Requires PHP: 7.4
  * License: MIT
  *
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) { exit; }
 
 final class Sitewright_Agent
 {
-    const VERSION = '1.0.0';
+    const VERSION = '1.0.1';
     const MAX_SKEW = 300;          // seconds a signature stays valid
     const MAX_RULES = 5000;
     const MAX_404_ROWS = 5000;
@@ -64,6 +64,13 @@ final class Sitewright_Agent
         global $wpdb;
         $wpdb->query("UPDATE " . self::seq_table() . " SET n = LAST_INSERT_ID(n + 1) WHERE id = 1");
         return (int)$wpdb->get_var("SELECT LAST_INSERT_ID()");
+    }
+
+    /** A pasted secret: surrounding spaces and quotes are ignored; anything that is not exactly 64 hex characters is refused (null), never silently shortened. */
+    public static function normalise_secret(string $raw): ?string
+    {
+        $s = strtolower(trim($raw, " \t\n\r\0\x0B\"'"));
+        return preg_match('/^[a-f0-9]{64}$/D', $s) === 1 ? $s : null;
     }
 
     private static function secret(): string
@@ -233,16 +240,20 @@ final class Sitewright_Agent
         if (!current_user_can('manage_options')) { return; }
         $fromConst = defined('SITEWRIGHT_SECRET') && SITEWRIGHT_SECRET !== '';
         if (isset($_POST['sitewright_secret']) && check_admin_referer('sitewright_save') && !$fromConst) {
-            $s = preg_replace('/[^a-f0-9]/', '', strtolower((string)wp_unslash($_POST['sitewright_secret'])));
-            update_option('sitewright_secret', $s, false);
-            echo '<div class="updated"><p>Saved.</p></div>';
+            $s = self::normalise_secret((string)wp_unslash($_POST['sitewright_secret']));
+            if ($s === null) {
+                echo '<div class="notice notice-error"><p>Not saved. The secret must be exactly 64 characters, 0-9 and a-f, as shown once by Sitewright (Sites, New secret). Check that your browser did not fill in a saved password.</p></div>';
+            } else {
+                update_option('sitewright_secret', $s, false);
+                echo '<div class="updated"><p>Saved.</p></div>';
+            }
         }
         $rules = get_option('sitewright_rules', []);
         echo '<div class="wrap"><h1>Sitewright</h1>';
         echo '<p>Secret: <strong>' . (self::secret() !== '' ? 'set' : 'NOT set') . '</strong>' . ($fromConst ? ' (from wp-config.php)' : '') . '. Rules enforced: <strong>' . (is_array($rules) ? count($rules) : 0) . '</strong>. Version ' . esc_html(self::VERSION) . '.</p>';
         if (!$fromConst) {
             echo '<form method="post">'; wp_nonce_field('sitewright_save');
-            echo '<p><label>Secret (64 hex characters from Sitewright)<br><input type="password" name="sitewright_secret" class="regular-text" autocomplete="off"></label></p>';
+            echo '<p><label>Secret (64 hex characters from Sitewright)<br><input type="password" name="sitewright_secret" class="regular-text" autocomplete="new-password" spellcheck="false"></label></p>';
             submit_button('Save'); echo '</form>';
         }
         echo '</div>';

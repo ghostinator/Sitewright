@@ -57,7 +57,7 @@ $check('static-file 404 also captured', (bool)$db->fetchOne("SELECT 1 x FROM sw_
 $http("$WP/does-not-exist-1/");
 SiteSync::handleJob(['site_id' => $id]);
 $check('later hits update the same row (absolute count)', (int)$db->fetchOne("SELECT hits FROM sw_404_monitor WHERE uri = '/does-not-exist-1/'")['hits'] === 3);
-$check('cursor advanced and status ok', (int)$site()['cursor_seq'] > 0 && $site()['last_status'] === 'ok' && $site()['plugin_version'] === '1.0.0');
+$check('cursor advanced and status ok', (int)$site()['cursor_seq'] > 0 && $site()['last_status'] === 'ok' && $site()['plugin_version'] === '1.0.1');
 
 // ---- redirects pushed and enforced -------------------------------------------------------------------------------------------
 $ins = fn (string $s, string $t, string $ty) => $db->query("INSERT INTO sw_redirections (project_id, source_url, target_url, redirect_type, status) VALUES (:p, :s, :t, :ty, 'active')", ['p' => $id, 's' => $s, 't' => $t, 'ty' => $ty]);
@@ -87,7 +87,7 @@ SiteSync::handleJob(['site_id' => $id, 'force' => true]);
 
 // ---- failure modes ----------------------------------------------------------------------------------------------------------
 $db->update('sites', ['secret_enc' => Crypto::encrypt(str_repeat('b', 64), "site:$id")], ['id' => $id]);
-try { SiteSync::handleJob(['site_id' => $id]); $check('wrong secret => failed sync', false); } catch (JobFailedException $e) { $check('wrong secret => clear message, status recorded', str_contains($e->getMessage(), 'signature') && $site()['last_status'] === 'error', $e->getMessage()); }
+try { SiteSync::handleJob(['site_id' => $id]); $check('wrong secret => failed sync', false); } catch (JobFailedException $e) { $check('wrong secret => clear message, status recorded', str_contains($e->getMessage(), 'does not match') && str_contains($e->getMessage(), 'New secret') && $site()['last_status'] === 'error', $e->getMessage()); }
 $db->update('sites', ['base_url' => 'http://127.0.0.1', 'secret_enc' => Crypto::encrypt($SECRET, "site:$id")], ['id' => $id]);
 Config::set('fetch.dev_allow_cidrs', []); SafeHttpClient::setDefault(null);
 try { SiteSync::handleJob(['site_id' => $id]); $check('loopback site URL blocked by the SSRF guard', false); } catch (JobRetryException | JobFailedException $e) { $check('loopback site URL blocked by the SSRF guard', str_contains($e->getMessage(), 'not allowed') || str_contains($e->getMessage(), 'reach'), $e->getMessage()); }
