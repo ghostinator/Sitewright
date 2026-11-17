@@ -64,3 +64,5 @@ sudo cp deploy/sitewright-worker.service deploy/sitewright-health.{service,timer
 sudo systemctl daemon-reload && sudo systemctl enable --now sitewright-worker sitewright-health.timer
 ```
 The worker needs the same environment as the web app (config file is shared; export `SW_DB_*` in `/etc/sitewright/worker.env` if you use env vars). It runs as `www-data`, so crawls obey the same egress firewall as web requests.
+
+**Why the ping runs as root:** the health check runs as `www-data`, whose egress firewall rejects LAN and Tailscale addresses (where Kuma normally lives). The ping step therefore runs as root (`ExecStartPost=-+…`), and only contacts the one URL you saved. If the monitor stays red, run `journalctl -u sitewright-health.service -n 20` and look for a `curl:` line.
