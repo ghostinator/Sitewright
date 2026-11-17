@@ -45,11 +45,11 @@ Owner request (2026-11-17): build all seven proposed features, "in full", includ
 | # | Feature | Status | Commit | Tests |
 |---|---------|--------|--------|-------|
 | 0 | Shared refactors (SeoAnalyzer, Crawler, Jobs::touch; migration 010; `Validator::csvCell` already exists, reused for CSV) | done | (this commit) | PHP 457/457 (8.3) |
-| 7 | Per-site scoping, site switcher, overview; sites without the plugin (`sync_enabled`) | done | (next commit) | PHP 466, JS 33, browser 13 |
-| 1 | Watchlist, score history, regression alerts (migration 011, Watchlist/WatchController, settings group Monitoring) | done | (next commit) | PHP 482, JS 37, browser 14 |
-| 2 | Site audit (+ scheduled repeat, diff; migration 012) | done | (next commit) | PHP 502, JS 40, browser 15, WP e2e green |
-| 3 | Redirect suggestions from the 404 log (RedirectSuggester; no migration) | done | (next commit) | PHP 512, JS 42, browser 16 |
-| 4 | Search Console: query+page import, opportunity finder (migration 013) | done (mock-tested only: Google not connected) | (next commit) | PHP 520, JS 44 |
-| 6 | PageSpeed / Core Web Vitals (opt-in) | not started | | |
-| 5 | Export: CSV everywhere + print report | not started | | |
-| - | Docs, deploy to VM, full matrix | not started | | |
+| 7 | Per-site scoping, site switcher, overview; sites without the plugin (`sync_enabled`) | done | see git log | PHP 466, JS 33, browser 13 |
+| 1 | Watchlist, score history, regression alerts (migration 011, Watchlist/WatchController, settings group Monitoring) | done | see git log | PHP 482, JS 37, browser 14 |
+| 2 | Site audit (+ scheduled repeat, diff; migration 012) | done | see git log | PHP 502, JS 40, browser 15, WP e2e green |
+| 3 | Redirect suggestions from the 404 log (RedirectSuggester; no migration) | done | see git log | PHP 512, JS 42, browser 16 |
+| 4 | Search Console: query+page import, opportunity finder (migration 013) | done (mock-tested only: Google not connected) | see git log | PHP 520, JS 44 |
+| 6 | PageSpeed / Core Web Vitals (opt-in; migration 014) | done (live-checked: key header accepted, keyless = 429) | see git log | PHP 531 at the time |
+| 5 | Export: CSV everywhere + print report | done | see git log | PHP 543, JS 48, browser 16 |
+| - | Docs, deploy to VM, full matrix | **done 2026-11-17**: matrix green (PHP 8.1/8.3/8.4 x MariaDB 10.11/11.8, MySQL 8.4, JS 48, browser 16, WordPress e2e, drills, secret scan); VM: backup, rsync, migrations 010-014, VM tests 543/543, reload, worker restart. Found after deploy: failed site syncs turned the health check red; fixed and redeployed (544 tests) | see git log | 544 |
