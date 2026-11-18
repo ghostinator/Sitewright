@@ -55,7 +55,7 @@ final class AlertController
         $have = Alerts::channels();
         $quiet = array_values(array_diff($have, ['email'])) ?: $have;
         $changes = $name === 'calm' ? [
-            'alerts.events' => ['weekly_summary', 'health_down', 'health_recovered', 'watch_down', 'cert_expiring', 'cert_problem', 'domain_expiring', 'server_error', 'login_failures', 'mfa_disabled', 'mfa_reset', 'account_deleted'],
+            'alerts.events' => ['weekly_summary', 'cert_issue_failed', 'cert_target_stale', 'health_down', 'health_recovered', 'watch_down', 'cert_expiring', 'cert_problem', 'domain_expiring', 'server_error', 'login_failures', 'mfa_disabled', 'mfa_reset', 'account_deleted'],
             'alerts.events_batch' => ['updates_waiting', 'php_outdated', 'watch_regression', 'watch_recovered', 'audit_new_issues', 'site_sync_failed', 'gsc_sync_failed', 'job_failed'],
             'alerts.events_digest' => ['user_created', 'account_changed', 'setting_changed'],
             'alerts.channels_error' => $have, 'alerts.channels_warning' => $quiet, 'alerts.channels_info' => $quiet,

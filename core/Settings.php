@@ -23,6 +23,7 @@ final class Settings
         'integrations' => ['Integrations', 'Gemini, Google, geocoding and what the server may fetch.'],
         'crawl' => ['Crawling & jobs', 'How much a crawl or image batch may do, and how often sites sync.'],
         'data' => ['Data & logging', 'How long records are kept and how much is logged.'],
+        'certificates' => ['Certificates', 'Certificates from Let\'s Encrypt: test or real, the contact address, and when to renew.'],
         'content' => ['Content AI', 'Which tones and content types are offered, and how the model is asked to write.'],
         'site' => ['Images, sitemaps & redirects', 'Defaults for new sitemap rows, redirect rules and the image size check, and which 404 paths to ignore.'],
         'dashboard' => ['Dashboard & analytics', 'The date window and the cards shown on the dashboard.'],
@@ -125,6 +126,10 @@ final class Settings
         $add('sites.rdap_enabled', 'crawl', 'Look up domain expiry dates', 'On: the domain name of each site is sent to the public registration service (RDAP) of its registry, and to IANA once a week for the list of registries, to read when the domain expires. Off: only certificates are checked. No page content or secrets are sent.', 'bool');
         $add('digest.weekly_day', 'alerts', 'Weekly summary day', 'One message a week with how every site is doing (watched pages, latest audit, missing pages, certificate and domain dates, updates waiting). "off" turns it off. It goes through the same channels and quiet hours as other alerts.', 'enum', ['enum' => ['off', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']]);
         $add('digest.weekly_time', 'alerts', 'Weekly summary time', 'Local time (see Time zone below), as HH:MM.', 'string', ['pattern' => '/^([01]\d|2[0-3]):[0-5]\d$/D']);
+        $add('acme.environment', 'certificates', 'Certificate service', '"staging" makes test certificates that browsers do not trust, so you can try everything without limits. "production" makes real ones. When you switch to production, every certificate is made again with the real service.', 'enum', ['enum' => ['staging', 'production'], 'danger' => true, 'danger_effects' => ['Every managed certificate is issued again with the real service. Servers that fetch them pick up the new ones.']]);
+        $add('acme.email', 'certificates', 'Contact address', 'Let\'s Encrypt may write here if a certificate is about to expire without renewing. Used when the account is first created; leave empty to give none.', 'string', ['pattern' => '/^([^@\s]+@[^@\s]+\.[^@\s]+)?$/D']);
+        $add('acme.renew_days', 'certificates', 'Renew this many days before expiry', 'Let\'s Encrypt certificates last 90 days; 30 leaves time to retry if something goes wrong.', 'int', ['min' => 7, 'max' => 60, 'unit' => 'days']);
+        $add('acme.dns_wait_seconds', 'certificates', 'Wait after adding the DNS record', 'How long to wait before asking the certificate service to look for the record. Cloudflare is usually ready within seconds.', 'int', ['min' => 0, 'max' => 300, 'unit' => 'seconds']);
         // ---- Data & logging
         $add('retention_days_404', 'data', 'Keep 404 entries', 'Older entries are deleted automatically.', 'int', ['min' => 1, 'max' => 3650, 'unit' => 'days']);
         $add('retention_days_audit', 'data', 'Keep audit log entries', 'Older entries are deleted automatically.', 'int', ['min' => 1, 'max' => 3650, 'unit' => 'days']);

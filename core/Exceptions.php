@@ -97,3 +97,15 @@ final class AnalysisException extends \RuntimeException
 
 /** An audit of this site is already queued or running. */
 final class AuditBusyException extends \RuntimeException {}
+
+/** An ACME server refused something, or answered in a way that cannot be used. $type is the problem type from the server (for example "urn:ietf:params:acme:error:rateLimited"). */
+final class AcmeException extends \RuntimeException
+{
+    public function __construct(string $message, public readonly string $type = '', public readonly int $httpStatus = 0)
+    {
+        parent::__construct($message);
+    }
+}
+
+/** A DNS provider's API refused something or could not be reached. */
+final class DnsProviderException extends \RuntimeException {}

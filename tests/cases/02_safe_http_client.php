@@ -138,6 +138,7 @@ $p = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 if ($p === '/big') { header('Content-Type: text/html'); echo str_repeat('A', 300000); exit; }
 if ($p === '/slow') { sleep(3); echo 'late'; exit; }
 if ($p === '/redir') { header('Location: http://127.0.0.1:%PORT%/ok', true, 302); exit; }
+if ($p === '/echo') { header('Content-Type: application/json'); echo json_encode(['m' => $_SERVER['REQUEST_METHOD'], 'body' => file_get_contents('php://input'), 'ct' => $_SERVER['CONTENT_TYPE'] ?? '', 'x' => $_SERVER['HTTP_X_TEST'] ?? '']); exit; }
 if ($p === '/hostecho') { header('Content-Type: text/plain'); echo $_SERVER['HTTP_HOST'] . '|' . ($_SERVER['HTTP_USER_AGENT'] ?? ''); exit; }
 header('Content-Type: text/html'); echo '<html><title>fixture</title></html>';
 PHP);
@@ -153,6 +154,13 @@ test('curl transport: pinned connection reaches validated IP for an unresolvable
     $r = $real()->get("http://pinned.test:$serverPort/hostecho");
     eq($r['status'], 200);
     ok(str_starts_with($r['body'], "pinned.test:$serverPort|Sitewright-SEO/1.0"), $r['body']);
+});
+test('curl transport: PUT, PATCH and DELETE carry their method, body and headers (DNS provider APIs)', function () use ($real, $serverPort) {
+    foreach (['PUT', 'PATCH', 'DELETE', 'POST'] as $m) {
+        $r = json_decode($real()->request($m, "http://pinned.test:$serverPort/echo", ['body' => '{"a":1}', 'headers' => ['Content-Type: application/json', 'X-Test: yes']])['body'], true);
+        eq([$r['m'], $r['body'], $r['ct'], $r['x']], [$m, '{"a":1}', 'application/json', 'yes']);
+    }
+    $r = json_decode($real()->request('DELETE', "http://pinned.test:$serverPort/echo")['body'], true); eq([$r['m'], $r['body']], ['DELETE', ''], 'no body is fine');
 });
 test('curl transport: size cap aborts streaming download', function () use ($real, $serverPort) {
     throws(ResponseTooLargeException::class, fn () => $real()->get("http://pinned.test:$serverPort/big", ['max_bytes' => 100000]));

@@ -383,6 +383,9 @@ final class SafeHttpClient
         if ($r['method'] === 'POST') {
             $opts[CURLOPT_POST] = true;
             $opts[CURLOPT_POSTFIELDS] = (string)$r['body'];
+        } elseif (in_array($r['method'], ['PUT', 'PATCH', 'DELETE'], true)) {   // for the APIs of DNS providers
+            $opts[CURLOPT_CUSTOMREQUEST] = $r['method'];
+            if ((string)$r['body'] !== '') { $opts[CURLOPT_POSTFIELDS] = (string)$r['body']; }
         } elseif ($r['method'] === 'HEAD') {
             $opts[CURLOPT_NOBODY] = true;
         } else {
@@ -393,6 +396,7 @@ final class SafeHttpClient
             $addrs = array_map(static fn (string $ip): string => str_contains($ip, ':') ? '[' . $ip . ']' : $ip, $r['ips']);
             $opts[CURLOPT_RESOLVE] = [$r['host'] . ':' . $r['port'] . ':' . implode(',', $addrs)];
         }
+        if ((string)($this->cfg['cainfo'] ?? '') !== '') { $opts[CURLOPT_CAINFO] = (string)$this->cfg['cainfo']; }   // only for a private test CA; empty means the system's trusted list
         curl_setopt_array($ch, $opts);
 
         $ok = curl_exec($ch);
