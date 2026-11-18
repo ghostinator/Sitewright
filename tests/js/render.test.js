@@ -675,6 +675,64 @@ test('setup guide: certificate and domain show the date, the days left and a cle
     for (const i of [...box.querySelectorAll('input')]) i.remove(); assertInert(box, p, 'expiry'); assert.ok(box.textContent.includes(p));
   }
 });
+// ---- certificates -----------------------------------------------------------------------------------------------------------------
+const certData = (over = {}) => ({ encryption_ready: true, environment: 'staging', custom_service: false,
+  provider_types: { cloudflare: 'Cloudflare', spaceship: 'Spaceship' }, provider_fields: { cloudflare: { token: 'API token' }, spaceship: { api_key: 'API key', api_secret: 'API secret' } },
+  dns_accounts: [{ id: 4, name: 'Main Cloudflare', type: 'cloudflare', type_label: 'Cloudflare', checked_at: '2026-11-17 10:00:00', check_ok: true, check_msg: 'The token works and can see 2 zones: a.example, b.example.' },
+    { id: 5, name: 'Spaceship', type: 'spaceship', type_label: 'Spaceship', checked_at: null, check_ok: null, check_msg: null }],
+  certificates: [
+    { id: 9, name: 'Web', names: ['example.com', '*.example.com'], provider: 'Main Cloudflare', state: 'issued', test: true, not_after: '2027-02-15 00:00:00', days_left: 90, last_error: null, next_attempt_at: null, targets: [
+      { id: 21, name: 'web1', allow_cidrs: '10.0.0.0/8', last_pull_at: '2026-11-17 09:00:00', last_pull_ip: '10.1.2.3', installed_at: '2026-11-17 09:00:01', install_status: 'ok', install_error: null, up_to_date: true },
+      { id: 22, name: 'web2', allow_cidrs: '', last_pull_at: null, last_pull_ip: null, installed_at: null, install_status: null, install_error: null, up_to_date: false },
+      { id: 23, name: 'web3', allow_cidrs: '', last_pull_at: '2026-11-16 09:00:00', last_pull_ip: '1.2.3.4', installed_at: '2026-11-16 09:00:01', install_status: 'failed', install_error: 'the reload command failed', up_to_date: false },
+      { id: 24, name: 'web4', allow_cidrs: '', last_pull_at: '2026-11-16 09:00:00', last_pull_ip: '1.2.3.4', installed_at: '2026-11-15 09:00:01', install_status: 'ok', install_error: null, up_to_date: false }] },
+    { id: 10, name: 'Mail', names: ['mail.example.com'], provider: 'Main Cloudflare', state: 'failed', test: false, not_after: null, days_left: null, last_error: 'The ACME service rejected it: No TXT records found', next_attempt_at: '2026-11-17 12:00:00', targets: [] },
+    { id: 11, name: 'Old', names: ['old.example.com'], provider: 'Main Cloudflare', state: 'issued', test: false, not_after: '2026-11-20 00:00:00', days_left: 3, last_error: null, next_attempt_at: null, targets: [] }],
+  ...over });
+test('certificates: every certificate shows its state, names, expiry and servers in words, and only offers what makes sense', () => {
+  const { SW, box } = load(); SW.renderCertificates(box, certData());
+  const items = [...box.querySelectorAll('.list-item')].filter(i => i.querySelector('h5'));
+  assert.equal(items.length, 3); const [web, mail, old] = items;
+  assert.match(web.textContent, /Web.*Issued.*test certificate/); assert.match(web.textContent, /example\.com, \*\.example\.com \| DNS: Main Cloudflare/); assert.match(web.textContent, /90 days left.*valid until 2027-02-15/);
+  assert.match(mail.textContent, /Failed/); assert.match(mail.textContent, /No TXT records found.*Next try: 2026-11-17 12:00:00 UTC/); assert.match(mail.textContent, /No certificate yet/); assert.match(mail.textContent, /No server yet/);
+  assert.ok(old.querySelector('.badge-bad'), 'three days left is flagged');
+  const servers = [...web.querySelectorAll('.list-item')];
+  assert.deepEqual(servers.map(s => s.querySelector('.badge').textContent), ['up to date', 'never fetched', 'failed', 'behind']);
+  assert.match(servers[0].textContent, /only from 10\.0\.0\.0\/8/); assert.match(servers[2].textContent, /the reload command failed/);
+  assert.deepEqual([...web.querySelectorAll(':scope > div:first-child > .list-item [data-action]')].map(b => b.dataset.action), ['cert-target-delete', 'cert-target-delete', 'cert-target-delete', 'cert-target-delete']);
+  const acts = c => [...c.querySelectorAll('[data-action]')].map(b => b.dataset.action).filter(a => !a.startsWith('cert-target'));
+  assert.deepEqual(acts(web), ['cert-renew', 'cert-delete']); for (const b of web.querySelectorAll('[data-action="cert-renew"],[data-action="cert-delete"],[data-action="cert-target-add"]')) assert.equal(b.dataset.id, '9');
+  assert.ok(web.querySelector('.cert-target-add [data-role="name"]') && web.querySelector('.cert-target-add [data-role="cidrs"]'));
+});
+test('certificates: DNS accounts say whether they were tested; the forms exist, start hidden, and the secret fields are password boxes', () => {
+  const { SW, box } = load(); SW.renderCertificates(box, certData());
+  const dns = [...box.querySelectorAll('.list-item')].filter(i => i.querySelector('[data-action="dns-test"]'));
+  assert.equal(dns.length, 2); assert.match(dns[0].textContent, /works.*can see 2 zones/); assert.match(dns[1].textContent, /not tested yet/);
+  assert.deepEqual([...dns[0].querySelectorAll('[data-action]')].map(b => b.dataset.action), ['dns-test', 'dns-delete']); assert.ok(dns[0].querySelector('.cert-test-domain'));
+  for (const id of ['dns-create-form', 'cert-create-form']) assert.ok(box.querySelector('#' + id).classList.contains('hidden'), id + ' starts hidden');
+  const secrets = [...box.querySelectorAll('#dns-create-form input[data-type]')]; assert.deepEqual(secrets.map(i => i.dataset.type + '.' + i.dataset.key), ['cloudflare.token', 'spaceship.api_key', 'spaceship.api_secret']); assert.ok(secrets.every(i => i.type === 'password' && i.autocomplete === 'off'));
+  assert.deepEqual([...box.querySelectorAll('#cert-dns option')].map(o => o.textContent), ['Main Cloudflare (Cloudflare)', 'Spaceship (Spaceship)']);
+  assert.ok(box.querySelector('#cert-names').required && box.querySelector('#cert-name').required);
+});
+test('certificates: test mode, a custom service, a missing app key and an empty page are each explained', () => {
+  const { SW, box } = load();
+  SW.renderCertificates(box, certData()); assert.match(box.querySelector('.alert-info').textContent, /Test mode.*do not trust them/);
+  box.replaceChildren(); SW.renderCertificates(box, certData({ environment: 'production' })); assert.equal(box.querySelector('.alert-info'), null, 'production: no test banner');
+  box.replaceChildren(); SW.renderCertificates(box, certData({ custom_service: true })); assert.match(box.querySelector('.alert-info').textContent, /custom certificate service/);
+  box.replaceChildren(); SW.renderCertificates(box, certData({ encryption_ready: false })); assert.match(box.querySelector('.alert-error').textContent, /app_key/);
+  box.replaceChildren(); SW.renderCertificates(box, certData({ dns_accounts: [], certificates: [] })); assert.match(box.textContent, /No DNS account yet/); assert.match(box.textContent, /No certificate yet/); assert.match(box.querySelector('#cert-create-form').textContent, /Add a DNS account first/);
+});
+test('certificates: whatever the API returned (names, errors, messages) is shown as text, never as markup', () => {
+  const { SW, box } = load();
+  for (const p of PAYLOADS) {
+    const d = certData(); d.dns_accounts[0].name = p; d.dns_accounts[0].check_msg = p; d.certificates[0].name = p; d.certificates[0].names = [p]; d.certificates[0].provider = p; d.certificates[0].targets[0].name = p; d.certificates[0].targets[0].allow_cidrs = p;
+    d.certificates[0].targets[2].install_error = p; d.certificates[1].last_error = p; d.provider_types.cloudflare = p;
+    box.replaceChildren(); SW.renderCertificates(box, d);
+    for (const f of box.querySelectorAll('form')) assert.equal(f.querySelectorAll('img,script,iframe,object,embed,style,link,base,meta,svg').length, 0, 'nothing injected inside a form: ' + p);   // the page's own forms are allowed; markup inside them is not
+    for (const i of [...box.querySelectorAll('form,input,textarea,select')]) i.remove();
+    assertInert(box, p, 'certificates'); assert.ok(box.textContent.includes(p));
+  }
+});
 test('Search Console: the property that matches the site is preselected (domain property first)', () => {
   const { SW, box } = load();
   const state = { configured: true, redirect_uri: 'x', connections: [{ id: 9, property_url: null, site_id: 5, last_status: 'ok', last_sync_at: null, rows_synced: 0, last_error: null }] };

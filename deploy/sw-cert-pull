@@ -1,0 +1,92 @@
+#!/bin/sh
+# sw-cert-pull: fetch a certificate that Sitewright manages, install it, reload the web server, and tell Sitewright what happened.
+#
+#   sw-cert-pull /etc/sitewright-cert/example.conf
+#
+# The config file (readable by root only) has one KEY=value per line:
+#   URL=https://sitewright.example/api/cert-pull/7        the address shown when you added this server in Sitewright
+#   TOKEN=swc_...                                         the token shown once (or TOKEN_FILE=/path to a file that holds it)
+#   DEST=/etc/sitewright-certs/example                    where fullchain.pem and privkey.pem are written
+#   RELOAD="systemctl reload nginx"                       run after a new certificate is in place (optional)
+#   GROUP=ssl-cert                                        group that may read the private key (optional; the key is 0640 with it, 0600 without)
+#
+# It never replaces anything with a certificate that is expired, that does not match the one Sitewright announced, or whose key does not match.
+# If the reload command fails, the previous certificate is put back and the reload runs again. Only needs sh, curl and openssl. Needs https
+# (SW_CERT_PULL_INSECURE=1 allows plain http for tests only).
+set -eu
+umask 077
+
+CONF=${1:-}
+[ -n "$CONF" ] && [ -r "$CONF" ] || { echo "usage: sw-cert-pull /etc/sitewright-cert/<name>.conf" >&2; exit 2; }
+URL=''; TOKEN=''; TOKEN_FILE=''; DEST=''; RELOAD=''; GROUP=''
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in ''|'#'*) continue ;; esac
+  key=${line%%=*}; val=${line#*=}
+  case "$val" in \"*\") val=${val#\"}; val=${val%\"} ;; esac
+  case "$key" in URL) URL=$val ;; TOKEN) TOKEN=$val ;; TOKEN_FILE) TOKEN_FILE=$val ;; DEST) DEST=$val ;; RELOAD) RELOAD=$val ;; GROUP) GROUP=$val ;; esac
+done < "$CONF"
+[ -z "$TOKEN" ] && [ -n "$TOKEN_FILE" ] && TOKEN=$(tr -d '\n\r ' < "$TOKEN_FILE")
+[ -n "$URL" ] && [ -n "$TOKEN" ] && [ -n "$DEST" ] || { echo "sw-cert-pull: $CONF needs URL, TOKEN (or TOKEN_FILE) and DEST" >&2; exit 2; }
+case "$URL" in https://*) ;; http://*) [ "${SW_CERT_PULL_INSECURE:-}" = 1 ] || { echo "sw-cert-pull: URL must be https (the private key travels in the answer)" >&2; exit 2; } ;; *) echo "sw-cert-pull: URL must start with https://" >&2; exit 2 ;; esac
+case "$TOKEN" in swc_*) ;; *) echo "sw-cert-pull: TOKEN does not look like a Sitewright token" >&2; exit 2 ;; esac
+case "$DEST" in /*) ;; *) echo "sw-cert-pull: DEST must be an absolute path" >&2; exit 2 ;; esac
+
+# the token goes in a curl config file, not on a command line (other users can read command lines)
+CURLCFG=$(mktemp); TMP=''
+cleanup() { rm -f "$CURLCFG"; [ -n "$TMP" ] && rm -rf "$TMP"; return 0; }
+trap cleanup EXIT INT TERM
+printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" > "$CURLCFG"
+get() { curl -fsS --max-time 60 --proto '=https,http' --config "$CURLCFG" "$URL/$1"; }
+
+report() {   # report <fingerprint> <ok|failed> <message>
+  msg=$(printf '%s' "$3" | tr -cd '[:print:]' | tr -d '"\\' | cut -c1-200)
+  printf '{"fingerprint":"%s","status":"%s","error":"%s"}' "$1" "$2" "$msg" | curl -fsS --max-time 30 --config "$CURLCFG" -H 'Content-Type: application/json' --data-binary @- "$URL/installed" >/dev/null 2>&1 || echo "sw-cert-pull: could not report to Sitewright (continuing)" >&2
+}
+fingerprint_of() { openssl x509 -in "$1" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//' | tr -d ':' | tr 'A-F' 'a-f'; }
+
+raw=$(get fingerprint 2>/dev/null) || { echo "sw-cert-pull: Sitewright refused the request or could not be reached" >&2; exit 1; }
+want=$(printf '%s' "$raw" | tr -d ' \n\r')
+[ "$want" = "none" ] && { echo "sw-cert-pull: no certificate has been issued yet"; exit 0; }
+printf '%s' "$want" | grep -Eq '^[a-f0-9]{64}$' || { echo "sw-cert-pull: unexpected answer from Sitewright" >&2; exit 1; }
+
+have=''
+[ -f "$DEST/fullchain.pem" ] && have=$(fingerprint_of "$DEST/fullchain.pem")
+if [ "$have" = "$want" ] && [ -f "$DEST/privkey.pem" ]; then
+  report "$want" ok ""      # a heartbeat: Sitewright learns this server is up to date
+  exit 0
+fi
+
+mkdir -p "$DEST"
+TMP=$(mktemp -d "$DEST/.new.XXXXXX")
+get fullchain.pem > "$TMP/fullchain.pem" || { report "$want" failed "could not download the certificate"; echo "sw-cert-pull: download failed" >&2; exit 1; }
+get privkey.pem > "$TMP/privkey.pem" || { report "$want" failed "could not download the key"; echo "sw-cert-pull: download failed" >&2; exit 1; }
+
+fail() { report "$want" failed "$1"; echo "sw-cert-pull: $1" >&2; exit 1; }
+[ "$(fingerprint_of "$TMP/fullchain.pem")" = "$want" ] || fail "the certificate is not the one Sitewright announced"
+openssl x509 -in "$TMP/fullchain.pem" -noout -checkend 86400 >/dev/null 2>&1 || fail "the certificate expires within a day or is unreadable"
+a=$(openssl x509 -in "$TMP/fullchain.pem" -noout -pubkey 2>/dev/null | openssl sha256 2>/dev/null) || fail "the certificate is unreadable"
+b=$(openssl pkey -in "$TMP/privkey.pem" -pubout 2>/dev/null | openssl sha256 2>/dev/null) || fail "the private key is unreadable"
+[ -n "$a" ] && [ "$a" = "$b" ] || fail "the private key does not belong to the certificate"
+
+# keep the previous pair so a failed reload can be undone
+rm -rf "$DEST/previous"
+if [ -f "$DEST/fullchain.pem" ] && [ -f "$DEST/privkey.pem" ]; then
+  mkdir "$DEST/previous"; cp -p "$DEST/fullchain.pem" "$DEST/privkey.pem" "$DEST/previous/"
+fi
+if [ -n "$GROUP" ]; then chgrp "$GROUP" "$TMP/privkey.pem" && chmod 0640 "$TMP/privkey.pem" || fail "could not give group $GROUP access to the key"; else chmod 0600 "$TMP/privkey.pem"; fi
+chmod 0644 "$TMP/fullchain.pem"
+mv -f "$TMP/privkey.pem" "$DEST/privkey.pem"
+mv -f "$TMP/fullchain.pem" "$DEST/fullchain.pem"
+
+if [ -n "$RELOAD" ]; then
+  if ! out=$(sh -c "$RELOAD" 2>&1); then
+    if [ -f "$DEST/previous/fullchain.pem" ]; then
+      mv -f "$DEST/previous/privkey.pem" "$DEST/privkey.pem"; mv -f "$DEST/previous/fullchain.pem" "$DEST/fullchain.pem"
+      sh -c "$RELOAD" >/dev/null 2>&1 || true
+      fail "the reload command failed, the previous certificate was put back: $out"
+    fi
+    fail "the reload command failed: $out"
+  fi
+fi
+report "$want" ok ""
+echo "sw-cert-pull: installed certificate $want in $DEST"

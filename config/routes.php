@@ -2,7 +2,8 @@
 /**
  * Route table: [METHOD, path, 'Class@method', options].
  * Options: public (no login required), session (start a session for CSRF even if public),
- *          limit (rate-limit group), upload (multipart body instead of JSON).
+ *          limit (rate-limit group), upload (multipart body instead of JSON),
+ *          bearer (no browser session, so no CSRF token: the controller checks its own bearer token; used with public).
  * Everything NOT marked public requires an authenticated session (deny by default).
  */
 $C = 'Sitewright\\Core\\';
@@ -40,6 +41,19 @@ return [
     ['GET',    '/api/sites/{id}/profile',       $C . 'SiteProfileController@show',    ['role' => 'viewer']],
     ['POST',   '/api/sites/{id}/profile',       $C . 'SiteProfileController@choose',  ['role' => 'admin']],
     ['POST',   '/api/sites/{id}/profile/refresh', $C . 'SiteProfileController@refresh', ['role' => 'admin']],
+    ['GET',    '/api/certificates',                   $C . 'CertificateController@list',           ['role' => 'admin']],
+    ['POST',   '/api/certificates',                   $C . 'CertificateController@create',         ['role' => 'admin']],
+    ['POST',   '/api/certificates/{id}/renew',        $C . 'CertificateController@renew',          ['role' => 'admin']],
+    ['DELETE', '/api/certificates/{id}',              $C . 'CertificateController@delete',         ['role' => 'admin']],
+    ['POST',   '/api/certificates/{id}/targets',      $C . 'CertificateController@createTarget',   ['role' => 'admin']],
+    ['DELETE', '/api/cert-targets/{id}',              $C . 'CertificateController@deleteTarget',   ['role' => 'admin']],
+    ['POST',   '/api/dns-accounts',                   $C . 'CertificateController@createProvider', ['role' => 'admin']],
+    ['POST',   '/api/dns-accounts/{id}/test',         $C . 'CertificateController@testProvider',   ['role' => 'admin', 'limit' => 'certs']],
+    ['DELETE', '/api/dns-accounts/{id}',              $C . 'CertificateController@deleteProvider', ['role' => 'admin']],
+    ['GET',    '/api/cert-pull/{id}/fingerprint',     $C . 'CertPullController@fingerprint',       ['public' => true, 'bearer' => true]],
+    ['GET',    '/api/cert-pull/{id}/fullchain.pem',   $C . 'CertPullController@fullchain',         ['public' => true, 'bearer' => true]],
+    ['GET',    '/api/cert-pull/{id}/privkey.pem',     $C . 'CertPullController@privkey',           ['public' => true, 'bearer' => true]],
+    ['POST',   '/api/cert-pull/{id}/installed',       $C . 'CertPullController@installed',         ['public' => true, 'bearer' => true]],
     ['POST',   '/api/sites/{id}/sync',          $C . 'SiteController@sync',      ['role' => 'admin']],
     ['POST',   '/api/sites/{id}/rotate-secret', $C . 'SiteController@rotate',    ['role' => 'admin']],
     ['DELETE', '/api/sites/{id}',               $C . 'SiteController@delete',    ['role' => 'admin']],

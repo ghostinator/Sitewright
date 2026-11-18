@@ -176,7 +176,8 @@ final class App
             if (!str_starts_with($ct, $want)) {
                 Response::error("Content-Type must be $want", 415);
             }
-            if (!Auth::csrfValid(Request::header('X-CSRF-Token'))) {
+            // routes that carry their own bearer token (servers fetching a certificate) have no browser session, so no CSRF token; the controller checks the token
+            if (empty($opts['bearer']) && !Auth::csrfValid(Request::header('X-CSRF-Token'))) {
                 Response::error('Missing or invalid CSRF token', 403);
             }
         }

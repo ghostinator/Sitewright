@@ -18,9 +18,9 @@ foreach (App::pageHeaders() as $k => $v) { header("$k: $v"); }
 $views = [
     'dashboard' => 'Dashboard', 'seo-analysis' => 'SEO Analysis', 'competitor' => 'Competitor Analysis', 'watchlist' => 'Watchlist', 'site-audit' => 'Site Audit', 'opportunities' => 'Search Opportunities', 'analytics' => 'Analytics',
     'content-ai' => 'Content AI', 'local-seo' => 'Local SEO', 'image-seo' => 'Image SEO', 'sitemaps' => 'Sitemaps',
-    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'alerts' => 'Alerts', 'users' => 'Users', 'audit' => 'Audit Log', 'settings' => 'Settings',
+    '404-monitor' => '404 Log', 'redirections' => 'Redirect Rules', 'account' => 'My Account', 'sites' => 'Sites', 'certificates' => 'Certificates', 'alerts' => 'Alerts', 'users' => 'Users', 'audit' => 'Audit Log', 'settings' => 'Settings',
 ];
-$adminViews = ['sites', 'alerts', 'users', 'audit', 'settings'];
+$adminViews = ['sites', 'certificates', 'alerts', 'users', 'audit', 'settings'];
 $slug = trim(App::relativePath(), '/');
 $view = $slug === '' ? 'dashboard' : $slug;
 $resetPage = $slug === 'reset';   // public: the page the password-reset e-mail links to
@@ -371,6 +371,13 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <div id="site-secret" class="hidden"></div>
                     <div id="sites-list" class="list-area"></div>
                     <div id="site-profile" class="list-area hidden"></div>
+                </div></div>
+
+                <div class="view" id="view-certificates"><div class="card">
+                    <h3>Certificates</h3>
+                    <p class="text-muted">Sitewright gets and renews free certificates from Let's Encrypt for names in your own DNS, proving ownership with a short-lived DNS record (so nothing has to be reachable from the internet). It keeps the private keys encrypted and never logs in to your servers: each server runs a small script that fetches its certificate with its own token, installs it, reloads the web server and reports back. Sites that sit behind Cloudflare or a tunnel need no certificate of their own.</p>
+                    <div id="cert-secret" class="hidden"></div>
+                    <div id="cert-area" class="list-area"></div>
                 </div></div>
 
                 <div class="view" id="view-alerts"><div class="card">

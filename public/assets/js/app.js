@@ -249,6 +249,58 @@
         setContent(container, ...nodes);
     }
 
+    // ------------------------------------------------------------------ certificates
+    const CERT_STATE = { new: 'Waiting to start', issuing: 'Getting it now', issued: 'Issued', failed: 'Failed' };
+    const certField = (id, label, input) => el('div', { class: 'form-group' }, el('label', { text: label, attrs: { for: id } }), input);
+    function renderCertificates(container, d) {
+        const nodes = [];
+        if (!d.encryption_ready) nodes.push(el('div', { class: 'alert alert-error', text: 'Set app_key first (php bin/gen-key.php): it encrypts the API tokens and private keys.' }));
+        if (d.custom_service) nodes.push(el('div', { class: 'alert alert-info', text: 'A custom certificate service is set in the config file.' }));
+        else if (d.environment !== 'production') nodes.push(el('div', { class: 'alert alert-info', text: 'Test mode: certificates are made with the Let\'s Encrypt test service, so browsers do not trust them. Try everything now; when it works, choose "production" under Settings, Certificates and every certificate is made again with the real service.' }));
+
+        // DNS accounts
+        nodes.push(el('h4', { text: 'DNS accounts' }), muted('Where your names are hosted. Give each account a token limited to editing DNS records in the zones you need; Sitewright adds a TXT record to prove ownership and removes it again.'));
+        const accounts = d.dns_accounts || [];
+        nodes.push(...(accounts.length ? accounts.map(a => listItem([
+            el('strong', { text: a.name }), ' ', el('span', { class: 'badge', text: a.type_label }), ' ', a.check_ok === null ? el('span', { class: 'badge', text: 'not tested yet' }) : el('span', { class: 'badge ' + (a.check_ok ? 'badge-ok' : 'badge-bad'), text: a.check_ok ? 'works' : 'does not work' }),
+            a.check_msg ? el('br') : null, a.check_msg ? el('small', { class: 'text-muted break-all', text: a.check_msg + (a.checked_at ? ' (' + a.checked_at + ' UTC)' : '') }) : null],
+            [el('input', { class: 'cert-test-domain', attrs: { type: 'text', placeholder: 'domain to test, e.g. example.com', 'aria-label': 'Domain to test with ' + a.name, maxlength: '253' } }), smallButton('Test', 'dns-test', a.id), deleteButton('dns-delete', a.id)])) : [muted('No DNS account yet.')]));
+        const typeSel = el('select', { attrs: { id: 'dns-type' } }, ...Object.entries(d.provider_types || {}).map(([k, v]) => el('option', { text: v, attrs: { value: k } })));
+        const secretFields = [];
+        for (const [type, fields] of Object.entries(d.provider_fields || {})) for (const [key, label] of Object.entries(fields))
+            secretFields.push(certField('dns-secret-' + type + '-' + key, (d.provider_types[type] || type) + ': ' + label, el('input', { attrs: { id: 'dns-secret-' + type + '-' + key, type: 'password', autocomplete: 'off', spellcheck: 'false', maxlength: '300' }, data: { type, key } })));
+        nodes.push(el('button', { class: 'btn btn-secondary btn-sm', text: 'Add DNS account', attrs: { type: 'button' }, data: { action: 'toggle-form', target: 'dns-create-form' } }),
+            el('form', { class: 'form hidden', attrs: { id: 'dns-create-form', autocomplete: 'off' } }, el('div', { class: 'form-row' }, certField('dns-name', 'Name', el('input', { attrs: { id: 'dns-name', required: 'required', maxlength: '100' } })), certField('dns-type', 'Provider', typeSel)),
+                muted('Fill in only the fields of the provider you chose. Secrets are stored encrypted and never shown again.'), ...secretFields, el('button', { class: 'btn btn-primary', text: 'Save DNS account', attrs: { type: 'submit' } })));
+
+        // certificates
+        nodes.push(el('h4', { text: 'Certificates' }));
+        const certs = d.certificates || [];
+        nodes.push(...(certs.length ? certs.map(c => {
+            const bad = c.days_left !== null && c.days_left <= 7;
+            const body = [el('strong', { text: c.name }), ' ', el('span', { class: 'badge' + (c.state === 'issued' ? ' badge-ok' : c.state === 'failed' ? ' badge-bad' : ''), text: CERT_STATE[c.state] || c.state }), c.test ? el('span', { class: 'badge', text: 'test certificate' }) : null, el('br'),
+                el('small', { class: 'text-muted break-all', text: (c.names || []).join(', ') + (c.provider ? ' | DNS: ' + c.provider : '') }), el('br'),
+                c.not_after ? el('small', {}, el('span', { class: 'badge' + (bad ? ' badge-bad' : ''), text: c.days_left < 0 ? 'expired' : c.days_left + ' days left' }), ' valid until ' + c.not_after + ' UTC') : el('small', { class: 'text-muted', text: 'No certificate yet.' }),
+                c.last_error ? el('div', { class: 'alert alert-error', text: c.last_error + (c.next_attempt_at ? ' Next try: ' + c.next_attempt_at + ' UTC.' : '') }) : null,
+                el('h5', { text: 'Servers that fetch it' })];
+            const servers = (c.targets || []).length ? c.targets.map(t => el('div', { class: 'list-item' }, el('div', {}, el('strong', { text: t.name }), ' ',
+                t.up_to_date ? el('span', { class: 'badge badge-ok', text: 'up to date' }) : t.install_status === 'failed' ? el('span', { class: 'badge badge-bad', text: 'failed' }) : t.last_pull_at ? el('span', { class: 'badge', text: 'behind' }) : el('span', { class: 'badge', text: 'never fetched' }),
+                el('br'), el('small', { class: 'text-muted break-all', text: (t.last_pull_at ? 'last contact ' + t.last_pull_at + ' UTC from ' + (t.last_pull_ip || '?') : 'has not contacted Sitewright yet') + (t.allow_cidrs ? ' | only from ' + t.allow_cidrs : '') }),
+                t.install_error ? el('div', { class: 'alert alert-error', text: t.install_error }) : null),
+                el('div', { class: 'list-item-actions' }, deleteButton('cert-target-delete', t.id)))) : [muted('No server yet. Add the first one below.')];
+            const add = el('div', { class: 'cert-target-add form-row' }, el('input', { attrs: { type: 'text', placeholder: 'server name, e.g. web1', 'aria-label': 'Server name for ' + c.name, maxlength: '100' }, data: { role: 'name' } }),
+                el('input', { attrs: { type: 'text', placeholder: 'only from these addresses (optional)', 'aria-label': 'Allowed addresses for ' + c.name, maxlength: '480' }, data: { role: 'cidrs' } }), smallButton('Add server', 'cert-target-add', c.id, 'btn-primary'));
+            return listItem([...body, ...servers, add], [smallButton('Renew now', 'cert-renew', c.id), deleteButton('cert-delete', c.id)]);
+        }) : [muted('No certificate yet.')]));
+        const sel = el('select', { attrs: { id: 'cert-dns' } }, ...accounts.map(a => el('option', { text: a.name + ' (' + a.type_label + ')', attrs: { value: String(a.id) } })));
+        nodes.push(el('button', { class: 'btn btn-primary btn-sm', text: 'Add certificate', attrs: { type: 'button' }, data: { action: 'toggle-form', target: 'cert-create-form' } }),
+            el('form', { class: 'form hidden', attrs: { id: 'cert-create-form', autocomplete: 'off' } }, accounts.length ? null : muted('Add a DNS account first.'),
+                el('div', { class: 'form-row' }, certField('cert-name', 'Name', el('input', { attrs: { id: 'cert-name', required: 'required', maxlength: '100' } })), certField('cert-dns', 'DNS account', sel)),
+                certField('cert-names', 'Domain names, one per line (a wildcard such as *.example.com is fine)', el('textarea', { attrs: { id: 'cert-names', required: 'required', rows: '3', maxlength: '2000', spellcheck: 'false' } })),
+                el('button', { class: 'btn btn-primary', text: 'Get the certificate', attrs: { type: 'submit' } })));
+        setContent(container, ...nodes);
+    }
+
     const SVG_NS = 'http://www.w3.org/2000/svg';
     /** Small score trend (values 0-100, oldest first). Fewer than two points draws nothing. */
     function sparkline(values) {
@@ -717,7 +769,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderCertificates, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -837,7 +889,7 @@
 
     const TITLES = { dashboard: 'Dashboard', 'seo-analysis': 'SEO Analysis', competitor: 'Competitor Analysis', watchlist: 'Watchlist', alerts: 'Alerts', 'site-audit': 'Site Audit', opportunities: 'Search Opportunities', analytics: 'Analytics', 'content-ai': 'Content AI',
         'local-seo': 'Local SEO', 'image-seo': 'Image SEO', sitemaps: 'Sitemaps', '404-monitor': '404 Log', redirections: 'Redirect Rules',
-        account: 'My Account', sites: 'Sites', users: 'Users', audit: 'Audit Log', settings: 'Settings' };
+        account: 'My Account', sites: 'Sites', certificates: 'Certificates', users: 'Users', audit: 'Audit Log', settings: 'Settings' };
     const viewUrl = v => BASE + (v === 'dashboard' ? '/' : '/' + v);
 
     function viewFromLocation() {
@@ -852,7 +904,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, alerts: loadAlerts, 'site-audit': loadSiteAudits, opportunities: loadOpportunities, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
+        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, alerts: loadAlerts, 'site-audit': loadSiteAudits, opportunities: loadOpportunities, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, certificates: loadCertificates, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
         syncExportLinks();
         if (loaders[view]) loaders[view]();
     }
@@ -955,6 +1007,7 @@
         } catch (e) { showError(box, 'Could not load audits: ' + e.message); }
     }
     const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
+    const loadCertificates = () => loadInto('cert-area', '/certificates', renderCertificates, 'certificates');
     let profileSiteId = 0, profilePoll = null;
     /** Show the setup guide of one site; while the first read is still queued, look again every 2 seconds (at most 10 times). */
     async function openProfile(id, attempt) {
@@ -1045,6 +1098,20 @@
     let lastGenerated = '';
 
     const submitHandlers = {
+        'dns-create-form': async form => {
+            try {
+                const type = form.querySelector('#dns-type').value, secrets = {};
+                for (const i of form.querySelectorAll('input[data-type="' + type + '"]')) secrets[i.dataset.key] = i.value.trim();
+                await apiRequest('POST', '/dns-accounts', { name: form.querySelector('#dns-name').value.trim(), type, secrets });
+                showToast('DNS account saved. Test it next.'); loadCertificates();
+            } catch (e) { showToast(e.message, 'error'); }
+        },
+        'cert-create-form': async form => {
+            try {
+                await apiRequest('POST', '/certificates', { name: form.querySelector('#cert-name').value.trim(), names: form.querySelector('#cert-names').value, dns_provider_id: Number(form.querySelector('#cert-dns').value) });
+                showToast('Certificate requested. This takes a minute or two.'); loadCertificates(); setTimeout(loadCertificates, 20000);
+            } catch (e) { showToast(e.message, 'error'); }
+        },
         'seo-analysis-form': form => analyse(form, 'seo-url', 'seo-results', false),
         'competitor-form': form => analyse(form, 'competitor-url', 'competitor-results', true),
         'audit-form': async form => {
@@ -1267,6 +1334,20 @@
     // ------------------------------------------------------------------ delegated clicks
 
     const clickActions = {
+        'dns-test': async t => { const inp = t.parentElement.querySelector('.cert-test-domain'); const d = await apiRequest('POST', '/dns-accounts/' + encodeURIComponent(t.dataset.id) + '/test', { domain: inp ? inp.value.trim() : '' }); showToast(d.message, d.ok ? 'success' : 'error'); loadCertificates(); },
+        'dns-delete': async t => { if (confirm('Delete this DNS account?')) { await apiRequest('DELETE', '/dns-accounts/' + encodeURIComponent(t.dataset.id)); showToast('DNS account deleted'); loadCertificates(); } },
+        'cert-renew': async t => { await apiRequest('POST', '/certificates/' + encodeURIComponent(t.dataset.id) + '/renew', {}); showToast('Getting a new certificate now'); setTimeout(loadCertificates, 15000); loadCertificates(); },
+        'cert-delete': async t => { if (confirm('Delete this certificate? Servers that already installed it keep it until it expires.')) { await apiRequest('DELETE', '/certificates/' + encodeURIComponent(t.dataset.id)); showToast('Certificate deleted'); loadCertificates(); } },
+        'cert-target-delete': async t => { if (confirm('Remove this server? Its token stops working.')) { await apiRequest('DELETE', '/cert-targets/' + encodeURIComponent(t.dataset.id)); showToast('Server removed'); loadCertificates(); } },
+        'cert-target-add': async t => {
+            const row = t.closest('.cert-target-add'), q = r => row.querySelector('[data-role="' + r + '"]');
+            const d = await apiRequest('POST', '/certificates/' + encodeURIComponent(t.dataset.id) + '/targets', { name: q('name').value.trim(), allow_cidrs: q('cidrs').value.trim() });
+            const box = document.getElementById('cert-secret');
+            setContent(box, el('div', { class: 'alert alert-error', text: 'Copy this now. The token is not shown again.' }),
+                el('p', { class: 'text-muted', text: 'On the server: copy deploy/sw-cert-pull from the Sitewright install to /usr/local/sbin/ (mode 755); save the text below as /etc/sitewright-cert/<name>.conf (mode 600, owner root); run "sudo sw-cert-pull /etc/sitewright-cert/<name>.conf"; then run it from a timer (deploy/sw-cert-pull@.timer). Finally point the web server at DEST/fullchain.pem and DEST/privkey.pem. Existing certificates (for example certbot\'s) are not touched.' }),
+                el('pre', { class: 'break-all', text: d.config }));
+            box.classList.remove('hidden'); loadCertificates();
+        },
         'delete-404': async t => { if (confirm('Delete this log entry?')) { await apiRequest('DELETE', '/404-monitor/' + encodeURIComponent(t.dataset.id)); showToast('Entry deleted'); load404(); } },
         'clear-404': async () => { if (confirm(siteId > 0 ? 'Clear all 404 entries of the selected site? This cannot be undone.' : 'Clear ALL 404 log entries of ALL sites? This cannot be undone.')) { await apiRequest('POST', '/404-monitor/clear', { confirm: true, project_id: siteId }); showToast('Log cleared'); load404(); } },
         'refresh-404': () => load404(),

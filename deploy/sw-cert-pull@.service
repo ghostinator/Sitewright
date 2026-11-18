@@ -1,0 +1,12 @@
+[Unit]
+Description=Fetch the Sitewright-managed certificate %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sw-cert-pull /etc/sitewright-cert/%i.conf
+# the script writes certificates and reloads the web server, so it runs as root and is otherwise locked down
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=false

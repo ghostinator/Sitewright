@@ -17,7 +17,7 @@ up)
       "admin"=>["username"=>"admin","email"=>"admin@example.test","password"=>"smoke-test-passphrase"]]); echo "installed\n";'
   docker rm -f sw-fixture sw-apache-root sw-apache-sub sw-apache-fi >/dev/null 2>&1
   docker run -d --name sw-fixture --network $NET -v "$PWD/tests/fixtures/site":/usr/share/nginx/html:ro nginx:alpine >/dev/null
-  ENVS="-e SW_DB_HOST=sw-db -e SW_DB_NAME=sw_smoke -e SW_DB_USER=root -e SW_DB_PASS=test-root-pw -e SW_ALLOWED_HOSTS=localhost,sw-apache-root -e SW_FETCH_DEV_ALLOW_CIDRS=172.16.0.0/12,192.168.0.0/16,10.0.0.0/8 -e SW_CONTACT=https://example.test/contact"
+  ENVS="-e SW_DB_HOST=sw-db -e SW_DB_NAME=sw_smoke -e SW_DB_USER=root -e SW_DB_PASS=test-root-pw -e SW_ALLOWED_HOSTS=localhost,sw-apache-root -e SW_FETCH_DEV_ALLOW_CIDRS=172.16.0.0/12,192.168.0.0/16,10.0.0.0/8 -e SW_CONTACT=https://example.test/contact -e SW_APP_KEY=$(openssl rand -base64 32)"
   docker run -d --name sw-apache-root --network $NET -p 8081:80 $ENVS -v "$PWD":/var/www/app -v "$PWD/tests/docker/apache-root.conf":/etc/apache2/sites-enabled/000-default.conf sw-apache >/dev/null
   docker run -d --name sw-apache-sub --network $NET -p 8082:80 $ENVS -e SW_BASE_URL=http://localhost:8082/seo -v "$PWD":/var/www/app -v "$PWD/tests/docker/apache-sub.conf":/etc/apache2/sites-enabled/000-default.conf sw-apache sh -c 'ln -sfn /var/www/app/public /var/www/html/seo && apache2-foreground' >/dev/null
   docker run -d --name sw-apache-fi --network $NET -p 8083:80 $ENVS -v "$PWD":/var/www/app -v "$PWD/tests/docker/apache-fileinfo.conf":/etc/apache2/sites-enabled/000-default.conf sw-apache sh -c 'sed -ri "s!AllowOverride All!AllowOverride None!g" /etc/apache2/apache2.conf; apache2-foreground' >/dev/null

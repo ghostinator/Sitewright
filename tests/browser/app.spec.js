@@ -411,6 +411,29 @@ test('setup guide: a new site is read automatically; use, type my own and start 
   await page.selectOption('#site-switch', { label: 'All sites' });
 });
 
+test('certificates: add a DNS account (shown untested, secret never shown again), a bad certificate name is refused, the account can be deleted', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.goto('/certificates');
+  await expect(page.locator('#cert-area')).toContainText('Test mode');                                       // the default is the Let's Encrypt test service
+  await page.click('[data-action=toggle-form][data-target=dns-create-form]');
+  await page.fill('#dns-name', 'Browser test DNS'); await page.selectOption('#dns-type', 'cloudflare');
+  await page.fill('input[data-type=cloudflare][data-key=token]', 'cf_' + 'Ab1'.repeat(10));
+  await page.click('#dns-create-form button[type=submit]');
+  const acct = page.locator('#cert-area .list-item', { hasText: 'Browser test DNS' });
+  await expect(acct).toContainText('not tested yet');
+  await expect(page.locator('#cert-area')).not.toContainText('Ab1Ab1Ab1');                                  // the token is write-only
+  await page.reload();
+  await expect(page.locator('#cert-area .list-item', { hasText: 'Browser test DNS' })).toContainText('Cloudflare');
+  await page.click('[data-action=toggle-form][data-target=cert-create-form]');
+  await page.fill('#cert-name', 'Bad name test'); await page.fill('#cert-names', 'not a domain');
+  await page.click('#cert-create-form button[type=submit]');
+  await expect(page.locator('#toast')).toContainText('not a valid domain name');
+  await expect(page.locator('#cert-area')).toContainText('No certificate yet');                              // nothing was created, so nothing was sent to anyone
+  page.once('dialog', d => d.accept());
+  await page.locator('#cert-area .list-item', { hasText: 'Browser test DNS' }).locator('[data-action=dns-delete]').click();
+  await expect(page.locator('#cert-area')).toContainText('No DNS account yet');
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {
