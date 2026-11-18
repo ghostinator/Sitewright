@@ -736,6 +736,23 @@ test('certificates: whatever the API returned (names, errors, messages) is shown
     assertInert(box, p, 'certificates'); assert.ok(box.textContent.includes(p));
   }
 });
+test('audit report: repeated link problems are listed once with how many pages, what to do, and a one-click redirect only where a good match exists and the user may edit', () => {
+  const { SW, box } = load();
+  const audit = { id: 7, project_id: 3, base_url: 'https://corner.example', pages: 80, stopped_early: 0, summary: { avg_score: 80, new: null, fixed: null, actions_skipped: 312, fix_once: [
+    { code: 'redirected_link', target: 'https://corner.example/checkout/', destination: 'https://corner.example/cart/', pages: 87, sample: ['https://corner.example/a/', 'https://corner.example/b/', 'https://corner.example/c/'] },
+    { code: 'broken_link', target: 'https://corner.example/old-shop/?x=1', status: 404, pages: 5, sample: ['https://corner.example/a/'], suggestion: { target: '/shop/', score: 85, reason: 'same page name' } },
+    { code: 'broken_link', target: 'https://corner.example/dead/', status: 404, pages: 3, sample: [] }] } };
+  SW.renderSiteAuditReport(box, { audit, types: [] }, true);
+  assert.match(box.textContent, /Fix once, fixes many/); assert.match(box.textContent, /312 links that trigger an action/);
+  const rows = [...box.querySelectorAll('h4 + p + .table-wrap tbody tr, h4 ~ .table-wrap tbody tr')].slice(0, 3);
+  assert.match(rows[0].textContent, /\/checkout\/.*redirects to https:\/\/corner\.example\/cart\/.*87.*Change the link to https:\/\/corner\.example\/cart\//);
+  const btn = rows[1].querySelector('[data-action="redirect-accept"]'); assert.ok(btn, 'a good match offers the redirect');
+  assert.deepEqual([btn.dataset.uri, btn.dataset.target, btn.dataset.project], ['/old-shop/?x=1', '/shop/', '3']); assert.match(rows[1].textContent, /85% match/);
+  assert.equal(rows[2].querySelector('[data-action]'), null, 'no match, no button'); assert.match(rows[2].textContent, /Restore the page/);
+  box.replaceChildren(); SW.renderSiteAuditReport(box, { audit, types: [] }, false); assert.equal(box.querySelector('[data-action="redirect-accept"]'), null, 'viewers cannot create rules');
+  for (const p of PAYLOADS) { box.replaceChildren(); const a2 = JSON.parse(JSON.stringify(audit)); a2.summary.fix_once[0].target = 'https://x.example/' + p; a2.summary.fix_once[0].destination = p; a2.summary.fix_once[1].suggestion.target = p; a2.summary.fix_once[0].sample = [p];
+    SW.renderSiteAuditReport(box, { audit: a2, types: [] }, true); assertInert(box, p, 'audit fix-once'); }
+});
 test('Search Console: the property that matches the site is preselected (domain property first)', () => {
   const { SW, box } = load();
   const state = { configured: true, redirect_uri: 'x', connections: [{ id: 9, property_url: null, site_id: 5, last_status: 'ok', last_sync_at: null, rows_synced: 0, last_error: null }] };

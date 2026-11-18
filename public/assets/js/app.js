@@ -424,13 +424,28 @@
         setContent(container, tableOf(['Site', 'Result', 'Pages', 'Average score', 'Actions'], rows));
     }
 
-    function renderSiteAuditReport(container, data) {
+    function renderSiteAuditReport(container, data, canEdit = true) {
         const a = data.audit, s = a.summary || {};
         const lines = [el('p', { class: 'no-print' }, exportLink('/audit/' + a.id + '?part=issues', 'Download issues (CSV)'), ' ', exportLink('/audit/' + a.id + '?part=pages', 'Download pages (CSV)'), ' ', printButton('Site audit: ' + a.base_url)),
             el('p', {}, el('strong', { text: a.base_url }), ' ' + a.pages + ' pages checked, average score ' + (s.avg_score === null || s.avg_score === undefined ? '–' : s.avg_score) + '/100.'
             + (s.new !== null && s.new !== undefined ? ' Since the previous audit: ' + s.new + ' new, ' + s.fixed + ' fixed.' : ' This is the first audit of this site, so there is nothing to compare with yet.'))];
         if (Number(a.stopped_early)) lines.push(el('div', { class: 'alert alert-warn', text: 'The audit stopped early at its page or time limit, so some pages were not checked. Raise the limits under Settings → Monitoring to cover more.' }));
         if (s.issues_truncated) lines.push(muted('There were more issues than are stored; the list shows the first 5,000.'));
+        if (Number(s.actions_skipped) > 0) lines.push(muted(fmtInt(s.actions_skipped) + ' link' + (Number(s.actions_skipped) === 1 ? '' : 's') + ' that trigger an action (share buttons, add to cart, log out) were left out: they are not pages.'));
+        const fo = s.fix_once || [];
+        if (fo.length) {
+            const pathOf = u => { try { const x = new URL(u); return x.pathname + x.search; } catch (e) { return String(u); } };
+            const frows = fo.map(f => {
+                const redirected = f.code === 'redirected_link';
+                const fix = redirected ? el('span', { text: 'Change the link to ' + (f.destination || 'its final address') + '. It is usually in a menu, widget or the theme, so one change fixes every page.' })
+                    : f.suggestion ? el('span', {}, canEdit ? el('button', { class: 'btn btn-secondary btn-sm', text: 'Redirect to ' + f.suggestion.target, attrs: { type: 'button' }, data: { action: 'redirect-accept', uri: pathOf(f.target), target: f.suggestion.target, project: a.project_id } }) : el('span', { class: 'break-all', text: 'Redirect to ' + f.suggestion.target }),
+                        ' ', el('span', { class: 'badge', text: f.suggestion.score + '% match' }), el('br'), el('small', { class: 'text-muted', text: 'Or restore the page, or remove the link.' }))
+                    : el('span', { text: 'Restore the page, redirect it to a page that fits, or remove the link.' });
+                return el('tr', {}, el('td', { class: 'break-all' }, el('strong', { text: pathOf(f.target) }), el('br'), el('small', { class: 'text-muted', text: redirected ? 'redirects to ' + (f.destination || '?') : 'missing' + (f.status ? ' (HTTP ' + f.status + ')' : '') })),
+                    el('td', { text: String(f.pages) }), el('td', {}, fix), el('td', { class: 'break-all' }, el('small', { class: 'text-muted', text: (f.sample || []).map(pathOf).join(', ') + (f.pages > (f.sample || []).length ? ', …' : '') })));
+            });
+            lines.push(el('h4', { text: 'Fix once, fixes many' }), muted('The same link is on many pages. Each row is one thing to change.'), tableOf(['Link', 'Pages', 'What to do', 'For example on'], frows));
+        }
         const types = data.types || [];
         if (!types.length) { lines.push(el('div', { class: 'alert alert-info', text: 'No issues found.' })); return setContent(container, ...lines); }
         const rows = types.map(t => el('tr', {}, el('td', {}, sevBadge(t.severity)), el('td', {}, el('strong', { text: t.title }), el('br'), el('small', { class: 'text-muted', text: t.advice })), el('td', { text: String(t.count) }),
@@ -1421,7 +1436,7 @@
             setContent(box, muted('Loading…'));
             const id = encodeURIComponent(t.dataset.id);
             const [d, pages] = await Promise.all([apiRequest('GET', '/site-audits/' + id), apiRequest('GET', '/site-audits/' + id + '/pages?limit=20')]);
-            const rep = el('div'), worst = el('div'); renderSiteAuditReport(rep, d); renderSiteAuditPages(worst, pages);
+            const rep = el('div'), worst = el('div'); renderSiteAuditReport(rep, d, canEdit()); renderSiteAuditPages(worst, pages);
             setContent(box, el('h4', { text: 'Report' }), rep, el('div', { attrs: { id: 'audit-issue-list' } }), el('h4', { text: 'Lowest-scoring pages' }), worst); syncExportLinks();
         },
         'audit-issues': async t => {

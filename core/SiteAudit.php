@@ -140,14 +140,25 @@ final class SiteAudit
             foreach ($groups as $urls) { if (count($urls) > 1) { foreach ($urls as $u) { $issues[] = [$code, $u, 'Shared with ' . (count($urls) - 1) . ' other page(s)']; } } }
         }
         foreach (Nap::issues($nap, $project > 0 ? SiteProfile::values($project) : []) as $i) { $issues[] = $i; }
+        // a page that did not load while the crawl was busy is looked at once more before it is called broken (a slow answer is not a broken link)
+        $retry = array_keys(array_filter($fetches, static fn (array $f): bool => $f['status'] === 0 || $f['status'] === 429 || $f['status'] >= 500));
+        if ($retry !== []) {
+            $client = SafeHttpClient::default(); $delay = (int)Config::get('limits.crawl_delay_ms') * 1000; $retryDeadline = microtime(true) + min(90, $budget);
+            foreach (array_slice($retry, 0, 40) as $u) {
+                if (microtime(true) > $retryDeadline) { break; }
+                usleep(max($delay, 500000)); Jobs::touch();
+                try { $res = $client->get($u, ['max_bytes' => (int)Config::get('fetch.max_html_bytes'), 'timeout' => 25, 'deadline' => $retryDeadline]); } catch (FetchException) { continue; }
+                $fetches[$u] = ['status' => $res['status'], 'final' => $res['final_url'], 'redirected' => !empty($res['redirects'])];
+            }
+        }
         $finalOf = [];
         foreach ($fetches as $req => $f) { if ($f['final'] !== null) { $finalOf[$req] = Url::normalize($f['final']) ?? $f['final']; } }
-        $inbound = [];
+        $inbound = []; $groups = ['broken_link' => [], 'redirected_link' => []];
         foreach ($linksFrom as $src => $targets) {
             foreach ($targets as $t) {
                 $f = $fetches[$t] ?? null;
-                if ($f !== null && ($f['status'] >= 400 || $f['status'] === 0)) { $issues[] = ['broken_link', $src, 'Links to ' . $t . ' (' . ($f['status'] ? 'HTTP ' . $f['status'] : 'not reachable') . ')']; }
-                elseif ($f !== null && $f['redirected'] && isset($finalOf[$t]) && $finalOf[$t] !== $t) { $issues[] = ['redirected_link', $src, 'Links to ' . $t . ', which redirects to ' . $finalOf[$t]]; }
+                if ($f !== null && ($f['status'] >= 400 || $f['status'] === 0)) { $issues[] = ['broken_link', $src, 'Links to ' . $t . ' (' . ($f['status'] ? 'HTTP ' . $f['status'] : 'not reachable') . ')']; $groups['broken_link'][$t][$src] = $f['status']; }
+                elseif ($f !== null && $f['redirected'] && isset($finalOf[$t]) && $finalOf[$t] !== $t) { $issues[] = ['redirected_link', $src, 'Links to ' . $t . ', which redirects to ' . $finalOf[$t]]; $groups['redirected_link'][$t][$src] = 1; }
                 $dest = $finalOf[$t] ?? $t;
                 if ($dest !== $src) { $inbound[$dest][$src] = true; }
             }
@@ -187,7 +198,8 @@ final class SiteAudit
                 $db->query('INSERT INTO `' . $db->t('audit_issues') . '` (audit_id, code, severity, url, detail) VALUES ' . implode(',', $ph), $bind);
             }
         });
-        $summary = ['pages' => count($pages), 'fetched' => $out['fetched'], 'stopped_early' => $out['stopped_early'], 'issues_truncated' => $truncated, 'by_severity' => $bySev, 'by_code' => $byCode,
+        $fixOnce = self::fixOnce($groups, $pages, $finalOf);
+        $summary = ['pages' => count($pages), 'actions_skipped' => (int)($out['actions_skipped'] ?? 0), 'fix_once' => $fixOnce, 'fetched' => $out['fetched'], 'stopped_early' => $out['stopped_early'], 'issues_truncated' => $truncated, 'by_severity' => $bySev, 'by_code' => $byCode,
             'avg_score' => (int)round(array_sum(array_column($pages, 'score')) / count($pages)), 'previous_audit_id' => null, 'new' => null, 'fixed' => null, 'new_high' => 0];
 
         // ---- compare with the previous audit of the same site and alert about NEW high-priority problems
@@ -204,6 +216,37 @@ final class SiteAudit
             Alerts::notify('audit_new_issues', 'Audit of ' . $base . ' found ' . $summary['new_high'] . ' new high-priority issue(s) (' . $summary['fixed'] . ' fixed since the last audit). Open Site Audit in Sitewright to see them.', 'warning', 'a' . $project . ':' . $base, $project);
         }
         return ['pages' => count($pages), 'issues' => count($issues)];
+    }
+
+    /**
+     * The same link found on many pages is one thing to fix (a menu item, a footer link), not hundreds. For each target linked from at least three
+     * pages: how many pages, where it ends up, and for a missing page the closest live page to redirect it to.
+     * @param array<string,array<string,array<string,int>>> $groups code => target => [source page => status]
+     * @param array<string,array{title:string}> $pages @param array<string,string> $finalOf
+     * @return list<array<string,mixed>>
+     */
+    private static function fixOnce(array $groups, array $pages, array $finalOf): array
+    {
+        $idx = null; $out = [];
+        foreach ($groups as $code => $targets) {
+            uasort($targets, static fn (array $a, array $b): int => count($b) <=> count($a));
+            foreach (array_slice($targets, 0, 8, true) as $target => $sources) {
+                if (count($sources) < 3) { break; }
+                $row = ['code' => $code, 'target' => $target, 'pages' => count($sources), 'sample' => array_slice(array_keys($sources), 0, 3)];
+                if ($code === 'redirected_link') { $row['destination'] = $finalOf[$target] ?? null; }
+                else {
+                    $status = (int)reset($sources); $row['status'] = $status;
+                    if ($status === 404 || $status === 410) {
+                        $idx ??= RedirectSuggester::index(array_map(static fn (string $u, array $p): array => ['path' => RedirectSuggester::pathOf($u), 'title' => $p['title']], array_keys($pages), $pages));
+                        $s = RedirectSuggester::suggestIn($idx, RedirectSuggester::pathOf($target), 1);
+                        if ($s) { $row['suggestion'] = $s[0]; }
+                    }
+                }
+                $out[] = $row;
+            }
+        }
+        usort($out, static fn (array $a, array $b): int => $b['pages'] <=> $a['pages']);
+        return array_slice($out, 0, 12);
     }
 
     /** Keep the newest audit.keep per site; mark audits whose job vanished as failed. @return int audits deleted */

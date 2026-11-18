@@ -120,3 +120,33 @@ test('audit retention keeps the newest N audits per site and removes the rest wi
     eq(SiteAudit::purge(), 2); eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_audits WHERE project_id = 5')['n'], 2); eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_audit_issues')['n'], 2); eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_audit_pages')['n'], 2);
     ok((bool)$db->fetchOne('SELECT 1 x FROM sw_audits WHERE id = :i', ['i' => $other]), 'another site is untouched'); Config::set('audit.keep', 10);
 });
+
+test('audit: links that DO something (share buttons, add to cart, log out) are not followed or reported; a page that failed once while the crawl was busy is re-checked before it is called broken', function () use ($db, $reset, $run, $pg) {
+    $reset(); $flaky = 0;
+    $links = '<a href="/?share=twitter">tw</a><a href="/shop/x/?share=facebook">fb</a><a href="/?add-to-cart=12">add</a><a href="/wp-login.php?action=logout">out</a><a href="/slow">slow</a><a href="/real-404">gone</a><a href="/blog/">blog</a>';
+    fakeWeb(['https://aud.example/' => $pg('Home page of the audit example site', $links), 'https://aud.example/blog/' => $pg('The blog of the audit example site', '<a href="/">home</a><a href="/slow">slow</a>'),
+        'https://aud.example/slow' => function () use (&$flaky, $pg) { return ++$flaky === 1 ? [503, [], 'busy'] : $pg('A page that answers on the second try', '<a href="/">home</a>'); },
+        'https://aud.example/real-404' => [404, [], 'nope']]);
+    $r = $run(); $a = $db->fetchOne('SELECT * FROM sw_audits WHERE id = :i', ['i' => $r['audit_id']]); eq($a['status'], 'done', (string)$a['error']);
+    $urls = array_column($GLOBALS['__calls'], 'url');
+    foreach ($urls as $u) { ok(!str_contains($u, 'share=') && !str_contains($u, 'add-to-cart') && !str_contains($u, 'wp-login'), "an action link was fetched: $u"); }
+    $codes = array_map(fn ($x) => $x['code'] . ' ' . $x['detail'], $db->fetchAll('SELECT code, detail FROM sw_audit_issues WHERE audit_id = :a', ['a' => $r['audit_id']]));
+    ok(!array_filter($codes, fn ($c) => str_contains($c, 'slow')), 'the page that answered on the second try is not reported: ' . implode(' | ', $codes));
+    ok((bool)array_filter($codes, fn ($c) => str_contains($c, 'real-404') && str_contains($c, 'HTTP 404')), 'a real 404 still is');
+    eq(count(array_filter($urls, fn ($u) => $u === 'https://aud.example/slow')), 2, 'fetched twice: once in the crawl, once to re-check');
+    $s = json_decode($a['summary'], true); eq($s['actions_skipped'], 4 + 0, 'the four action links on the home page were counted, not followed');
+});
+
+test('audit: one link repeated on many pages is one thing to fix: the report lists it once with how many pages and, for a missing page, the closest live page', function () use ($db, $reset, $run, $pg) {
+    $reset(); $menu = '<a href="/checkout/">Checkout</a><a href="/old-shop/">Shop</a><a href="/cart/">Cart</a><a href="/shop/">Shop</a>';
+    $site = ['https://aud.example/' => $pg('Home page of the audit example site', $menu . '<a href="/p1/">1</a><a href="/p2/">2</a><a href="/p3/">3</a><a href="/lonely/">l</a>'), 'https://aud.example/cart/' => $pg('Your cart on the audit example site', $menu),
+        'https://aud.example/shop/' => $pg('The shop of the audit example site', $menu), 'https://aud.example/lonely/' => $pg('A page with a link only here', $menu . '<a href="/gone-once/">g</a>'),
+        'https://aud.example/checkout/' => [301, ['Location' => 'https://aud.example/cart/'], ''], 'https://aud.example/old-shop/' => [404, [], 'gone'], 'https://aud.example/gone-once/' => [404, [], 'gone']];
+    foreach (['p1', 'p2', 'p3'] as $p) { $site["https://aud.example/$p/"] = $pg("Page $p of the audit example site", $menu); }
+    fakeWeb($site); $r = $run(); $a = $db->fetchOne('SELECT summary FROM sw_audits WHERE id = :i', ['i' => $r['audit_id']]); $s = json_decode($a['summary'], true); $f = $s['fix_once'];
+    $by = array_column($f, null, 'target');
+    eq($by['https://aud.example/checkout/']['code'], 'redirected_link'); eq($by['https://aud.example/checkout/']['destination'], 'https://aud.example/cart/'); ok($by['https://aud.example/checkout/']['pages'] >= 6, (string)$by['https://aud.example/checkout/']['pages']);
+    eq($by['https://aud.example/old-shop/']['code'], 'broken_link'); eq($by['https://aud.example/old-shop/']['status'], 404); eq($by['https://aud.example/old-shop/']['suggestion']['target'], '/shop/', 'the closest live page is offered');
+    ok(!isset($by['https://aud.example/gone-once/']), 'a link found on one page is not a "fix once" item (it is just an issue)');
+    ok(count($by['https://aud.example/checkout/']['sample']) === 3, 'a few example pages are named');
+});

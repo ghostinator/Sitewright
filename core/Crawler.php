@@ -15,10 +15,25 @@ namespace Sitewright\Core;
 final class Crawler
 {
     private const MAX_LINKS_PER_PAGE = 500;
+    /** Query keys of links that ask the site to DO something (Jetpack share buttons, WooCommerce add-to-cart, comment reply, nonces): not pages, so never followed or reported. */
+    private const ACTION_KEYS = ['share', 'add-to-cart', 'add_to_cart', 'add_to_wishlist', 'remove_item', 'removed_item', 'undo_item', 'wc-ajax', 'replytocom', '_wpnonce', 'redirect_to', 'wp_logout', 'action'];
+    private const ACTION_PATHS = ['/wp-login.php', '/wp-admin', '/xmlrpc.php', '/wp-cron.php'];
+
+    /** A link that triggers an action (share, add to cart, log out, reply) rather than showing a page. */
+    public static function isActionLink(string $url): bool
+    {
+        $path = strtolower((string)parse_url($url, PHP_URL_PATH));
+        foreach (self::ACTION_PATHS as $p) { if ($path === $p || str_starts_with($path, $p . '/')) { return true; } }
+        $q = (string)parse_url($url, PHP_URL_QUERY);
+        if ($q === '') { return false; }
+        parse_str($q, $keys);
+        foreach (array_keys($keys) as $k) { if (in_array(strtolower((string)$k), self::ACTION_KEYS, true)) { return true; } }
+        return false;
+    }
 
     /**
      * @param array{on_page?:callable,on_fetch?:callable,on_links?:callable,on_tick?:callable,seeds?:array} $hooks
-     * @return array{pages:string[],fetched:int,stopped_early:bool,error:?string}
+     * @return array{pages:string[],fetched:int,stopped_early:bool,error:?string,actions_skipped:int}
      */
     public static function run(string $startUrl, int $maxPages, float $deadline, array $hooks = []): array
     {
@@ -32,7 +47,7 @@ final class Crawler
         foreach ((array)($hooks['seeds'] ?? []) as $seed) {
             $n = is_string($seed) ? Url::normalize($seed) : null;
             if ($n !== null && !isset($queued[$n]) && Url::origin($n) === Url::origin($start) && count($queued) < $maxPages * 20) { $queued[$n] = true; $queue[] = $n; }
-        } $pages = []; $fetched = 0; $error = null; $stopped = false;
+        } $pages = []; $fetched = 0; $error = null; $stopped = false; $actions = 0;
 
         while ($queue) {
             if (isset($hooks['on_tick'])) { ($hooks['on_tick'])(); }
@@ -72,6 +87,7 @@ final class Crawler
                     if (count($external) < self::MAX_LINKS_PER_PAGE) { $external[$norm] = true; }
                     continue;
                 }
+                if (self::isActionLink($norm)) { $actions++; continue; }
                 if (count($internal) < self::MAX_LINKS_PER_PAGE) { $internal[$norm] = true; }
                 if (isset($queued[$norm])) { continue; }
                 if (count($queued) >= $maxPages * 20) { continue; } // bound memory on link-heavy sites
@@ -80,7 +96,7 @@ final class Crawler
             }
             if (isset($hooks['on_links'])) { ($hooks['on_links'])($final, array_keys($internal), array_keys($external)); }
         }
-        return ['pages' => array_keys($pages), 'fetched' => $fetched, 'stopped_early' => $stopped || ($queue !== [] && count($pages) >= $maxPages), 'error' => $pages ? null : $error];
+        return ['pages' => array_keys($pages), 'fetched' => $fetched, 'stopped_early' => $stopped || ($queue !== [] && count($pages) >= $maxPages), 'error' => $pages ? null : $error, 'actions_skipped' => $actions];
     }
 
     /** @return string[] Disallow prefixes that apply to every user agent */
