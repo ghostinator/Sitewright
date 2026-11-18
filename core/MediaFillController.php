@@ -44,7 +44,8 @@ final class MediaFillController
     public function skip(array $params): never
     {
         $id = $this->site($params);
-        $n = MediaFill::skip($id, is_array(Request::json()['ids'] ?? null) ? Request::json()['ids'] : []);
+        $conf = Request::json()['confidence'] ?? null;
+        $n = is_string($conf) ? MediaFill::skipConfidence($id, $conf) : MediaFill::skip($id, is_array(Request::json()['ids'] ?? null) ? Request::json()['ids'] : []);
         Response::success($n . ' image' . ($n === 1 ? '' : 's') . ' left as they are', ['skipped' => $n]);
     }
 }

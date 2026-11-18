@@ -110,6 +110,14 @@ final class MediaFill
         return ['applied' => $r['applied'], 'failed' => $r['failed'], 'skipped' => count($items) - count($ids)];
     }
 
+    /** Leave every open image with this level of suggestion alone (e.g. the ones that need a person and never will get one). @return int how many */
+    public static function skipConfidence(int $siteId, string $confidence): int
+    {
+        if (!in_array($confidence, ['good', 'fair', 'none'], true)) { Validator::fail('confidence', 'must be good, fair or none'); }
+        $db = Database::getInstance();
+        return $db->query('UPDATE `' . $db->t('media_missing') . "` SET status = 'skipped' WHERE site_id = :s AND status = 'open' AND confidence = :c", ['s' => $siteId, 'c' => $confidence])->rowCount();
+    }
+
     /** Leave these images alone (decorative, or to be handled by hand). @param list<int> $attachmentIds */
     public static function skip(int $siteId, array $attachmentIds): int
     {

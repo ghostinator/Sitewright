@@ -15,6 +15,8 @@ test('suggestions: the page or product an image belongs to wins; otherwise reada
         ['', $u('CleanShot-2026-10-05-at-8.16.24-PM-edited-2.png'), '', '', 'none'],
         ['', $u('IMG_20260704_123456.jpg'), '', '', 'none'],
         ['', $u('1234.jpg'), '', '', 'none'],
+        ['', $u('288124a1-a0fe-4b5e-ada3-0e297012c4a5.jpg'), '', '', 'none'],
+        ['288124a1-a0fe-4b5e-ada3-0e297012c4a5', $u('x.jpg'), '', '', 'none'],
         ['Riverwalk mural at sunset', $u('IMG_1234.jpg'), 'Blog', 'Riverwalk mural at sunset', 'fair'],
         ['', $u('Pueblo%20Riverwalk%20Mural.jpg'), 'Mural', 'Pueblo riverwalk mural', 'fair'],
     ];
@@ -74,6 +76,8 @@ test('apply: the text the person reviewed is sent through the write-back, only i
     $st = array_column($db->fetchAll('SELECT attachment_id, status, suggestion FROM sw_media_missing'), null, 'attachment_id'); eq([$st[1]['status'], $st[1]['suggestion'], $st[2]['status'], $st[3]['status']], ['applied', 'A blue mug on a table', 'open', 'open']);
     eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_media_changes')['n'], 1, 'one logged change, so it can be undone');
     eq(MediaFill::skip($site, [3, 3, 'x', 0, 77]), 1); eq($db->fetchOne('SELECT status FROM sw_media_missing WHERE attachment_id = 3')['status'], 'skipped'); eq(MediaFill::skip($site, [1]), 0, 'an applied image is not "skipped"');
+    $wp([5 => ['', 'Gemini_Generated_Image_d9ggy0d9ggy0d9gg.jpg'], 6 => ['', 'Spicy-clothing.jpg']]); MediaFill::handleJob(['site_id' => $site]);
+    eq(MediaFill::skipConfidence($site, 'none'), 1, 'only the open ones of that level'); eq($db->fetchOne('SELECT status FROM sw_media_missing WHERE attachment_id = 6')['status'], 'open'); throws(Sitewright\Core\ResponseException::class, fn () => MediaFill::skipConfidence($site, 'bogus'));
     foreach ([[], range(1, 201)] as $bad) { throws(Sitewright\Core\ResponseException::class, fn () => MediaFill::apply($site, $bad, null)); }
     $wp([1 => ['', 'a.png']], '1.3.0', ['media_list' => true, 'media_write' => false]); $db->query("UPDATE sw_media_missing SET status = 'open'");
     $e = throws(Sitewright\Core\ResponseException::class, fn () => MediaFill::apply($site, [['id' => 1, 'alt' => 'x']], null)); eq($e->status, 409); ok(str_contains((string)(json_decode($e->body, true)['message'] ?? ''), 'Change image text'), $e->body);
@@ -86,5 +90,6 @@ test('API: administrators only; scan answers in words before queueing; the list 
     $all = call(Sitewright\Core\MediaFillController::class, 'show', [], ['id' => (string)$site]); eq(array_column($all['json']['data']['items'], 'confidence'), ['good', 'fair', 'none'], 'best suggestions first'); eq($all['json']['data']['summary']['open'], 3);
     Sitewright\Core\Request::fake(['query' => ['confidence' => 'none', 'limit' => '1']]); $r = Sitewright\Core\MediaFillController::class; $none = resp(fn () => (new $r())->show(['id' => (string)$site])); eq(count($none['json']['data']['items']), 1); eq($none['json']['data']['items'][0]['confidence'], 'none');
     eq(call($r, 'show', [], ['id' => '9999'])['status'], 404); $scan = call($r, 'scan', [], ['id' => (string)$site]); eq($scan['status'], 202); eq(call($r, 'scan', [], ['id' => (string)$site])['json']['data']['job_id'], $scan['json']['data']['job_id'], 'a scan already waiting is not queued twice');
+    $sk = call($r, 'skip', ['method' => 'POST', 'body' => ['confidence' => 'none']], ['id' => (string)$site]); eq([$sk['status'], $sk['json']['data']['skipped']], [200, 1], json_encode($sk['json'])); eq(call($r, 'skip', ['method' => 'POST', 'body' => ['confidence' => 'x']], ['id' => (string)$site])['status'], 400);
     $wp([1 => ['', 'a.png']], '1.2.0'); $x = call($r, 'scan', [], ['id' => (string)$site]); eq($x['status'], 409);
 });

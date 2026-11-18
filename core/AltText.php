@@ -18,6 +18,8 @@ final class AltText
     /** @return array{text:string,confidence:string} confidence is "good", "fair" or "none" */
     public static function suggest(string $title, string $url, string $parentTitle = ''): array
     {
+        $uuid = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i';   // a generated id is not a description, whatever words its digits spell
+        if (preg_match($uuid, trim($title)) || ($title === '' && preg_match($uuid, self::fileStem($url)))) { return ['text' => '', 'confidence' => 'none']; }
         $own = self::words($title !== '' ? $title : self::fileStem($url));
         $parent = SiteProfile::clean($parentTitle, 200) ?? '';
         if (count(self::plainWords($parent)) >= 2) {

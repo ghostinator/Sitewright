@@ -804,8 +804,8 @@ test('media worklist: counts by how good the suggestion is, one editable box per
   const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 3);
   assert.deepEqual(rows.map(r => r.querySelector('.media-alt').value), ['Chili Tote Bag (front view)', 'Spicy clothing', '']); assert.deepEqual(rows.map(r => r.querySelector('.media-pick').dataset.conf), ['good', 'fair', 'none']);
   assert.match(rows[0].textContent, /a\.png.*on: Chili Tote Bag.*from the page or product/); assert.ok(rows[0].querySelector('.badge-ok')); assert.match(rows[2].textContent, /needs a person/);
-  assert.deepEqual([...box.querySelectorAll('[data-action]')].map(b => b.dataset.action), ['media-scan', 'media-tick-good', 'media-apply', 'media-skip', 'media-page-next']);
-  assert.equal(box.querySelector('#media-conf').dataset.change, 'media-conf');
+  assert.deepEqual([...box.querySelectorAll('[data-action]')].map(b => b.dataset.action), ['media-scan', 'media-tick-good', 'media-apply', 'media-skip', 'media-skip-none', 'media-page-next']);
+  assert.equal(box.querySelector('#media-conf').dataset.change, 'media-conf'); assert.match(box.querySelector('[data-action="media-skip-none"]').textContent, /Leave all 50 that need a person/);
   box.replaceChildren(); SW.renderMediaFill(box, data({ summary: { open: 103, good: 10, fair: 43, none: 50, applied: 0, skipped: 0, scanned_at: 'x' } }), { conf: 'all', offset: 100, limit: 50 }); assert.deepEqual([...box.querySelectorAll('[data-action]')].map(b => b.dataset.action).filter(a => a.startsWith('media-page')), ['media-page-prev'], 'last page: Previous only');
   box.replaceChildren(); SW.renderMediaFill(box, { summary: { open: 0, good: 0, fair: 0, none: 0, applied: 0, skipped: 0, scanned_at: null }, items: [] }); assert.match(box.textContent, /Not read yet.*"Image list"/); assert.ok(box.querySelector('[data-action="media-scan"]'));
   for (const p of PAYLOADS) { box.replaceChildren(); SW.renderMediaFill(box, data({ items: [{ id: 1, url: 'https://s.example/' + p, title: p, parent_title: p, parent_url: p, suggestion: p, confidence: 'good' }] }));

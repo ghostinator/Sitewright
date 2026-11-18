@@ -152,7 +152,7 @@
             muted((s.scanned_at ? 'Read on ' + s.scanned_at + ' UTC. ' : '') + 'Correct the text where needed, tick the images, then Apply. Applying needs the owner to have ticked "Change image text"; every change is listed under Image SEO and can be undone.'),
             el('p', {}, smallButton('Read the media library again', 'media-scan', ''), ' ', sel),
             rows.length ? tableOf(['', 'Image', 'Suggested alt text (edit it)', 'Where it came from'], rows) : muted('Nothing to show here.'),
-            el('p', {}, smallButton('Tick all good suggestions', 'media-tick-good', ''), ' ', smallButton('Apply ticked', 'media-apply', '', 'btn-primary'), ' ', smallButton('Leave ticked as they are', 'media-skip', ''),
+            el('p', {}, smallButton('Tick all good suggestions', 'media-tick-good', ''), ' ', smallButton('Apply ticked', 'media-apply', '', 'btn-primary'), ' ', smallButton('Leave ticked as they are', 'media-skip', ''), ' ', s.none ? smallButton('Leave all ' + fmtInt(s.none) + ' that need a person as they are', 'media-skip-none', '') : null,
                 ' ', state.offset > 0 ? smallButton('Previous ' + state.limit, 'media-page-prev', '') : null, ' ', more ? smallButton('Next ' + state.limit, 'media-page-next', '') : null));
     }
 
@@ -1471,6 +1471,10 @@
             showToast(d.applied + ' updated on the site' + (d.failed.length ? '; ' + d.failed.length + ' refused: ' + d.failed[0].error : ''), d.failed.length && !d.applied ? 'error' : undefined); loadMediaFill(); loadMediaChanges();
         },
         'media-skip': async () => { const ids = pickedMedia().map(i => i.id); if (!ids.length) { showToast('Tick some images first', 'error'); return; } await apiRequest('POST', '/sites/' + encodeURIComponent(siteId) + '/media-missing/skip', { ids }); showToast('Left as they are'); loadMediaFill(); },
+        'media-skip-none': async () => {
+            if (!confirm('Leave every image that needs a person as it is? They will no longer be listed here (you can read the media library again to bring back any that still have no alt text).')) return;
+            const d = await apiRequest('POST', '/sites/' + encodeURIComponent(siteId) + '/media-missing/skip', { confidence: 'none' }); showToast(d.skipped + ' left as they are'); mediaFill.offset = 0; loadMediaFill();
+        },
         'media-page-next': () => { mediaFill.offset += mediaFill.limit; loadMediaFill(); },
         'media-page-prev': () => { mediaFill.offset = Math.max(0, mediaFill.offset - mediaFill.limit); loadMediaFill(); },
         'image-suggest': async t => {
