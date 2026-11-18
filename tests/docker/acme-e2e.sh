@@ -9,7 +9,7 @@ trap 'docker rm -f sw-pebble sw-challtestsrv >/dev/null 2>&1; rm -rf "$CA"' EXIT
 docker rm -f sw-pebble sw-challtestsrv >/dev/null 2>&1
 docker create --name sw-pebble-ca ghcr.io/letsencrypt/pebble:latest >/dev/null && docker cp sw-pebble-ca:/test/certs/pebble.minica.pem "$CA/minica.pem" >/dev/null && docker rm sw-pebble-ca >/dev/null
 docker run -d --name sw-challtestsrv --network $NET ghcr.io/letsencrypt/pebble-challtestsrv:latest -http01 "" -https01 "" -tlsalpn01 "" -doh "" >/dev/null
-docker run -d --name sw-pebble --network $NET --network-alias pebble -e PEBBLE_VA_NOSLEEP=1 -e PEBBLE_VA_ALWAYS_VALID=0 \
+docker run -d --name sw-pebble --network $NET --network-alias pebble -e PEBBLE_VA_NOSLEEP=1 -e PEBBLE_VA_ALWAYS_VALID=0 -e PEBBLE_AUTHZREUSE=0 \
   ghcr.io/letsencrypt/pebble:latest -config /test/config/pebble-config.json -dnsserver sw-challtestsrv:8053 >/dev/null
 docker image inspect sw-php:8.3 >/dev/null 2>&1 || docker build -q -t sw-php:8.3 --build-arg PHP_VERSION=8.3 tests/docker >/dev/null
 docker ps --format '{{.Names}}' | grep -qx sw-db-mariadb-10-11 || docker run -d --name sw-db-mariadb-10-11 --network $NET -e MARIADB_ROOT_PASSWORD=test-root-pw -e MARIADB_DATABASE=sw_test mariadb:10.11 >/dev/null
