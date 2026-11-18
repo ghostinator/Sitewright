@@ -713,6 +713,9 @@ test('certificates: DNS accounts say whether they were tested; the forms exist, 
   const secrets = [...box.querySelectorAll('#dns-create-form input[data-type]')]; assert.deepEqual(secrets.map(i => i.dataset.type + '.' + i.dataset.key), ['cloudflare.token', 'spaceship.api_key', 'spaceship.api_secret']); assert.ok(secrets.every(i => i.type === 'password' && i.autocomplete === 'off'));
   assert.deepEqual([...box.querySelectorAll('#cert-dns option')].map(o => o.textContent), ['Main Cloudflare (Cloudflare)', 'Spaceship (Spaceship)']);
   assert.ok(box.querySelector('#cert-names').required && box.querySelector('#cert-name').required);
+  const shown = [...box.querySelectorAll('#dns-create-form [data-type-group]')].filter(g => !g.classList.contains('hidden')).map(g => g.dataset.typeGroup);
+  assert.deepEqual(shown, ['cloudflare'], 'only the first provider\'s fields show until another is chosen');
+  assert.equal(box.querySelector('#dns-type').dataset.change, 'dns-type', 'the select drives which fields show');
 });
 test('certificates: test mode, a custom service, a missing app key and an empty page are each explained', () => {
   const { SW, box } = load();

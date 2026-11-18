@@ -416,7 +416,10 @@ test('certificates: add a DNS account (shown untested, secret never shown again)
   await page.goto('/certificates');
   await expect(page.locator('#cert-area')).toContainText('Test mode');                                       // the default is the Let's Encrypt test service
   await page.click('[data-action=toggle-form][data-target=dns-create-form]');
-  await page.fill('#dns-name', 'Browser test DNS'); await page.selectOption('#dns-type', 'cloudflare');
+  await page.fill('#dns-name', 'Browser test DNS');
+  await page.selectOption('#dns-type', 'route53');                                                          // each provider asks only for its own keys
+  await expect(page.locator('input[data-type=route53][data-key=access_key_id]')).toBeVisible(); await expect(page.locator('input[data-type=cloudflare][data-key=token]')).toBeHidden();
+  await page.selectOption('#dns-type', 'cloudflare'); await expect(page.locator('input[data-type=cloudflare][data-key=token]')).toBeVisible(); await expect(page.locator('input[data-type=route53][data-key=access_key_id]')).toBeHidden();
   await page.fill('input[data-type=cloudflare][data-key=token]', 'cf_' + 'Ab1'.repeat(10));
   await page.click('#dns-create-form button[type=submit]');
   const acct = page.locator('#cert-area .list-item', { hasText: 'Browser test DNS' });

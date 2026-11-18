@@ -12,7 +12,7 @@ DnsProvider::$factories['fake'] = static fn (array $c) => new class($c) extends 
     public function __construct(private array $c) {}
     public function addTxt(string $name, string $value): string { return $name; }
     public function removeTxt(string $handle): void {}
-    public function verify(): string { if (($this->c['bad'] ?? '') === '1') { throw new DnsProviderException('no good'); } return 'fake ok'; }
+    public function verify(): string { if (($this->c['bad'] ?? '') === '1') { throw new DnsProviderException('no good'); } if (isset($this->c['leak'])) { throw new DnsProviderException('refused for key ' . $this->c['leak'] . ' sorry'); } return 'fake ok'; }
     public function domains(): ?array { if (($this->c['down'] ?? '') === '1') { throw new DnsProviderException('api down'); } return isset($this->c['zones']) ? explode(',', $this->c['zones']) : null; }
     public function elsewhere(): array { return isset($this->c['elsewhere']) ? ['moved.example' => $this->c['elsewhere']] : []; }
 };
@@ -205,4 +205,17 @@ test('the name check never blocks when the provider cannot list its domains or i
     $reset(); $none = Certificates::createProvider('NoList', 'fake', []); $down = Certificates::createProvider('Down', 'fake', ['zones' => 'a.example', 'down' => '1']);
     ok(Certificates::create('A', ['anything.example'], $none) > 0); ok(Certificates::create('B', ['anything.example'], $down) > 0);
     eq(Certificates::coverage(['x.example'], $down), []); eq(Certificates::coverage(['x.example'], $none), []);
+});
+
+test('a provider that echoes a secret back in an error never gets it recorded: the stored status, the returned message and the failure alert all say [hidden]', function () use ($reset, $db) {
+    $reset(); $secret = 'sekrit-' . bin2hex(random_bytes(6)); $id = Certificates::createProvider('Leaky', 'fake', ['leak' => $secret]);
+    $r = Certificates::testProvider($id); ok(!str_contains(json_encode($r), $secret) && str_contains($r['message'], 'refused for key [hidden] sorry'), json_encode($r));
+    eq(str_contains((string)$db->fetchOne('SELECT check_msg m FROM sw_dns_providers WHERE id = :i', ['i' => $id])['m'], $secret), false);
+    $leaky = new class extends DnsProvider { public function addTxt(string $n, string $v): string { throw new DnsProviderException('nope ' . $GLOBALS['__leak']); } public function removeTxt(string $h): void {} public function verify(): string { return ''; } };
+    $GLOBALS['__leak'] = $secret; DnsProvider::$factories['leaky'] = fn () => $leaky;
+    $pid = Certificates::createProvider('Leaky2', 'leaky', ['x' => $secret]); $cid = Certificates::create('Leak cert', ['a.example.com'], $pid);
+    Config::set('acme.directory', 'https://acme.example.test/dir'); fakeWeb(['https://acme.example.test/dir' => [503, [], 'down']]);
+    Certificates::issue($cid); Config::set('acme.directory', '');
+    $row = $db->fetchOne('SELECT last_error e FROM sw_certificates WHERE id = :i', ['i' => $cid]); ok(!str_contains((string)$row['e'], $secret), (string)$row['e']);
+    ok(!str_contains(json_encode($db->fetchAll('SELECT payload FROM sw_jobs')), $secret), 'no alert payload holds it');
 });

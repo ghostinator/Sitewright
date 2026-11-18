@@ -265,13 +265,17 @@
             el('strong', { text: a.name }), ' ', el('span', { class: 'badge', text: a.type_label }), ' ', a.check_ok === null ? el('span', { class: 'badge', text: 'not tested yet' }) : el('span', { class: 'badge ' + (a.check_ok ? 'badge-ok' : 'badge-bad'), text: a.check_ok ? 'works' : 'does not work' }),
             a.check_msg ? el('br') : null, a.check_msg ? el('small', { class: 'text-muted break-all', text: a.check_msg + (a.checked_at ? ' (' + a.checked_at + ' UTC)' : '') }) : null],
             [el('input', { class: 'cert-test-domain', attrs: { type: 'text', placeholder: 'domain to test, e.g. example.com', 'aria-label': 'Domain to test with ' + a.name, maxlength: '253' } }), smallButton('Test', 'dns-test', a.id), deleteButton('dns-delete', a.id)])) : [muted('No DNS account yet.')]));
-        const typeSel = el('select', { attrs: { id: 'dns-type' } }, ...Object.entries(d.provider_types || {}).map(([k, v]) => el('option', { text: v, attrs: { value: k } })));
+        const typeSel = el('select', { attrs: { id: 'dns-type' }, data: { change: 'dns-type' } }, ...Object.entries(d.provider_types || {}).map(([k, v]) => el('option', { text: v, attrs: { value: k } })));
+        const firstType = Object.keys(d.provider_types || {})[0];
         const secretFields = [];
-        for (const [type, fields] of Object.entries(d.provider_fields || {})) for (const [key, label] of Object.entries(fields))
-            secretFields.push(certField('dns-secret-' + type + '-' + key, (d.provider_types[type] || type) + ': ' + label, el('input', { attrs: { id: 'dns-secret-' + type + '-' + key, type: 'password', autocomplete: 'off', spellcheck: 'false', maxlength: '300' }, data: { type, key } })));
+        for (const [type, fields] of Object.entries(d.provider_fields || {})) for (const [key, label] of Object.entries(fields)) {
+            const g = certField('dns-secret-' + type + '-' + key, (d.provider_types[type] || type) + ': ' + label, el('input', { attrs: { id: 'dns-secret-' + type + '-' + key, type: 'password', autocomplete: 'off', spellcheck: 'false', maxlength: '300' }, data: { type, key } }));
+            g.dataset.typeGroup = type; if (type !== firstType) g.classList.add('hidden');   // only the chosen provider's fields show (see the change handler)
+            secretFields.push(g);
+        }
         nodes.push(el('button', { class: 'btn btn-secondary btn-sm', text: 'Add DNS account', attrs: { type: 'button' }, data: { action: 'toggle-form', target: 'dns-create-form' } }),
             el('form', { class: 'form hidden', attrs: { id: 'dns-create-form', autocomplete: 'off' } }, el('div', { class: 'form-row' }, certField('dns-name', 'Name', el('input', { attrs: { id: 'dns-name', required: 'required', maxlength: '100' } })), certField('dns-type', 'Provider', typeSel)),
-                muted('Fill in only the fields of the provider you chose. Secrets are stored encrypted and never shown again.'), ...secretFields, el('button', { class: 'btn btn-primary', text: 'Save DNS account', attrs: { type: 'submit' } })));
+                muted('Secrets are stored encrypted and never shown again. Give the key only the permissions needed to edit DNS records.'), ...secretFields, el('button', { class: 'btn btn-primary', text: 'Save DNS account', attrs: { type: 'submit' } })));
 
         // certificates
         nodes.push(el('h4', { text: 'Certificates' }));
@@ -296,7 +300,7 @@
         nodes.push(el('button', { class: 'btn btn-primary btn-sm', text: 'Add certificate', attrs: { type: 'button' }, data: { action: 'toggle-form', target: 'cert-create-form' } }),
             el('form', { class: 'form hidden', attrs: { id: 'cert-create-form', autocomplete: 'off' } }, accounts.length ? null : muted('Add a DNS account first.'),
                 el('div', { class: 'form-row' }, certField('cert-name', 'Name', el('input', { attrs: { id: 'cert-name', required: 'required', maxlength: '100' } })), certField('cert-dns', 'DNS account', sel)),
-                certField('cert-names', 'Domain names, one per line (a wildcard such as *.example.com is fine)', el('textarea', { attrs: { id: 'cert-names', required: 'required', rows: '3', maxlength: '2000', spellcheck: 'false' } })),
+                certField('cert-names', 'Domain names, one per line (a wildcard such as *.example.com is fine; they must be in a domain this DNS account manages)', el('textarea', { attrs: { id: 'cert-names', required: 'required', rows: '3', maxlength: '2000', spellcheck: 'false' } })),
                 el('button', { class: 'btn btn-primary', text: 'Get the certificate', attrs: { type: 'submit' } })));
         setContent(container, ...nodes);
     }
@@ -1323,6 +1327,7 @@
     window.addEventListener('beforeunload', e => { if (settingsData && Object.keys(settingsState.edits).length) { e.preventDefault(); e.returnValue = ''; } });
     document.addEventListener('input', e => {
         if (e.target.id === 'settings-search') { settingsState.q = e.target.value.trim(); if (settingsData) drawSettings(); return; }
+        if (e.target.dataset && e.target.dataset.change === 'dns-type') { for (const g of document.querySelectorAll('#dns-create-form [data-type-group]')) g.classList.toggle('hidden', g.dataset.typeGroup !== e.target.value); return; }
         if (e.target.matches && e.target.matches('[data-setting]')) settingFromControl(e.target);
     });
     document.addEventListener('change', e => {

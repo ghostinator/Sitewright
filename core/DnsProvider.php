@@ -10,7 +10,7 @@ namespace Sitewright\Core;
 abstract class DnsProvider
 {
     /** type => label */
-    public const TYPES = ['cloudflare' => 'Cloudflare', 'spaceship' => 'Spaceship'];
+    public const TYPES = ['cloudflare' => 'Cloudflare', 'spaceship' => 'Spaceship', 'route53' => 'Amazon Route 53', 'digitalocean' => 'DigitalOcean', 'porkbun' => 'Porkbun', 'desec' => 'deSEC', 'gandi' => 'Gandi', 'linode' => 'Linode (Akamai)', 'vultr' => 'Vultr'];
 
     /** Test seam: type => fn(array $config): DnsProvider. */
     public static array $factories = [];
@@ -22,6 +22,13 @@ abstract class DnsProvider
         return match ($type) {
             'cloudflare' => new DnsCloudflare($config),
             'spaceship' => new DnsSpaceship($config),
+            'route53' => new DnsRoute53($config),
+            'digitalocean' => new DnsDigitalOcean($config),
+            'porkbun' => new DnsPorkbun($config),
+            'desec' => new DnsDesec($config),
+            'gandi' => new DnsGandi($config),
+            'linode' => new DnsLinode($config),
+            'vultr' => new DnsVultr($config),
             default => throw new DnsProviderException('Unknown DNS provider type'),
         };
     }
@@ -32,6 +39,13 @@ abstract class DnsProvider
         return match ($type) {
             'cloudflare' => ['token' => 'API token (Zone: Read and DNS: Edit on the zones you need)'],
             'spaceship' => ['api_key' => 'API key', 'api_secret' => 'API secret'],
+            'route53' => ['access_key_id' => 'Access key ID', 'secret_access_key' => 'Secret access key'],
+            'digitalocean' => ['token' => 'API token (read and write)'],
+            'porkbun' => ['api_key' => 'API key', 'api_secret' => 'Secret API key'],
+            'desec' => ['token' => 'API token'],
+            'gandi' => ['token' => 'Personal access token (LiveDNS)'],
+            'linode' => ['token' => 'Personal access token (Domains read/write)'],
+            'vultr' => ['token' => 'API key'],
             default => [],
         };
     }
@@ -58,6 +72,40 @@ abstract class DnsProvider
         $h = $this->addTxt('_sitewright-test.' . $name, 'sitewright-dns-test');
         $this->removeTxt($h);
         return 'A test record was added to ' . $name . ' and removed again.';
+    }
+
+    /** One HTTPS call to a provider through the address guard. Throws a readable error when it cannot be made or the provider is rate limiting. @return array{status:int,headers:array<string,string>,body:string,json:mixed} */
+    protected function call(string $who, string $method, string $url, array $headers, ?string $body = null): array
+    {
+        try {
+            $res = SafeHttpClient::default()->request($method, $url, ['headers' => $headers, 'body' => $body ?? '', 'accept' => '*/*', 'follow' => false, 'max_bytes' => 2097152, 'timeout' => 20]);
+        } catch (FetchException $e) {
+            throw new DnsProviderException('Could not reach ' . $who . ': ' . self::message($e->getMessage()));
+        }
+        if ($res['status'] === 429) { throw new DnsProviderException($who . ' is limiting this key for now; try again in a few minutes'); }
+        return ['status' => (int)$res['status'], 'headers' => $res['headers'], 'body' => $res['body'], 'json' => json_decode($res['body'], true)];
+    }
+
+    /** The domain of the account that holds this name: the longest one that is the name or a parent of it. @param list<string> $domains */
+    protected static function zoneIn(array $domains, string $name, string $who): string
+    {
+        $best = '';
+        foreach ($domains as $d) { if (($name === $d || str_ends_with($name, '.' . $d)) && strlen($d) > strlen($best)) { $best = $d; } }
+        if ($best === '') { throw new DnsProviderException('This ' . $who . ' key cannot see a domain for ' . $name . ' (is it in this account?)'); }
+        return $best;
+    }
+
+    /** The record name inside the zone ("_acme-challenge.shop" for "_acme-challenge.shop.example.com" in "example.com"). */
+    protected static function relative(string $name, string $zone): string
+    {
+        return $name === $zone ? '' : substr($name, 0, -strlen('.' . $zone));
+    }
+
+    /** "The key works and sees N domains: a, b, …" for verify(). @param list<string> $names */
+    protected static function summary(array $names, string $thing = 'domain'): string
+    {
+        if (!$names) { return 'The key works, but it cannot see any ' . $thing . '. Check what it is allowed to use.'; }
+        return 'The key works and can see ' . count($names) . ' ' . $thing . (count($names) === 1 ? '' : 's') . ': ' . implode(', ', array_slice($names, 0, 10)) . (count($names) > 10 ? ', …' : '') . '. Use "Test a domain" to prove it can edit DNS.';
     }
 
     protected static function message(mixed $text): string

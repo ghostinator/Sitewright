@@ -47,11 +47,23 @@ final class Certificates
         return $id;
     }
 
+    /** @var array<int,list<string>> the secret values of each DNS account used in this process, so an error text can be cleaned before it is recorded */
+    private static array $known = [];
+
     public static function provider(int $id): DnsProvider
     {
         $db = Database::getInstance();
         $r = $db->fetchOne('SELECT type, config_enc FROM `' . $db->t('dns_providers') . '` WHERE id = :i', ['i' => $id]) ?? throw new DnsProviderException('The DNS account no longer exists');
-        return DnsProvider::make((string)$r['type'], (array)json_decode(Crypto::decrypt((string)$r['config_enc'], 'dns:' . $id), true));
+        $cfg = (array)json_decode(Crypto::decrypt((string)$r['config_enc'], 'dns:' . $id), true);
+        self::$known[$id] = array_values(array_filter(array_map('strval', $cfg), static fn ($v) => strlen($v) >= 6));
+        return DnsProvider::make((string)$r['type'], $cfg);
+    }
+
+    /** Take any of the account's secrets out of a message before it is stored or sent (a provider should never echo one back, but nothing relies on that). */
+    public static function scrub(string $message, int $providerId): string
+    {
+        foreach (self::$known[$providerId] ?? [] as $secret) { $message = str_replace($secret, '[hidden]', $message); }
+        return $message;
     }
 
     /** Check the credentials (and, when a domain is given, that records can be added and removed there). Records the outcome. @return array{ok:bool,message:string} */
@@ -66,6 +78,7 @@ final class Certificates
             $ok = false; $msg = $e instanceof DnsProviderException ? $e->getMessage() : 'The check failed (see the log)';
             if (!$e instanceof DnsProviderException) { Logger::warn('dns_test_failed', ['provider' => $id, 'error' => get_class($e)]); }
         }
+        $msg = self::scrub($msg, $id);
         $db->update('dns_providers', ['checked_at' => gmdate('Y-m-d H:i:s'), 'check_ok' => (int)$ok, 'check_msg' => mb_substr($msg, 0, 300)], ['id' => $id]);
         return ['ok' => $ok, 'message' => $msg];
     }
@@ -230,7 +243,7 @@ final class Certificates
     private static function failed(array $c, \Throwable $e, int $now): array
     {
         $db = Database::getInstance();
-        $msg = ($e instanceof AcmeException || $e instanceof DnsProviderException) ? $e->getMessage() : 'Unexpected error (see the log)';
+        $msg = ($e instanceof AcmeException || $e instanceof DnsProviderException) ? self::scrub($e->getMessage(), (int)$c['dns_provider_id']) : 'Unexpected error (see the log)';
         if (!($e instanceof AcmeException || $e instanceof DnsProviderException)) { Logger::warn('cert_issue_failed', ['certificate' => (int)$c['id'], 'error' => get_class($e)]); }
         $attempts = (int)$c['attempts'] + 1;
         $limited = $e instanceof AcmeException && str_contains($e->type, 'rateLimited');

@@ -83,7 +83,7 @@ test('Spaceship: the apex is "@"; failures are explained without the secret; bad
 });
 
 test('provider types and the fields asked for are fixed in code; an unknown type is refused', function () {
-    eq(array_keys(DnsProvider::TYPES), ['cloudflare', 'spaceship']); eq(array_keys(DnsProvider::fields('cloudflare')), ['token']); eq(array_keys(DnsProvider::fields('spaceship')), ['api_key', 'api_secret']); eq(DnsProvider::fields('nope'), []);
+    eq(array_keys(DnsProvider::TYPES), ['cloudflare', 'spaceship', 'route53', 'digitalocean', 'porkbun', 'desec', 'gandi', 'linode', 'vultr']); eq(array_keys(DnsProvider::fields('cloudflare')), ['token']); eq(array_keys(DnsProvider::fields('spaceship')), ['api_key', 'api_secret']); eq(DnsProvider::fields('nope'), []);
     throws(DnsProviderException::class, fn () => DnsProvider::make('nope', []));
 });
 
