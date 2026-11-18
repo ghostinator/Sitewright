@@ -104,10 +104,11 @@ final class SiteExpiry
     {
         $labels = explode('.', $host);
         if (count($labels) < 2) { return ['expires' => null, 'domain' => null, 'error' => 'Not a domain name']; }
-        $map = self::bootstrap();
-        if ($map === null) { return ['expires' => null, 'domain' => null, 'error' => 'Could not get the list of registries from IANA']; }
-        $base = $map[end($labels)] ?? null;
-        if ($base === null) { return ['expires' => null, 'domain' => null, 'error' => 'The registry for .' . end($labels) . ' does not offer a public RDAP service']; }
+        $tld = end($labels);
+        if (!preg_match('/^[a-z0-9-]{1,63}$/', $tld)) { return ['expires' => null, 'domain' => null, 'error' => 'Not a domain name']; }
+        $base = self::registryFor($tld);
+        if ($base === null) { return ['expires' => null, 'domain' => null, 'error' => 'Could not get the list of registries from IANA']; }
+        if ($base === '-') { return ['expires' => null, 'domain' => null, 'error' => 'The registry for .' . $tld . ' does not offer a public RDAP service']; }
         for ($i = 0; $i < min(4, count($labels) - 1); $i++) {
             $name = implode('.', array_slice($labels, $i));
             try {
@@ -128,29 +129,34 @@ final class SiteExpiry
         return ['expires' => null, 'domain' => null, 'error' => 'No registered domain found for ' . $host];
     }
 
-    /** @return ?array<string,string> top-level domain => RDAP base address (ending in "/"); cached for a week. */
-    private static function bootstrap(): ?array
+    /**
+     * The RDAP address of the registry for one domain ending (for example "co"): from IANA's public list, kept per ending for a week (the whole list does not
+     * fit the small key-value table and nobody needs 1,400 endings). "-" is kept for an ending the list does not have. When IANA cannot be reached an older
+     * answer is used if there is one. @return ?string base address ending in "/", "-" when the ending has none, null when unknown and IANA is down
+     */
+    private static function registryFor(string $tld): ?string
     {
         $db = Database::getInstance();
         $kv = $db->t('kv');
-        $row = $db->fetchOne("SELECT v, updated_at FROM `$kv` WHERE k = 'rdap_bootstrap'");
-        if ($row && strtotime((string)$row['updated_at'] . ' UTC') > time() - 7 * 86400) { return json_decode((string)$row['v'], true) ?: null; }
-        $map = [];
+        $key = 'rdap_' . $tld;
+        $row = $db->fetchOne("SELECT v, updated_at FROM `$kv` WHERE k = :k", ['k' => $key]);
+        if ($row && strtotime((string)$row['updated_at'] . ' UTC') > time() - 7 * 86400) { return (string)$row['v']; }
+        $found = null;
         try {
             $res = SafeHttpClient::default()->get(self::BOOTSTRAP, ['max_bytes' => 2097152, 'timeout' => 10, 'accept' => 'application/json']);
             $j = $res['status'] === 200 ? json_decode($res['body'], true) : null;
-            foreach (is_array($j) && is_array($j['services'] ?? null) ? $j['services'] : [] as $svc) {
+            if (!is_array($j) || !is_array($j['services'] ?? null)) { return $row ? (string)$row['v'] : null; }
+            $found = '-';
+            foreach ($j['services'] as $svc) {
                 $tlds = is_array($svc) && is_array($svc[0] ?? null) ? $svc[0] : []; $urls = is_array($svc) && is_array($svc[1] ?? null) ? $svc[1] : [];
-                $https = array_values(array_filter($urls, static fn ($u) => is_string($u) && str_starts_with($u, 'https://')));
-                if (!$https) { continue; }
-                foreach ($tlds as $t) { if (is_string($t) && preg_match('/^[a-z0-9-]{1,63}$/', $t)) { $map[$t] = rtrim($https[0], '/') . '/'; } }
+                $https = array_values(array_filter($urls, static fn ($u) => is_string($u) && str_starts_with($u, 'https://') && strlen($u) <= 200 && !preg_match('/[\x00-\x20\x7F]/', $u)));
+                if ($https && in_array($tld, $tlds, true)) { $found = rtrim($https[0], '/') . '/'; break; }
             }
-        } catch (FetchException) { /* use an older copy below */ }
-        if ($map) {
-            $db->query("INSERT INTO `$kv` (k, v) VALUES ('rdap_bootstrap', :v) ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = NOW()", ['v' => json_encode($map)]);
-            return $map;
+        } catch (FetchException) {
+            return $row ? (string)$row['v'] : null;   // IANA is down: an old answer is better than none
         }
-        return $row ? (json_decode((string)$row['v'], true) ?: null) : null;   // IANA is down: an old list is better than none
+        $db->query("INSERT INTO `$kv` (k, v) VALUES (:k, :v) ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = NOW()", ['k' => $key, 'v' => $found]);
+        return $found;
     }
 
     // ------------------------------------------------------------------ storing and warning

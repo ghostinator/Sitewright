@@ -41,8 +41,9 @@ final class SiteChecklist
         if (str_starts_with((string)$site['base_url'], 'https://')) {
             $add('cert', 'Certificate checked', ($c['state'] ?? '') === 'ok', $c === null ? 'Not checked yet.' : (($c['state'] === 'ok') ? 'Valid until ' . $c['expires_at'] . ' UTC.' : (string)($c['error'] ?: $c['detail'])));
         }
-        if ((bool)Config::get('sites.rdap_enabled')) {
-            $d = $exp['domain'] ?? null;
+        $d = $exp['domain'] ?? null;
+        $noRdap = $d !== null && $d['state'] === 'error' && str_contains((string)$d['error'], 'does not offer a public RDAP');   // nothing the owner can do about it, so it is not a to-do
+        if ((bool)Config::get('sites.rdap_enabled') && !$noRdap) {
             $add('domain', 'Domain expiry known', ($d['state'] ?? '') === 'ok', $d === null ? 'Not checked yet.' : (($d['state'] === 'ok') ? 'Registration runs until ' . $d['expires_at'] . ' UTC.' : (string)$d['error']));
         }
         $w = $has('SELECT 1 x FROM `' . $db->t('watch_items') . '` WHERE project_id = :s');

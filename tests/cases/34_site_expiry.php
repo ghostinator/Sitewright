@@ -11,7 +11,7 @@ Config::set('alerts', ['email_to' => [], 'teams_webhook' => 'https://example.web
 $NOW = 1_800_000_000;   // a fixed "now" so day counts are exact
 $mk = function (string $url = 'https://www.corner.test') use ($db) {
     foreach (['sites', 'site_expiry', 'jobs', 'rate_limits', 'alert_log'] as $t) { try { $db->query("TRUNCATE sw_$t"); } catch (\Throwable) {} }
-    $db->query("DELETE FROM sw_kv WHERE k = 'rdap_bootstrap'");
+    $db->query("DELETE FROM sw_kv WHERE k LIKE 'rdap\\_%'");
     return (int)$db->insert('sites', ['name' => 'Corner', 'base_url' => $url, 'secret_enc' => 'x']);
 };
 $alerts = fn () => array_map(fn ($r) => json_decode($r['payload'], true)['event'] . ':' . (json_decode($r['payload'], true)['level'] ?? ''), $db->fetchAll("SELECT payload FROM sw_jobs WHERE type = 'alert' ORDER BY id"));
@@ -63,13 +63,14 @@ test('domain: the registry is found through IANA, the host is shortened until a 
     $r = $row($id, 'domain'); eq([$r['state'], $r['expires_at'], $r['detail']], ['ok', '2027-03-01 00:00:00', 'Registered as corner.test']);
     $urls = array_column($GLOBALS['__calls'], 'url'); ok(in_array('https://rdap.reg.test/domain/www.corner.test', $urls, true) && in_array('https://rdap.reg.test/domain/corner.test', $urls, true));
     ok(!in_array('http://insecure.reg.test/domain/corner.test', $urls, true), 'only https registries are used');
-    $web($RDAP); SiteExpiry::check($id, $NOW); ok(!in_array('https://data.iana.org/rdap/dns.json', array_column($GLOBALS['__calls'], 'url'), true), 'the registry list is cached for a week');
+    $web($RDAP); SiteExpiry::check($id, $NOW); ok(!in_array('https://data.iana.org/rdap/dns.json', array_column($GLOBALS['__calls'], 'url'), true), 'the registry for the ending is cached for a week');
 });
 
-test('domain: warnings use the same steps; IANA being down falls back to the old list; every failure is recorded, not thrown', function () use ($mk, $certIn, $alerts, $row, $web, $RDAP, $NOW) {
+test('domain: warnings use the same steps; IANA being down falls back to the old list; every failure is recorded, not thrown', function () use ($mk, $certIn, $alerts, $row, $web, $RDAP, $NOW, $db) {
     Config::set('sites.rdap_enabled', true); $web($RDAP); $id = $mk(); $certIn(100);
     SiteExpiry::check($id, strtotime('2027-02-20 00:00:00 UTC'));   // 9 days before 2027-03-01
     eq($alerts(), ['domain_expiring:warning'], '9 days left: the 14-day step'); 
+    $db->query("UPDATE sw_kv SET updated_at = NOW() - INTERVAL 8 DAY WHERE k LIKE 'rdap\\_%'");   // the saved answer is a week old: IANA is asked again, and being down, the old one is used
     $web(['https://data.iana.org/rdap/dns.json' => [503, [], ''], 'https://rdap.reg.test/domain/www.corner.test' => [404, [], '{}'], 'https://rdap.reg.test/domain/corner.test' => $RDAP['https://rdap.reg.test/domain/corner.test']]);
     SiteExpiry::check($id, $NOW); eq($row($id, 'domain')['state'], 'ok');
     foreach ([[[500, [], '{}']], [[200, [], 'not json']], [[200, [], json_encode(['events' => [['eventAction' => 'expiration', 'eventDate' => 'garbage']]])]]] as [$answer]) {
@@ -78,11 +79,12 @@ test('domain: warnings use the same steps; IANA being down falls back to the old
     }
 });
 
-test('domain: turned off, no registry is contacted and nothing is kept; an unknown ending is explained', function () use ($mk, $certIn, $row, $web, $RDAP, $NOW) {
+test('domain: turned off, no registry is contacted and nothing is kept; an unknown ending is explained', function () use ($mk, $certIn, $row, $web, $RDAP, $NOW, $db) {
     $id = $mk(); $certIn(100); Config::set('sites.rdap_enabled', false); $web($RDAP); SiteExpiry::check($id, $NOW);
     eq($row($id, 'domain'), null); eq(array_values(array_filter(array_column($GLOBALS['__calls'], 'url'), fn ($u) => str_contains($u, 'rdap'))), []);
     Config::set('sites.rdap_enabled', true); $id = $mk('https://thing.unknowntld'); $web($RDAP); SiteExpiry::check($id, $NOW);
     ok(str_contains($row($id, 'domain')['error'], 'does not offer a public RDAP service'), $row($id, 'domain')['error']);
+    ok(strlen($db->fetchOne("SELECT v FROM sw_kv WHERE k = 'rdap_unknowntld'")['v']) <= 5, 'a missing ending is kept as a short marker');
 });
 
 test('scheduler: sites never checked or checked more than sites.expiry_hours ago get one job; the job is not an app outage', function () use ($mk, $certIn, $noRdap, $web, $db, $NOW) {
@@ -127,6 +129,9 @@ test('checklist: each step is done or not from what Sitewright knows, with what 
     $db->query("INSERT INTO sw_site_profile (site_id, field, found, value, state, updated_at) VALUES ($id, 'https', 'Yes', NULL, 'info', NOW()), ($id, 'robots', 'Allowed', NULL, 'info', NOW()), ($id, 'sitemap_url', 'https://corner.test/sitemap.xml', NULL, 'pending', NOW()), ($id, 'phone', '555', '555', 'used', NOW()), ($id, 'street', '1 A St', '1 A St', 'used', NOW()), ($id, 'city', 'X', NULL, 'manual', NOW())");
     $x = $c(); eq([$x['read']['done'], $x['https']['done'], $x['robots']['done'], $x['sitemap']['done'], $x['plugin']['done'], $x['business']['done']], [true, true, true, true, true, false], 'a typed value with no text does not count');
     eq($x['review']['done'], false); ok(str_contains($x['review']['detail'], '1 item waiting'), $x['review']['detail']);
+    ok(isset($c()['domain']), 'RDAP on: a domain step');
+    $db->query("INSERT INTO sw_site_expiry (site_id, kind, state, error, checked_at) VALUES ($id, 'domain', 'error', 'The registry for .co does not offer a public RDAP service', NOW())");
+    ok(!isset($c()['domain']), 'a registry without RDAP is not something to do');
     $noRdap(); ok(!isset($c()['domain']), 'RDAP off: no domain step');
     $db->query("UPDATE sw_sites SET base_url = 'http://corner.test'"); ok(!isset($c()['cert']), 'plain http: no certificate step');
 });
