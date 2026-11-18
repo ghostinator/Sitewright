@@ -56,6 +56,13 @@ abstract class DnsProvider
     /** Domains this account knows but whose DNS is hosted somewhere else, name => where. Filled by domains(). @return array<string,string> */
     public function elsewhere(): array { return []; }
 
+    /**
+     * When the registrar of this account says a domain registration runs out, for providers that are also registrars (null when this account does not
+     * register the name or the provider cannot say). Used when the public registry lookup has no answer (for example .co).
+     * @return ?array{expires:int,domain:string,registrar:string}
+     */
+    public function registration(string $host): ?array { return null; }
+
     /** Add a TXT record. @return string a handle to remove it again */
     abstract public function addTxt(string $name, string $value): string;
 

@@ -87,6 +87,20 @@ final class DnsSpaceship extends DnsProvider
 
     public function elsewhere(): array { return $this->elsewhere; }
 
+    /** The registration date of the domain (or its parent) from the account. Needs the domains:read scope. */
+    public function registration(string $host): ?array
+    {
+        $labels = explode('.', $host);
+        for ($i = 0; $i < min(3, count($labels) - 1); $i++) {
+            $cand = implode('.', array_slice($labels, $i));
+            $r = $this->api('GET', '/domains/' . rawurlencode($cand), null, true);
+            if ($r['status'] === 404) { continue; }
+            $t = is_array($r['json']) && is_string($r['json']['expirationDate'] ?? null) ? strtotime($r['json']['expirationDate']) : false;
+            return $t !== false && $t > 946684800 ? ['expires' => $t, 'domain' => $cand, 'registrar' => 'Spaceship'] : null;
+        }
+        return null;
+    }
+
     public function verify(): string
     {
         $own = $this->domains() ?? [];

@@ -93,7 +93,22 @@ final class SiteExpiry
     private static function checkDomain(array $site, string $host, int $now): string
     {
         $r = self::rdapExpiry($host);
+        if ($r['error'] !== null) {   // the public registry could not say (no RDAP for .co, for example): ask a registrar the owner connected
+            $reg = self::registrarExpiry($host);
+            if ($reg !== null) { return self::record((int)$site['id'], 'domain', 'ok', $reg['expires'], 'Registered as ' . $reg['domain'] . ' at ' . $reg['registrar'] . ' (from your ' . $reg['registrar'] . ' account)', null, $now, $site, $host); }
+        }
         return self::record((int)$site['id'], 'domain', $r['error'] === null ? 'ok' : 'error', $r['expires'], $r['domain'] !== null ? 'Registered as ' . $r['domain'] : null, $r['error'], $now, $site, $host);
+    }
+
+    /** The first connected DNS/registrar account that registers this domain. Never throws. @return ?array{expires:int,domain:string,registrar:string} */
+    public static function registrarExpiry(string $host): ?array
+    {
+        $db = Database::getInstance();
+        foreach ($db->fetchAll('SELECT id FROM `' . $db->t('dns_providers') . '` ORDER BY id') as $row) {
+            try { $r = Certificates::provider((int)$row['id'])->registration($host); } catch (\Throwable) { continue; }
+            if ($r !== null) { return $r; }
+        }
+        return null;
     }
 
     /**

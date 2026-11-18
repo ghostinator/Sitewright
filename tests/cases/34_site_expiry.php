@@ -135,3 +135,20 @@ test('checklist: each step is done or not from what Sitewright knows, with what 
     $noRdap(); ok(!isset($c()['domain']), 'RDAP off: no domain step');
     $db->query("UPDATE sw_sites SET base_url = 'http://corner.test'"); ok(!isset($c()['cert']), 'plain http: no certificate step');
 });
+
+test('domain expiry: when the public registry has no answer (.co), a registrar the owner connected is asked; its date is used, and a failing or silent one changes nothing', function () use ($mk, $certIn, $row, $web, $db, $NOW) {
+    Config::set('app_key', Sitewright\Core\Crypto::generateKey()); Config::set('sites.rdap_enabled', true);
+    foreach (['dns_providers'] as $t) { $db->query("TRUNCATE sw_$t"); }
+    Sitewright\Core\DnsProvider::$factories['reg'] = static fn (array $c) => new class($c) extends Sitewright\Core\DnsProvider {
+        public function __construct(private array $c) {}
+        public function addTxt(string $n, string $v): string { return $n; } public function removeTxt(string $h): void {} public function verify(): string { return ''; }
+        public function registration(string $host): ?array { if (($this->c['boom'] ?? '') === '1') { throw new \RuntimeException('down'); } return str_ends_with($host, 'registered.co') ? ['expires' => 1_810_000_000, 'domain' => 'registered.co', 'registrar' => 'TestReg'] : null; }
+    };
+    $web(['https://data.iana.org/rdap/dns.json' => [200, ['Content-Type' => 'application/json'], json_encode(['services' => [[['com'], ['https://rdap.reg.test/']]]])]]);
+    $id = $mk('https://www.registered.co'); $certIn(100);
+    SiteExpiry::check($id, $NOW); $r = $row($id, 'domain'); eq([$r['state'], $r['error']], ['error', 'The registry for .co does not offer a public RDAP service'], 'no registrar connected: unchanged');
+    Sitewright\Core\Certificates::createProvider('Boom', 'reg', ['boom' => '1']); Sitewright\Core\Certificates::createProvider('Reg', 'reg', ['x' => 'y']);
+    $web(['https://data.iana.org/rdap/dns.json' => [200, ['Content-Type' => 'application/json'], json_encode(['services' => [[['com'], ['https://rdap.reg.test/']]]])]]); SiteExpiry::check($id, $NOW);
+    $r = $row($id, 'domain'); eq([$r['state'], $r['expires_at'], $r['error']], ['ok', gmdate('Y-m-d H:i:s', 1_810_000_000), null]); ok(str_contains($r['detail'], 'Registered as registered.co at TestReg'), $r['detail']);
+    $id2 = $mk('https://www.unknown.co'); SiteExpiry::check($id2, $NOW); eq($row($id2, 'domain')['state'], 'error', 'a registrar that does not know the domain changes nothing');
+});

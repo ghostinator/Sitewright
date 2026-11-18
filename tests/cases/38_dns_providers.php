@@ -102,3 +102,11 @@ test('Spaceship: only domains whose name servers are Spaceship\'s own are offere
     eq($p->domains(), ['also-mine.example', 'mine.example']); eq($p->elsewhere(), ['cf.example' => 'kobe.ns.cloudflare.com, monika.ns.cloudflare.com']);
     $m = $p->verify(); ok(str_contains($m, '2 domains use Spaceship DNS') && str_contains($m, '1 more use name servers elsewhere'), $m);
 });
+
+test('Spaceship: the registration date of a domain (or its parent) comes from the account; an unknown domain is simply not there', function () use ($J, $SS, $KEY, $SEC) {
+    fakeWeb(["$SS/domains/www.shop.example.co" => [404, [], '{}'], "$SS/domains/shop.example.co" => $J(['name' => 'shop.example.co', 'expirationDate' => '2027-05-18T18:16:52Z']), "$SS/domains/nothing.test" => [404, [], '{}']]);
+    $p = new DnsSpaceship(['api_key' => $KEY, 'api_secret' => $SEC]);
+    eq($p->registration('www.shop.example.co'), ['expires' => strtotime('2027-05-18T18:16:52Z'), 'domain' => 'shop.example.co', 'registrar' => 'Spaceship']);
+    eq($p->registration('nothing.test'), null); fakeWeb(["$SS/domains/odd.test" => $J(['expirationDate' => 'garbage'])]); eq($p->registration('odd.test'), null, 'an unreadable date is no date');
+    eq((new DnsCloudflare(['token' => 'cf_' . str_repeat('A1b2', 8)]))->registration('shop.example.co'), null, 'a provider that is not a registrar says nothing');
+});
