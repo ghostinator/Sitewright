@@ -61,10 +61,21 @@ final class DnsCloudflare extends DnsProvider
         $this->api('DELETE', '/zones/' . $m[1] . '/dns_records/' . $m[2]);
     }
 
+    public function domains(): ?array
+    {
+        $names = [];
+        for ($page = 1; $page <= 20; $page++) {
+            $r = $this->api('GET', '/zones?status=active&per_page=50&page=' . $page);
+            foreach ((array)$r['result'] as $z) { if (is_array($z) && is_string($z['name'] ?? null) && ($n = Acme::cleanName($z['name'])) !== null) { $names[] = $n; } }
+            if ($page >= (int)($r['result_info']['total_pages'] ?? 1)) { break; }
+        }
+        sort($names);
+        return $names;
+    }
+
     public function verify(): string
     {
-        $r = $this->api('GET', '/zones?status=active&per_page=50');
-        $names = array_values(array_filter(array_map(static fn ($z) => is_array($z) && is_string($z['name'] ?? null) ? self::message($z['name']) : '', (array)$r['result'])));
+        $names = $this->domains() ?? [];
         if (!$names) { return 'The token works, but it cannot see any zone. Give it Zone: Read and DNS: Edit on the zones you need.'; }
         return 'The token works and can see ' . count($names) . ' zone' . (count($names) === 1 ? '' : 's') . ': ' . implode(', ', array_slice($names, 0, 10)) . (count($names) > 10 ? ', …' : '') . '. Use "Test a domain" to prove it can edit DNS.';
     }

@@ -13,6 +13,8 @@ DnsProvider::$factories['fake'] = static fn (array $c) => new class($c) extends 
     public function addTxt(string $name, string $value): string { return $name; }
     public function removeTxt(string $handle): void {}
     public function verify(): string { if (($this->c['bad'] ?? '') === '1') { throw new DnsProviderException('no good'); } return 'fake ok'; }
+    public function domains(): ?array { if (($this->c['down'] ?? '') === '1') { throw new DnsProviderException('api down'); } return isset($this->c['zones']) ? explode(',', $this->c['zones']) : null; }
+    public function elsewhere(): array { return isset($this->c['elsewhere']) ? ['moved.example' => $this->c['elsewhere']] : []; }
 };
 $reset = function () use ($db) { foreach (['dns_providers', 'acme_accounts', 'certificates', 'cert_targets', 'jobs', 'alert_log', 'rate_limits'] as $t) { $db->query("TRUNCATE sw_$t"); } };
 /** A certificate row with a self-signed certificate (or a mismatching key) standing in for one from Let's Encrypt. */
@@ -186,4 +188,21 @@ test('pull script: refuses a key that does not match, a certificate that is abou
     foreach ([['DEST' => 'relative/path'] + $good, ['TOKEN' => 'not-a-token'] + $good, ['URL' => 'ftp://x/y'] + $good, ['DEST' => ''] + $good] as $c) { eq($runScript($c, $d)['code'], 2, json_encode($c)); }
     $r = $runScript($good, $d); eq($r['code'], 0, $r['out']);
     exec('rm -rf ' . escapeshellarg($d));
+});
+
+test('names are checked against the domains of the DNS account: a mistyped domain is caught with a suggestion, a subdomain that does not exist yet is fine, a wildcard follows its parent', function () use ($reset, $db) {
+    $reset(); $p = Certificates::createProvider('Zones', 'fake', ['zones' => 'downwiththeman.org,example.com', 'elsewhere' => 'kobe.ns.cloudflare.com']);
+    $e = throws(ResponseException::class, fn () => Certificates::create('Typo', ['test.downwiththemain.org'], $p));
+    $msg = $e->body; ok(str_contains($msg, 'test.downwiththemain.org is not in any domain') && str_contains($msg, 'Did you mean downwiththeman.org?'), $msg);
+    foreach (['test.downwiththeman.org', 'brand-new.sub.example.com', 'example.com', '*.example.com', '*.new.example.com'] as $i => $ok) { Certificates::create('Fine ' . $i, [$ok], $p); }
+    eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_certificates')['n'], 5, 'a name that does not exist yet is allowed: DNS validation does not need it to');
+    $e = throws(ResponseException::class, fn () => Certificates::create('Moved', ['www.moved.example'], $p)); ok(str_contains($e->body, 'DNS is hosted elsewhere (kobe.ns.cloudflare.com)'), $e->body);
+    $e = throws(ResponseException::class, fn () => Certificates::create('Far', ['nothing.like.this.test'], $p)); $m = $e->body; ok(str_contains($m, 'not in any domain') && !str_contains($m, 'Did you mean'), 'no suggestion when nothing is close: ' . $m);
+    $e = throws(ResponseException::class, fn () => Certificates::create('Two', ['example.com', 'typo.exmple.com'], $p)); ok(str_contains($e->body, 'typo.exmple.com') && !str_contains($e->body, '"example.com is'), 'only the bad name is reported');
+});
+
+test('the name check never blocks when the provider cannot list its domains or its API is down (the issue job reports problems instead)', function () use ($reset) {
+    $reset(); $none = Certificates::createProvider('NoList', 'fake', []); $down = Certificates::createProvider('Down', 'fake', ['zones' => 'a.example', 'down' => '1']);
+    ok(Certificates::create('A', ['anything.example'], $none) > 0); ok(Certificates::create('B', ['anything.example'], $down) > 0);
+    eq(Certificates::coverage(['x.example'], $down), []); eq(Certificates::coverage(['x.example'], $none), []);
 });

@@ -36,6 +36,12 @@ abstract class DnsProvider
         };
     }
 
+    /** The domain names this account can really change DNS for (null when the provider cannot say). Used to catch a mistyped name before anything is requested. @return ?list<string> */
+    public function domains(): ?array { return null; }
+
+    /** Domains this account knows but whose DNS is hosted somewhere else, name => where. Filled by domains(). @return array<string,string> */
+    public function elsewhere(): array { return []; }
+
     /** Add a TXT record. @return string a handle to remove it again */
     abstract public function addTxt(string $name, string $value): string;
 

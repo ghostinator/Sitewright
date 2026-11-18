@@ -87,7 +87,43 @@ final class Certificates
         if (!$clean || count($clean) > 20) { Validator::fail('names', 'give between 1 and 20 domain names'); }
         if (!$db->fetchOne('SELECT 1 x FROM `' . $db->t('dns_providers') . '` WHERE id = :i', ['i' => $providerId])) { Validator::fail('dns_provider_id', 'choose a DNS account'); }
         if ($db->fetchOne('SELECT 1 x FROM `' . $db->t('certificates') . '` WHERE name = :n', ['n' => $name])) { Validator::fail('name', 'there is already a certificate with this name'); }
+        $problems = self::coverage($clean, $providerId);
+        if ($problems) { Validator::fail('names', implode(' ', $problems)); }
         return (int)$db->insert('certificates', ['name' => $name, 'names' => json_encode($clean), 'dns_provider_id' => $providerId, 'site_id' => $siteId]);
+    }
+
+    /**
+     * Names that this DNS account cannot prove (no domain of the account is the name or a parent of it), each with a hint when another spelling is close or
+     * the domain's DNS is hosted elsewhere. Empty when everything is covered or the provider cannot list its domains (then the issue job reports it).
+     * @param list<string> $names @return list<string>
+     */
+    public static function coverage(array $names, int $providerId): array
+    {
+        try {
+            $p = self::provider($providerId);
+            $domains = $p->domains();
+        } catch (\Throwable) {
+            return [];
+        }
+        if ($domains === null) { return []; }
+        $elsewhere = $p->elsewhere(); $out = [];
+        foreach ($names as $n) {
+            $base = str_starts_with($n, '*.') ? substr($n, 2) : $n;
+            foreach ([...$domains] as $d) { if ($base === $d || str_ends_with($base, '.' . $d)) { continue 2; } }
+            $hint = '';
+            foreach ($elsewhere as $d => $where) { if ($base === $d || str_ends_with($base, '.' . $d)) { $hint = ' Its DNS is hosted elsewhere (' . $where . '), so use the DNS account for that provider.'; break; } }
+            if ($hint === '') {
+                $best = null; $bestD = 4;
+                foreach ($domains as $d) {
+                    $labels = count(explode('.', $d)); $suffix = implode('.', array_slice(explode('.', $base), -$labels));
+                    $dist = levenshtein($suffix, $d);
+                    if ($dist < $bestD) { $bestD = $dist; $best = $d; }
+                }
+                $hint = $best !== null ? ' Did you mean ' . $best . '?' : '';
+            }
+            $out[] = $n . ' is not in any domain this DNS account can change.' . $hint;
+        }
+        return $out;
     }
 
     public static function delete(int $id): void

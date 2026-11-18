@@ -63,11 +63,37 @@ final class DnsSpaceship extends DnsProvider
         $this->api('DELETE', '/dns/records/' . rawurlencode($m[1]), [['type' => 'TXT', 'name' => $m[2], 'value' => $m[3]]]);
     }
 
+    /** @var array<string,string> */
+    private array $elsewhere = [];
+
+    /** Only domains whose name servers are Spaceship's own: a record added for any other domain would be accepted but never seen by the certificate service. */
+    public function domains(): ?array
+    {
+        $own = []; $this->elsewhere = [];
+        for ($skip = 0; $skip < 1000; $skip += 100) {
+            $r = $this->api('GET', '/domains?take=100&skip=' . $skip);
+            $items = (array)($r['json']['items'] ?? []);
+            foreach ($items as $d) {
+                $n = is_array($d) && is_string($d['name'] ?? null) ? Acme::cleanName($d['name']) : null;
+                if ($n === null) { continue; }
+                if (($d['nameservers']['provider'] ?? '') === 'custom') { $this->elsewhere[$n] = self::message(implode(', ', array_filter((array)($d['nameservers']['hosts'] ?? []), 'is_string'))); }
+                else { $own[] = $n; }
+            }
+            if (count($items) < 100 || $skip + 100 >= (int)($r['json']['total'] ?? 0)) { break; }
+        }
+        sort($own);
+        return $own;
+    }
+
+    public function elsewhere(): array { return $this->elsewhere; }
+
     public function verify(): string
     {
-        $r = $this->api('GET', '/domains?take=100&skip=0');
-        $names = array_values(array_filter(array_map(static fn ($d) => is_array($d) && is_string($d['name'] ?? null) ? self::message($d['name']) : '', (array)($r['json']['items'] ?? []))));
-        if (!$names) { return 'The keys work, but this account has no domains.'; }
-        return 'The keys work and the account has ' . count($names) . ' domain' . (count($names) === 1 ? '' : 's') . ': ' . implode(', ', array_slice($names, 0, 10)) . (count($names) > 10 ? ', …' : '') . '. Use "Test a domain" to prove it can edit DNS.';
+        $own = $this->domains() ?? [];
+        $other = count($this->elsewhere);
+        if (!$own && !$other) { return 'The keys work, but this account has no domains.'; }
+        $msg = 'The keys work. ' . count($own) . ' domain' . (count($own) === 1 ? '' : 's') . ' use Spaceship DNS' . ($own ? ': ' . implode(', ', array_slice($own, 0, 10)) . (count($own) > 10 ? ', …' : '') : '') . '.';
+        if ($other) { $msg .= ' ' . $other . ' more use name servers elsewhere (for example Cloudflare), so certificates for them need the DNS provider that hosts them.'; }
+        return $msg . ' Use "Test a domain" to prove it can edit DNS.';
     }
 }
