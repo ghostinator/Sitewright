@@ -170,6 +170,7 @@
             [smallButton('Setup guide', 'site-profile', s.id, 'btn-primary')].concat(Number(s.sync_enabled) === 0 ? [] : [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id)]).concat([deleteButton('delete-site', s.id)]))));
     }
 
+    const CHECK_ACTION = { 'profile-refresh': 'Read the site', 'profile-watch': 'Watch the home page', 'profile-audit': 'Run a first audit' };
     const REMOTE_STATE = { ok: ['Approved', ''], not_allowed: ['Not approved', 'The site owner has not ticked this in WordPress (Settings, Sitewright).'], unsupported: ['Plugin too old', 'Update the Sitewright plugin on the site to version 1.1 or newer to choose what to share.'], error: ['Problem', ''], unknown: ['Not checked yet', 'Sitewright has not synced this site since the plugin was updated.'] };
     const PROFILE_STATE = { pending: 'Not decided yet', used: 'Using what the site says', manual: 'Your own text', skipped: 'Skipped', empty: 'Nothing found' };
     const PROFILE_GROUPS = [['site', 'About the site'], ['business', 'Business details'], ['check', 'Checks']];
@@ -180,6 +181,15 @@
         nodes.push(el('p', { class: 'text-muted', text: site.profile_at ? 'Read from ' + site.base_url + ' on ' + site.profile_at + ' (UTC).' : 'Reading ' + site.base_url + ' now. This takes a few seconds.' }));
         nodes.push(el('p', { class: 'text-muted', text: 'Choose what Sitewright should use. "Use this" keeps the item in step with the site. "Type my own" is yours and is never overwritten. "Skip" leaves it out. Only items you use or type are filled in elsewhere in Sitewright.' }));
         if (site.profile_error) nodes.push(el('div', { class: 'alert alert-warn', text: site.profile_error }));
+        const cl = d.checklist;
+        if (cl && cl.items && cl.items.length) {
+            const crows = cl.items.map(i => el('tr', {}, el('th', { text: i.label, attrs: { scope: 'row' } }),
+                el('td', {}, el('span', { class: 'badge' + (i.done ? ' badge-ok' : ''), text: i.done ? 'Done' : 'To do' })),
+                el('td', { class: 'break-all', text: i.detail }),
+                el('td', { class: 'profile-actions' }, ...(i.action ? [profileButton(CHECK_ACTION[i.action] || 'Do it', i.action, site.id, '', 'btn-primary')] : []))));
+            const chead = el('thead', {}, el('tr', {}, ...['Step', 'Status', 'Details', ''].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+            nodes.push(el('h5', { text: 'Setup checklist: ' + cl.done + ' of ' + cl.total + ' done' }), el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, chead, el('tbody', {}, ...crows))));
+        }
         for (const [group, title] of PROFILE_GROUPS) {
             const fields = d.fields.filter(f => f.group === group);
             if (!fields.length) continue;
@@ -208,6 +218,20 @@
             nodes.push(el('h5', { text: title }), el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, el('tbody', {}, ...rows))));
         }
         nodes.push(el('p', {}, profileButton('Read the site again', 'profile-refresh', site.id, '')));
+        if ((d.expiry || []).length) {
+            const erows = d.expiry.map(e => {
+                const dl = e.days_left;
+                const cls = e.state === 'ok' ? (dl !== null && dl <= 7 ? ' badge-bad' : dl !== null && dl <= 30 ? '' : ' badge-ok') : e.state === 'unknown' ? '' : ' badge-bad';
+                const when = e.expires_at ? e.expires_at + ' UTC' + (dl === null ? '' : dl < 0 ? ' (expired ' + (-dl) + ' days ago)' : ' (' + dl + ' days left)') : '';
+                const word = e.state === 'ok' ? 'Valid' : e.state === 'problem' ? 'Problem' : e.state === 'error' ? 'Could not check' : 'Not checked yet';
+                return el('tr', {}, el('th', { text: e.label, attrs: { scope: 'row' } }), el('td', {}, el('span', { class: 'badge' + cls, text: word })), el('td', { class: 'break-all', text: when }),
+                    el('td', { class: 'break-all', text: e.error || e.detail || '' }));
+            });
+            const ehead = el('thead', {}, el('tr', {}, ...['Item', 'Status', 'Runs out', 'Details'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+            nodes.push(el('h5', { text: 'Certificate and domain' }),
+                el('p', { class: 'text-muted', text: 'You are warned 30, 14, 7, 3 and 1 days before each runs out, and when it has. A site behind a CDN such as Cloudflare shows the CDN\'s certificate, which renews itself; the certificate on your own server is not seen.' }),
+                el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, ehead, el('tbody', {}, ...erows))));
+        }
         if ((d.remote || []).length) {
             const rrows = d.remote.map(r => {
                 const st = REMOTE_STATE[r.state] || REMOTE_STATE.unknown;

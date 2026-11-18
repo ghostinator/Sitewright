@@ -50,8 +50,10 @@ final class SiteRemote
                 if (!$force && $had === 'ok' && (string)$rows[$kind]['fetched_at'] >= $cutoff) { continue; }
                 if (microtime(true) > self::$deadline) { continue; }   // out of time: this kind waits for the next sync
                 try {
+                    $before = $kind === 'versions' ? (array)json_decode((string)($db->fetchOne('SELECT data FROM `' . $db->t('site_remote') . "` WHERE site_id = :s AND kind = 'versions' AND state = 'ok'", ['s' => $id])['data'] ?? ''), true) : [];
                     [$items, $data] = self::fetch($site, $secret, $kind, $route);
                     self::save($id, $kind, 'ok', $data, $items, null);
+                    if ($kind === 'versions') { self::warnVersions($site, $before, (array)$data); }
                     $profileChanged = $profileChanged || in_array($kind, ['site', 'store'], true);
                 } catch (JobFailedException $e) {
                     $denied = $e->httpStatus === 403 && stripos($e->getMessage(), 'not approved') !== false;
@@ -199,7 +201,42 @@ final class SiteRemote
             'wordpress' => SiteProfile::clean($r['wordpress'] ?? null, 20), 'php' => SiteProfile::clean($r['php'] ?? null, 20),
             'core_update' => ($r['core_update'] ?? false) === true, 'plugin_updates' => $n($r['plugin_updates'] ?? 0), 'theme_updates' => $n($r['theme_updates'] ?? 0),
             'active_plugins' => $n($r['active_plugins'] ?? 0), 'checked_at' => $checked > 946684800 && $checked <= time() + 86400 ? gmdate('Y-m-d H:i:s', $checked) : null,
-        ]];
+        ] + self::phpSupport((string)($r['php'] ?? ''))];
+    }
+
+    /** Last day each PHP branch gets security fixes (php.net/supported-versions). Update this list when a new branch appears. */
+    public const PHP_SECURITY_UNTIL = ['8.0' => '2023-11-26', '8.1' => '2025-12-31', '8.2' => '2026-12-31', '8.3' => '2027-12-31', '8.4' => '2028-12-31', '8.5' => '2029-12-31'];
+
+    /** @return array{php_support:?string,php_until:?string} "ended", "soon" (within 90 days) or null when fine or unknown */
+    public static function phpSupport(string $php, ?int $now = null): array
+    {
+        $now ??= time();
+        if (!preg_match('/^(\d+)\.(\d+)/', $php, $m)) { return ['php_support' => null, 'php_until' => null]; }
+        $branch = $m[1] . '.' . $m[2];
+        if ((int)$m[1] < 8) { return ['php_support' => 'ended', 'php_until' => null]; }
+        $until = self::PHP_SECURITY_UNTIL[$branch] ?? null;
+        if ($until === null) { return ['php_support' => null, 'php_until' => null]; }
+        $end = strtotime($until . ' 23:59:59 UTC');
+        return ['php_support' => $end < $now ? 'ended' : ($end - $now < 90 * 86400 ? 'soon' : null), 'php_until' => $until];
+    }
+
+    /** Alert when something new needs attention: an update appears (or more of them), or PHP loses security support. Never for what was already known. */
+    private static function warnVersions(array $site, array $before, array $now): void
+    {
+        $id = (int)$site['id']; $name = (string)$site['name'];
+        $parts = [];
+        if (!empty($now['core_update']) && empty($before['core_update'])) { $parts[] = 'a WordPress update'; }
+        foreach (['plugin_updates' => 'plugin', 'theme_updates' => 'theme'] as $k => $word) {
+            if ((int)($now[$k] ?? 0) > (int)($before[$k] ?? 0)) { $parts[] = (int)$now[$k] . ' ' . $word . ' update' . ((int)$now[$k] === 1 ? '' : 's'); }
+        }
+        if ($parts) { Alerts::notify('updates_waiting', $name . ' has ' . implode(', ', $parts) . ' waiting. Updates fix security problems; install them in WordPress (Dashboard, Updates).', 'warning', 'upd' . $id, $id); }
+        $rank = ['ended' => 2, 'soon' => 1];
+        $new = $now['php_support'] ?? null;
+        if ($new !== null && ($rank[$new] ?? 0) > ($rank[$before['php_support'] ?? ''] ?? 0)) {
+            $msg = $new === 'ended' ? $name . ' runs PHP ' . ($now['php'] ?? '?') . ', which no longer gets security fixes' . (!empty($now['php_until']) ? ' (ended ' . $now['php_until'] . ')' : '') . '. Ask your host to move the site to a newer PHP version.'
+                : $name . ' runs PHP ' . ($now['php'] ?? '?') . ', which stops getting security fixes on ' . $now['php_until'] . '. Plan the move to a newer PHP version.';
+            Alerts::notify('php_outdated', $msg, $new === 'ended' ? 'error' : 'warning', 'php' . $id, $id);
+        }
     }
 
     /** One optional request. Refuses to start once the time budget is spent, so a slow site cannot hold the job (earlier data is kept). */

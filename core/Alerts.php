@@ -23,8 +23,8 @@ final class Alerts
     }
 
     /** Every event an alert can be about (Settings offers exactly these). */
-    public const EVENTS = ['account_changed', 'account_deleted', 'audit_new_issues', 'gsc_sync_failed', 'health_down', 'health_recovered', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset',
-        'server_error', 'setting_changed', 'site_sync_failed', 'user_created', 'watch_down', 'watch_recovered', 'watch_regression'];
+    public const EVENTS = ['account_changed', 'account_deleted', 'audit_new_issues', 'cert_expiring', 'cert_problem', 'domain_expiring', 'gsc_sync_failed', 'health_down', 'health_recovered', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'php_outdated',
+        'server_error', 'setting_changed', 'site_sync_failed', 'updates_waiting', 'user_created', 'watch_down', 'watch_recovered', 'watch_regression', 'weekly_summary'];
 
     /**
      * Raise an alert through the policy (enabled? muted? cooldown, quiet hours, hourly cap, batch or digest?) and record the decision in the

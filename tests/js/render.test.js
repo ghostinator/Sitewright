@@ -646,6 +646,35 @@ test('setup guide: whatever the plugin sent (summary, error) is shown as text, n
     assertInert(box, p, 'remote'); assert.ok(box.textContent.includes(p));
   }
 });
+test('setup guide: the checklist counts what is done and offers a button only where Sitewright can do the step', () => {
+  const { SW, box } = load();
+  const checklist = { done: 1, total: 3, items: [
+    { key: 'read', label: 'Site details read', done: true, detail: 'Read on 2026-11-17.', action: null },
+    { key: 'watch', label: 'The home page is watched', done: false, detail: 'Not watched yet.', action: 'profile-watch' },
+    { key: 'gsc', label: 'Search Console is connected', done: false, detail: 'Not connected (Search Console page).', action: null }] };
+  SW.renderSiteProfile(box, profileData({ checklist }));
+  assert.match(box.textContent, /Setup checklist: 1 of 3 done/);
+  const rows = [...box.querySelectorAll('h5')].find(h => /Setup checklist/.test(h.textContent)).nextElementSibling.querySelectorAll('tbody tr');
+  assert.deepEqual([...rows].map(r => r.querySelector('.badge').textContent), ['Done', 'To do', 'To do']);
+  assert.deepEqual([...rows].map(r => [...r.querySelectorAll('[data-action]')].map(b => b.dataset.action)), [[], ['profile-watch'], []]);
+  assert.equal(rows[1].querySelector('[data-action]').dataset.id, '3');
+  box.replaceChildren(); SW.renderSiteProfile(box, profileData()); assert.doesNotMatch(box.textContent, /Setup checklist/);
+});
+test('setup guide: certificate and domain show the date, the days left and a clear state; text from a certificate is never markup', () => {
+  const { SW, box } = load();
+  const expiry = [
+    { kind: 'cert', label: 'Certificate (HTTPS)', state: 'ok', expires_at: '2027-01-01 00:00:00', days_left: 5, detail: 'Issued by Let\'s Encrypt', error: null, checked_at: 'x' },
+    { kind: 'domain', label: 'Domain registration', state: 'error', expires_at: '2027-03-01 00:00:00', days_left: -2, detail: null, error: 'The registry answered HTTP 500', checked_at: 'x' }];
+  SW.renderSiteProfile(box, profileData({ expiry }));
+  const t = [...box.querySelectorAll('h5')].find(h => h.textContent === 'Certificate and domain').nextElementSibling.nextElementSibling;
+  const rows = [...t.querySelectorAll('tbody tr')];
+  assert.match(rows[0].textContent, /Valid.*2027-01-01 00:00:00 UTC \(5 days left\)/); assert.ok(rows[0].querySelector('.badge-bad'), 'five days left is flagged');
+  assert.match(rows[1].textContent, /Could not check.*expired 2 days ago.*HTTP 500/);
+  for (const p of PAYLOADS) {
+    box.replaceChildren(); SW.renderSiteProfile(box, profileData({ expiry: [{ ...expiry[0], detail: p, error: null }], checklist: { done: 0, total: 1, items: [{ key: 'x', label: p, done: false, detail: p, action: null }] } }));
+    for (const i of [...box.querySelectorAll('input')]) i.remove(); assertInert(box, p, 'expiry'); assert.ok(box.textContent.includes(p));
+  }
+});
 test('Search Console: the property that matches the site is preselected (domain property first)', () => {
   const { SW, box } = load();
   const state = { configured: true, redirect_uri: 'x', connections: [{ id: 9, property_url: null, site_id: 5, last_status: 'ok', last_sync_at: null, rows_synced: 0, last_error: null }] };

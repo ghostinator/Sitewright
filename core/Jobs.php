@@ -132,7 +132,7 @@ final class Jobs
         $db = Database::getInstance();
         $db->query("UPDATE `{$db->t('jobs')}` SET status = 'failed', finished_at = NOW(), error = :e, error_status = :s WHERE id = :id", ['e' => mb_substr($message, 0, 500), 's' => $status, 'id' => $id]);
         Logger::warn('job_failed', ['job' => $id, 'type' => $job['type'], 'status' => $status, 'reason' => $message]);
-        if (!in_array($job['type'], ['mail', 'alert', 'site_sync', 'gsc_sync', 'site_profile'], true)) {   // a failing alert must not raise another alert; syncs raise their own, more specific one; a site that cannot be read is no outage
+        if (!in_array($job['type'], ['mail', 'alert', 'site_sync', 'gsc_sync', 'site_profile', 'site_expiry'], true)) {   // a failing alert must not raise another alert; syncs raise their own, more specific one; a site that cannot be read is no outage
             Alerts::notify('job_failed', "Job #$id ({$job['type']}) failed: $message", 'warning');
         }
     }
@@ -148,6 +148,7 @@ final class Jobs
         if ($type === 'alert') { return Alerts::handleJob($payload); }
         if ($type === 'site_sync') { return SiteSync::handleJob($payload); }
         if ($type === 'site_profile') { return SiteProfile::handleJob($payload); }
+        if ($type === 'site_expiry') { return SiteExpiry::handleJob($payload); }
         if ($type === 'gsc_sync') { return Gsc::handleJob($payload); }
         if ($type === 'watch_run') { return Watchlist::handleJob($payload); }
         if ($type === 'site_audit') { return SiteAudit::handleJob($payload); }

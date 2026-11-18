@@ -71,7 +71,7 @@ final class SiteController
         $id = Validator::id($params['id'] ?? null);
         $site = $this->find($id);
         Database::getInstance()->delete('sites', ['id' => $id]);
-        foreach (['site_profile', 'site_remote', 'site_pages', 'site_seo'] as $t) { Database::getInstance()->delete($t, ['site_id' => $id]); }
+        foreach (['site_profile', 'site_remote', 'site_pages', 'site_seo', 'site_expiry'] as $t) { Database::getInstance()->delete($t, ['site_id' => $id]); }
         Audit::log('site_removed', null, '', $site['name']);
         Response::success('Site removed (its rules and 404 entries are kept)');
     }

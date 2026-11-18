@@ -270,7 +270,7 @@ final class SiteProfile
         return $out;
     }
 
-    /** Everything the setup guide shows for one site. @return array{site:array,fields:array,remote:array} */
+    /** Everything the setup guide shows for one site. @return array{site:array,fields:array,remote:array,expiry:array,checklist:array} */
     public static function view(int $siteId): array
     {
         $db = Database::getInstance();
@@ -283,7 +283,8 @@ final class SiteProfile
                 'found' => $r['found'] ?? null, 'value' => $r['value'] ?? null, 'state' => $r['state'] ?? 'empty', 'found_at' => $r['found_at'] ?? null];
         }
         return ['site' => ['id' => (int)$site['id'], 'name' => $site['name'], 'base_url' => $site['base_url'], 'wordpress' => (int)$site['sync_enabled'] === 1,
-            'profile_at' => $site['profile_at'], 'profile_error' => $site['profile_error']], 'fields' => $fields, 'remote' => (int)$site['sync_enabled'] === 1 ? SiteRemote::view($siteId) : []];
+            'profile_at' => $site['profile_at'], 'profile_error' => $site['profile_error']], 'fields' => $fields, 'remote' => (int)$site['sync_enabled'] === 1 ? SiteRemote::view($siteId) : [],
+            'expiry' => SiteExpiry::view($siteId), 'checklist' => SiteChecklist::for($siteId)];
     }
 
     // ------------------------------------------------------------------ jobs and scheduling

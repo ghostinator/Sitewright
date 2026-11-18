@@ -54,7 +54,8 @@ final class Config
                         'words_good' => 5, 'words_great' => 5],
             ],
             'google'           => ['client_id' => '', 'client_secret' => '', 'redirect_uri' => ''],
-            'sites'            => ['sync_minutes' => 10, 'profile_days' => 7, 'remote_hours' => 6],
+            'sites'            => ['sync_minutes' => 10, 'profile_days' => 7, 'remote_hours' => 6, 'expiry_hours' => 24, 'rdap_enabled' => true],
+            'digest' => ['weekly_day' => 'mon', 'weekly_time' => '08:00'],
             'log' => ['file' => '', 'level' => 'info', 'requests' => true],
             'mail' => [
                 'driver' => 'smtp', 'postal_url' => '', 'postal_key' => '',
@@ -63,7 +64,7 @@ final class Config
             ],
             'alerts' => ['email_to' => [], 'teams_webhook' => '', 'telegram_token' => '', 'telegram_chat_id' => '', 'cooldown' => 300, 'login_failures' => 10,
                 'events' => ['account_changed', 'account_deleted', 'gsc_sync_failed', 'job_failed', 'login_failures', 'mfa_disabled', 'mfa_reset', 'server_error', 'setting_changed', 'site_sync_failed', 'user_created',
-                    'audit_new_issues', 'health_down', 'health_recovered', 'watch_down', 'watch_recovered', 'watch_regression'],
+                    'audit_new_issues', 'cert_expiring', 'cert_problem', 'domain_expiring', 'php_outdated', 'updates_waiting', 'health_down', 'health_recovered', 'watch_down', 'watch_recovered', 'watch_regression', 'weekly_summary'],
                 'events_batch' => [], 'events_digest' => [], 'channels_error' => ['email', 'teams', 'telegram'], 'channels_warning' => ['email', 'teams', 'telegram'], 'channels_info' => ['email', 'teams', 'telegram'],
                 'max_per_hour' => 30, 'batch_minutes' => 15, 'digest_time' => '08:00', 'quiet_start' => '', 'quiet_end' => '', 'quiet_breakthrough' => true, 'cooldowns' => []],
             'display' => ['timezone' => 'UTC'],
