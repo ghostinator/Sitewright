@@ -17,7 +17,10 @@ final class SiteController
     public function options(array $params): never
     {
         $db = Database::getInstance();
-        Response::success('Sites', $db->fetchAll('SELECT id, name, base_url FROM `' . $db->t('sites') . '` ORDER BY name'));
+        $rows = $db->fetchAll('SELECT id, name, base_url FROM `' . $db->t('sites') . '` ORDER BY name');
+        $values = SiteProfile::valuesFor(array_map('intval', array_column($rows, 'id')));   // only what the owner used or typed in the setup guide
+        foreach ($rows as &$r) { $r['profile'] = $values[(int)$r['id']] ?? []; }
+        Response::success('Sites', $rows);
     }
 
     public function create(array $params): never
@@ -34,12 +37,14 @@ final class SiteController
         if (!$wordpress) {
             $id = (int)$db->insert('sites', ['name' => $name, 'base_url' => $url, 'secret_enc' => '', 'sync_enabled' => 0]);
             Audit::log('site_added', null, '', "$name ($url) without plugin");
+            $this->queueProfile($id);
             Response::success('Site added. It is analysed and monitored from here; no plugin is involved.', ['id' => $id], 201);
         }
         $secret = bin2hex(random_bytes(32));
         $id = (int)$db->insert('sites', ['name' => $name, 'base_url' => $url, 'secret_enc' => 'pending']);
         $db->update('sites', ['secret_enc' => Crypto::encrypt($secret, 'site:' . $id)], ['id' => $id]);
         Audit::log('site_added', null, '', "$name ($url)");
+        $this->queueProfile($id);
         Response::success('Site added. Copy the secret into the plugin now; it is not shown again.', ['id' => $id, 'secret' => $secret], 201);
     }
 
@@ -66,6 +71,7 @@ final class SiteController
         $id = Validator::id($params['id'] ?? null);
         $site = $this->find($id);
         Database::getInstance()->delete('sites', ['id' => $id]);
+        Database::getInstance()->delete('site_profile', ['site_id' => $id]);
         Audit::log('site_removed', null, '', $site['name']);
         Response::success('Site removed (its rules and 404 entries are kept)');
     }
@@ -78,6 +84,12 @@ final class SiteController
         throw new ResponseException(200, (string)file_get_contents($f), [
             'Content-Type' => 'application/x-httpd-php; charset=utf-8', 'Content-Disposition' => 'attachment; filename="sitewright-agent.php"', 'X-Content-Type-Options' => 'nosniff',
         ]);
+    }
+
+    /** A new site is read straight away so the setup guide has something to show; failing to queue it must never stop the site being added. */
+    private function queueProfile(int $id): void
+    {
+        try { SiteProfile::queue($id); } catch (\Throwable) { /* the worker schedule picks it up */ }
     }
 
     private function find(int $id): array

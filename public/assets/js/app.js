@@ -167,7 +167,49 @@
             el('small', { class: 'text-muted break-all', text: Number(s.sync_enabled) === 0 ? s.base_url + ' | analysed and monitored from here, no plugin'
                 : s.base_url + ' | last sync: ' + (s.last_sync_at || 'never') + (s.plugin_version ? ' | plugin ' + s.plugin_version : '') }),
             s.last_error ? el('div', { class: 'alert alert-error', text: s.last_error }) : null],
-            (Number(s.sync_enabled) === 0 ? [] : [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id)]).concat([deleteButton('delete-site', s.id)]))));
+            [smallButton('Setup guide', 'site-profile', s.id, 'btn-primary')].concat(Number(s.sync_enabled) === 0 ? [] : [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id)]).concat([deleteButton('delete-site', s.id)]))));
+    }
+
+    const PROFILE_STATE = { pending: 'Not decided yet', used: 'Using what the site says', manual: 'Your own text', skipped: 'Skipped', empty: 'Nothing found' };
+    const PROFILE_GROUPS = [['site', 'About the site'], ['business', 'Business details'], ['check', 'Checks']];
+    const profileButton = (label, action, siteId, field, cls) => { const b = smallButton(label, action, siteId, cls); b.dataset.field = field; return b; };
+    /** The setup guide for one site: what its public pages say, and per item Use / Type my own / Skip. d = {site, fields} from /sites/{id}/profile. */
+    function renderSiteProfile(container, d) {
+        const site = d.site, nodes = [el('h4', { text: 'Setup guide: ' + site.name })];
+        nodes.push(el('p', { class: 'text-muted', text: site.profile_at ? 'Read from ' + site.base_url + ' on ' + site.profile_at + ' (UTC).' : 'Reading ' + site.base_url + ' now. This takes a few seconds.' }));
+        nodes.push(el('p', { class: 'text-muted', text: 'Choose what Sitewright should use. "Use this" keeps the item in step with the site. "Type my own" is yours and is never overwritten. "Skip" leaves it out. Only items you use or type are filled in elsewhere in Sitewright.' }));
+        if (site.profile_error) nodes.push(el('div', { class: 'alert alert-warn', text: site.profile_error }));
+        for (const [group, title] of PROFILE_GROUPS) {
+            const fields = d.fields.filter(f => f.group === group);
+            if (!fields.length) continue;
+            const rows = fields.map(f => {
+                const shown = f.state === 'used' || f.state === 'manual' ? f.value : f.found;
+                const cell = [el('span', { class: 'break-all', text: shown === null || shown === undefined ? '–' : shown })];
+                if (f.state === 'manual' && f.found && f.found !== f.value) cell.push(el('br'), el('small', { class: 'text-muted break-all', text: 'The site now says: ' + f.found }));
+                if (f.info) {
+                    const good = /^(Yes|Allowed)/.test(f.found || '');
+                    return el('tr', { class: 'profile-row' }, el('th', { text: f.label, attrs: { scope: 'row' } }), el('td', {}, ...cell),
+                        el('td', {}, f.found ? el('span', { class: 'badge ' + (good ? 'badge-ok' : 'badge-bad'), text: good ? 'Good' : 'Look at this' }) : el('span', { class: 'badge', text: 'Unknown' })), el('td'));
+                }
+                const act = [];
+                if (f.found && f.state !== 'used') act.push(profileButton('Use this', 'profile-use', site.id, f.field, 'btn-primary'));
+                act.push(profileButton('Type my own', 'profile-type', site.id, f.field));
+                if (f.state !== 'skipped') act.push(profileButton('Skip', 'profile-skip', site.id, f.field));
+                if (['used', 'manual', 'skipped'].includes(f.state)) act.push(profileButton('Start over', 'profile-reset', site.id, f.field));
+                const input = el('input', { attrs: { type: 'text', maxlength: String(f.max), 'aria-label': 'Your own ' + f.label.toLowerCase() } });
+                input.value = f.state === 'manual' ? f.value : '';
+                cell.push(el('div', { class: 'profile-edit hidden' }, input, ' ', profileButton('Save', 'profile-save', site.id, f.field, 'btn-primary')));
+                return el('tr', { class: 'profile-row' }, el('th', { text: f.label, attrs: { scope: 'row' } }), el('td', {}, ...cell),
+                    el('td', {}, el('span', { class: 'badge' + (f.state === 'used' || f.state === 'manual' ? ' badge-ok' : ''), text: PROFILE_STATE[f.state] || f.state })),
+                    el('td', { class: 'profile-actions' }, ...act));
+            });
+            const head = el('thead', {}, el('tr', {}, ...['Item', 'What was found', 'Status', 'Your choice'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+            nodes.push(el('h5', { text: title }), el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, el('tbody', {}, ...rows))));
+        }
+        nodes.push(el('p', {}, profileButton('Read the site again', 'profile-refresh', site.id, '')));
+        nodes.push(el('h5', { text: 'Next steps' }), el('p', { class: 'text-muted', text: 'Two things worth doing for every site:' }),
+            el('p', {}, profileButton('Watch the home page', 'profile-watch', site.id, ''), ' ', profileButton('Run a first audit', 'profile-audit', site.id, '')));
+        setContent(container, ...nodes);
     }
 
     const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -383,6 +425,13 @@
     }
 
     /** Search Console panel. state = {configured, redirect_uri, connections:[...]}; properties = {id: [{site_url}]} for connections being set up. */
+    /** The Search Console property that matches a site's address (a domain property first), or null. */
+    function suggestGscProperty(site, props) {
+        let host; try { host = new URL(site.base_url).hostname.toLowerCase().replace(/^www\./, ''); } catch (e) { return null; }
+        const urls = props.map(p => p.site_url);
+        const hit = urls.find(u => u === 'sc-domain:' + host) || urls.find(u => { try { return new URL(u).hostname.toLowerCase().replace(/^www\./, '') === host; } catch (e) { return false; } });
+        return hit || null;
+    }
     function renderGsc(container, state, properties, sites) {
         const nodes = [];
         if (!state.configured) {
@@ -406,7 +455,10 @@
             }
             if (props) {
                 const sel = el('select', { attrs: { id: 'gsc-prop-' + c.id, 'aria-label': 'Search Console property' } }, ...props.map(p => el('option', { text: p.site_url + ' (' + p.permission + ')', attrs: { value: p.site_url } })));
+                const guess = suggestGscProperty((sites || []).find(s => s.id === c.site_id), props);
+                if (guess) sel.value = guess;
                 nodes.push(el('div', { class: 'form-inline' }, sel, smallButton('Use this property', 'gsc-set-property', c.id, 'btn-primary')));
+                if (guess) nodes.push(el('small', { class: 'text-muted', text: 'Preselected because it matches ' + sites.find(s => s.id === c.site_id).name + '.' }));
             }
         }
         if (state.configured) nodes.push(el('p', {}, smallButton(state.connections.length ? 'Connect another Google account' : 'Connect Google Search Console', 'gsc-connect', 0, 'btn-primary')));
@@ -628,7 +680,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -798,14 +850,27 @@
             sel.replaceChildren(el('option', { text: 'All sites', attrs: { value: '0' } }), ...siteList.map(s => el('option', { text: s.name, attrs: { value: String(s.id) } })));
             sel.value = String(siteId);
         }
+        prefillForms();
     }
     function setSite(id, reload) {
         siteId = Number(id) || 0;
+        prefillForms();
         try { window.localStorage.setItem('sw-site', String(siteId)); } catch (e) { /* ignore */ }
         const sel = document.getElementById('site-switch'); if (sel) sel.value = String(siteId);
         if (reload) switchView(viewFromLocation(), false);
     }
     const siteQuery = sep => (siteId > 0 ? sep + 'project_id=' + siteId : '');
+    // With a site chosen in the header, the address fields start with that site's address; anything the user typed stays.
+    const PREFILL_URLS = ['seo-url', 'watch-url', 'image-url', 'sitemap-url'];
+    function prefillForms() {
+        const site = siteList.find(s => s.id === siteId);
+        for (const id of PREFILL_URLS) {
+            const input = document.getElementById(id); if (!input) continue;
+            if (site && (input.value === '' || input.dataset.pf === '1')) { input.value = site.base_url; input.dataset.pf = '1'; }
+            else if (!site && input.dataset.pf === '1') { input.value = ''; delete input.dataset.pf; }
+        }
+    }
+    document.addEventListener('input', e => { if (e.target && e.target.dataset && e.target.dataset.pf) delete e.target.dataset.pf; });
     function syncExportLinks() {
         document.querySelectorAll('a.export-link').forEach(a => {
             const path = a.dataset.export; const sep = path.includes('?') ? '&' : '?';
@@ -853,6 +918,24 @@
         } catch (e) { showError(box, 'Could not load audits: ' + e.message); }
     }
     const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
+    let profileSiteId = 0, profilePoll = null;
+    /** Show the setup guide of one site; while the first read is still queued, look again every 2 seconds (at most 10 times). */
+    async function openProfile(id, attempt) {
+        clearTimeout(profilePoll);
+        profileSiteId = Number(id) || 0;
+        const box = document.getElementById('site-profile'); if (!box || !profileSiteId) return;
+        box.classList.remove('hidden');
+        try {
+            const d = await apiRequest('GET', '/sites/' + encodeURIComponent(profileSiteId) + '/profile');
+            if (profileSiteId !== Number(id)) return;
+            renderSiteProfile(box, d);
+            if (!d.site.profile_at && (attempt || 0) < 10) profilePoll = setTimeout(() => openProfile(id, (attempt || 0) + 1), 2000);
+        } catch (e) { showError(box, 'Could not load the setup guide: ' + e.message); }
+    }
+    const profileChoice = async (t, action, value) => {
+        await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/profile', { field: t.dataset.field, action, value });
+        await openProfile(t.dataset.id); loadSiteOptions();
+    };
     const loadSitemaps = () => loadInto('sitemap-list', '/sitemap' + siteQuery('?'), (box, rows) => setContent(box,
         rows.length ? el('p', { class: 'text-muted', text: rows.length + ' URL(s) stored. ' }, el('a', { text: 'Download XML', attrs: { href: BASE + '/api/sitemap/generate-xml', target: '_blank', rel: 'noopener' } })) : muted('No sitemap URLs stored yet.')), 'sitemap');
 
@@ -987,7 +1070,7 @@
                 const box = document.getElementById('site-secret');
                 if (d.secret) setContent(box, el('div', { class: 'alert alert-error', text: 'Copy this secret into the plugin now. It is not shown again.' }), el('pre', { class: 'break-all', text: d.secret }));
                 else setContent(box, el('div', { class: 'alert alert-info', text: 'Site added. It will be analysed and monitored from here.' }));
-                box.classList.remove('hidden'); loadSites(); loadSiteOptions();
+                box.classList.remove('hidden'); loadSites(); loadSiteOptions(); openProfile(d.id);
             } catch (e) { showToast(e.message, 'error'); }
         },
         'user-create-form': async form => {
@@ -1160,6 +1243,22 @@
             box.classList.remove('hidden');
         },
         'delete-location': async t => { if (confirm('Delete this location?')) { await apiRequest('DELETE', '/local-seo/locations/' + encodeURIComponent(t.dataset.id)); showToast('Location deleted'); loadLocations(); } },
+        'site-profile': t => { openProfile(t.dataset.id); const b = document.getElementById('site-profile'); if (b && b.scrollIntoView) b.scrollIntoView({ block: 'nearest' }); },
+        'profile-use': t => profileChoice(t, 'use'),
+        'profile-skip': t => profileChoice(t, 'skip'),
+        'profile-reset': t => profileChoice(t, 'reset'),
+        'profile-type': t => { const e = t.closest('tr').querySelector('.profile-edit'); e.classList.toggle('hidden'); if (!e.classList.contains('hidden')) e.querySelector('input').focus(); },
+        'profile-save': t => profileChoice(t, 'manual', t.closest('.profile-edit').querySelector('input').value),
+        'profile-refresh': async t => { await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/profile/refresh', {}); showToast('Reading the site'); await new Promise(r => setTimeout(r, 3000)); openProfile(t.dataset.id); loadSiteOptions(); },
+        'profile-watch': async t => { const s = siteList.find(x => x.id === Number(t.dataset.id)); await apiRequest('POST', '/watch', { url: s.base_url, label: s.name + ' home page', project_id: s.id }); showToast('Added to the watchlist'); },
+        'profile-audit': async t => { await apiRequest('POST', '/site-audits', { project_id: Number(t.dataset.id) }); showToast('Audit started: see Site audit'); },
+        'loc-prefill': () => {
+            const site = siteList.find(s => s.id === siteId), p = (site && site.profile) || {}, form = document.getElementById('location-form');
+            if (!site) { showToast('Choose a site in the header first', 'error'); return; }
+            const map = { name: p.business_name, phone: p.phone, address: p.street, city: p.city, state: p.region, postal_code: p.postal_code, country: p.country, website: site.base_url };
+            let n = 0; for (const [f, v] of Object.entries(map)) { if (v && form.elements[f].value.trim() === '') { form.elements[f].value = v; n++; } }
+            showToast(p.business_name || p.phone || p.street ? 'Filled ' + n + ' empty field(s) from ' + site.name : 'No business details are chosen for ' + site.name + ' yet: open its setup guide on the Sites page');
+        },
         'site-sync': async t => { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/sync', {}); showToast('Sync started'); await new Promise(r => setTimeout(r, 2500)); loadSites(); return d; },
         'site-rotate': async t => { if (confirm('Create a new secret? Syncing stops until the plugin has it.')) { const d = await apiRequest('POST', '/sites/' + encodeURIComponent(t.dataset.id) + '/rotate-secret', {}); const box = document.getElementById('site-secret'); setContent(box, el('div', { class: 'alert alert-error', text: 'New secret (shown once): put it into the plugin.' }), el('pre', { class: 'break-all', text: d.secret })); box.classList.remove('hidden'); loadSites(); } },
         'redirect-accept': async t => {

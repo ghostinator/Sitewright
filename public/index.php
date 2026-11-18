@@ -234,6 +234,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <form id="location-form" class="form hidden">
                         <input type="hidden" id="loc-id" name="loc_id">
                         <h4 id="loc-form-title">New location</h4>
+                        <p><button type="button" class="btn btn-sm btn-secondary" data-action="loc-prefill">Fill empty fields from this site's details</button> <small class="text-muted">Uses the business details you chose in the site's setup guide.</small></p>
                         <div class="form-row">
                             <div class="form-group"><label for="loc-name">Name *</label><input id="loc-name" name="name" required maxlength="255"></div>
                             <div class="form-group"><label for="loc-phone">Phone</label><input id="loc-phone" name="phone" maxlength="50"></div>
@@ -369,6 +370,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                         <button type="submit" class="btn btn-primary">Add site</button></form>
                     <div id="site-secret" class="hidden"></div>
                     <div id="sites-list" class="list-area"></div>
+                    <div id="site-profile" class="list-area hidden"></div>
                 </div></div>
 
                 <div class="view" id="view-alerts"><div class="card">

@@ -578,3 +578,56 @@ test('alert history: each row says what was decided and why, in words', () => {
   for (const p of PAYLOADS) { box.replaceChildren(); SW.renderAlertLog(box, { rows: [{ id: 1, created_at: p, event: p, level: 'warning', project_id: 0, site: p, message: p, outcome: 'sent', channels: p, reason: p }] });
     assert.equal(box.querySelectorAll('img,script,iframe,object,embed,style,link,form,input,base,meta,svg').length, 0, p); assert.ok(box.textContent.includes(p)); }
 });
+
+// ---- setup guide (site profile) -------------------------------------------------------------------------------------------
+const profileData = (over = {}) => ({ site: { id: 3, name: 'Corner', base_url: 'https://corner.example', wordpress: false, profile_at: '2026-11-17 10:00:00', profile_error: null }, fields: [
+  { field: 'site_title', label: 'Home page title', group: 'site', max: 200, info: false, found: 'Corner Bakery', value: null, state: 'pending' },
+  { field: 'phone', label: 'Phone', group: 'business', max: 30, info: false, found: '+1 505 555 0100', value: '+1 505 555 0199', state: 'manual' },
+  { field: 'city', label: 'City', group: 'business', max: 100, info: false, found: 'Santa Fe', value: 'Santa Fe', state: 'used' },
+  { field: 'country', label: 'Country', group: 'business', max: 100, info: false, found: null, value: null, state: 'empty' },
+  { field: 'https', label: 'Secure connection (HTTPS)', group: 'check', max: 60, info: true, found: 'Yes', value: null, state: 'info' },
+  { field: 'robots', label: 'Search engines allowed in', group: 'check', max: 100, info: true, found: 'Blocked: robots.txt tells every search engine to stay away (Disallow: /)', value: null, state: 'info' },
+], ...over });
+test('setup guide: each item offers only the choices that make sense, and every button carries the site and item', () => {
+  const { SW, box } = load();
+  SW.renderSiteProfile(box, profileData());
+  const row = f => [...box.querySelectorAll('.profile-row')].find(r => r.querySelector('th').textContent === f);
+  const actions = f => [...row(f).querySelectorAll('[data-action]')].map(b => b.dataset.action).sort();   // order on the page is not what is being tested
+  assert.deepEqual(actions('Home page title'), ['profile-save', 'profile-skip', 'profile-type', 'profile-use']);
+  assert.deepEqual(actions('Phone'), ['profile-reset', 'profile-save', 'profile-skip', 'profile-type', 'profile-use'], 'a typed value can still be replaced by what the site says');
+  assert.deepEqual(actions('City'), ['profile-reset', 'profile-save', 'profile-skip', 'profile-type'], 'already using the site: no second "Use this"');
+  assert.deepEqual(actions('Country'), ['profile-save', 'profile-skip', 'profile-type'], 'nothing found: only typing or skipping');
+  assert.deepEqual(actions('Secure connection (HTTPS)'), [], 'checks are not choices');
+  assert.match(row('Phone').textContent, /\+1 505 555 0199/); assert.match(row('Phone').textContent, /The site now says: \+1 505 555 0100/);
+  for (const b of box.querySelectorAll('.profile-row [data-action]')) { assert.equal(b.dataset.id, '3'); assert.ok(b.dataset.field, 'field set on ' + b.dataset.action); }
+  assert.ok(row('Phone').querySelector('.profile-edit.hidden input'), 'the typing box starts hidden'); assert.equal(row('Phone').querySelector('.profile-edit input').value, '+1 505 555 0199');
+  assert.equal(row('Secure connection (HTTPS)').querySelector('.badge-ok').textContent, 'Good'); assert.equal(row('Search engines allowed in').querySelector('.badge-bad').textContent, 'Look at this');
+  assert.ok(box.querySelector('[data-action="profile-refresh"]') && box.querySelector('[data-action="profile-watch"]') && box.querySelector('[data-action="profile-audit"]'));
+});
+test('setup guide: before the first read it says so; a failed read shows the reason', () => {
+  const { SW, box } = load();
+  SW.renderSiteProfile(box, profileData({ site: { id: 3, name: 'Corner', base_url: 'https://corner.example', profile_at: null, profile_error: null } }));
+  assert.match(box.textContent, /Reading https:\/\/corner\.example now/);
+  SW.renderSiteProfile(box, profileData({ site: { id: 3, name: 'Corner', base_url: 'https://corner.example', profile_at: '2026-11-17 10:00:00', profile_error: 'The site answered HTTP 503 for its home page' } }));
+  assert.match(box.querySelector('.alert-warn').textContent, /HTTP 503/);
+});
+test('setup guide: everything a site said is shown as text, never as markup', () => {
+  const { SW, box } = load();
+  for (const p of PAYLOADS) {
+    const d = profileData(); d.site.name = p; d.site.base_url = p; d.fields[0].found = p; d.fields[1].value = p; d.fields[1].found = p + '2'; d.fields[2].value = p;
+    box.replaceChildren(); SW.renderSiteProfile(box, d);
+    const inputs = [...box.querySelectorAll('input')]; assert.equal(inputs.length, 4, 'one typing box per choosable item and nothing injected'); inputs.forEach(i => i.remove());
+    assertInert(box, p, 'profile'); assert.ok(box.textContent.includes(p));
+  }
+});
+test('Search Console: the property that matches the site is preselected (domain property first)', () => {
+  const { SW, box } = load();
+  const state = { configured: true, redirect_uri: 'x', connections: [{ id: 9, property_url: null, site_id: 5, last_status: 'ok', last_sync_at: null, rows_synced: 0, last_error: null }] };
+  const props = { 9: [{ site_url: 'https://other.example/', permission: 'owner' }, { site_url: 'https://www.shop.example/', permission: 'owner' }, { site_url: 'sc-domain:shop.example', permission: 'owner' }] };
+  SW.renderGsc(box, state, props, [{ id: 5, name: 'Shop', base_url: 'https://www.shop.example' }]);
+  assert.equal(box.querySelector('#gsc-prop-9').value, 'sc-domain:shop.example'); assert.match(box.textContent, /matches Shop/);
+  box.replaceChildren(); SW.renderGsc(box, state, { 9: [{ site_url: 'https://other.example/', permission: 'owner' }, { site_url: 'https://www.shop.example/', permission: 'owner' }] }, [{ id: 5, name: 'Shop', base_url: 'https://shop.example' }]);
+  assert.equal(box.querySelector('#gsc-prop-9').value, 'https://www.shop.example/', 'www and non-www are the same site');
+  box.replaceChildren(); SW.renderGsc(box, state, { 9: [{ site_url: 'https://other.example/', permission: 'owner' }] }, [{ id: 5, name: 'Shop', base_url: 'https://shop.example' }]);
+  assert.equal(box.querySelector('#gsc-prop-9').value, 'https://other.example/'); assert.doesNotMatch(box.textContent, /Preselected/);
+});

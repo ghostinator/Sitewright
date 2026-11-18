@@ -629,3 +629,8 @@ select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 
 }
 .check-row { display: flex; gap: 8px; align-items: flex-start; font-weight: normal; }
 .check-row input { margin-top: 3px; }
+
+/* setup guide */
+.profile-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.profile-edit { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.profile-edit input { min-width: 12rem; flex: 1 1 12rem; }

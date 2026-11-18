@@ -32,7 +32,7 @@ Expiry monitoring (phase 4) covers the alerting need whatever the answers.
 |---|-------|--------|--------|-------|
 | 0 | **Stay signed in (30 days)**: remember-me tokens (migration 015), devices panel, setting `session.remember_days` | done | see git log | PHP 557, JS 50, browser 17 |
 | 1 | Alert controls: AlertPolicy (events/mute/channels/cooldown/quiet/mode/cap), alert history, batches and digest, pauses, presets, Alerts page, health state in the DB with a bad-checks streak (migration 016) | done | see git log | PHP 578, JS 52, browser 18 |
-| 2 | Site profile, public discovery, setup guide, prefills | not started | | |
+| 2 | Site profile (`site_profile`, migration 017), public discovery (`SiteProfile`), setup guide (Use / Type my own / Skip / Start over), prefills (address fields, location form, Search Console property), `sites.profile_days` | done in code, tests green on PHP 8.3 (see below); deploy and the full matrix pending | see git log | PHP 589, JS 56, browser 19 |
 | 3 | Plugin 1.1 with owner consent | not started | | |
 | 4 | Certificate/domain expiry, setup checklist, digest, update warnings | not started | | |
 | 5 | Phone/address consistency | not started | | |

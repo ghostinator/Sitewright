@@ -374,6 +374,43 @@ test('alerts page: pause everything and resume; the Calm preset applies and Ever
   await expect(page.locator('#toast')).toContainText('Preset applied');
 });
 
+test('setup guide: a new site is read automatically; use, type my own and start over; chosen values prefill the address fields and the location form', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.goto('/sites');
+  await page.click('[data-action=toggle-form][data-target=site-create-form]');
+  await page.fill('#site-name', 'Fixture Co'); await page.fill('#site-url', 'http://sw-fixture');
+  await page.uncheck('#site-wordpress');
+  await page.click('#site-create-form button[type=submit]');
+  const title = page.locator('#site-profile .profile-row', { hasText: 'Home page title' });
+  await expect(title).toContainText('Fixture Home - a page with a reasonable title', { timeout: 60000 });     // the worker read the site
+  await expect(page.locator('#site-profile')).toContainText('Setup guide: Fixture Co');
+  await expect(page.locator('#site-profile .profile-row', { hasText: 'Search engines allowed in' })).toContainText('Good');
+  await title.locator('[data-action=profile-use]').click();
+  await expect(title).toContainText('Using what the site says');
+  const name = page.locator('#site-profile .profile-row', { hasText: 'Business name' });
+  await name.locator('[data-action=profile-type]').click();
+  await name.locator('.profile-edit input').fill('Fixture Company LLC');
+  await name.locator('[data-action=profile-save]').click();
+  await expect(name).toContainText('Your own text'); await expect(name).toContainText('Fixture Company LLC');
+  await page.reload();                                                                                       // the choices are stored, not just shown
+  await page.locator('#sites-list .list-item', { hasText: 'Fixture Co' }).locator('[data-action=site-profile]').click();
+  await expect(page.locator('#site-profile .profile-row', { hasText: 'Business name' })).toContainText('Fixture Company LLC');
+  // the header's site now fills the address fields, and the location form
+  await page.selectOption('#site-switch', { label: 'Fixture Co' });
+  await page.goto('/seo-analysis');
+  await expect(page.locator('#seo-url')).toHaveValue('http://sw-fixture');
+  await page.goto('/local-seo');
+  await page.click('[data-action=toggle-form][data-target=location-form]');
+  await page.click('[data-action=loc-prefill]');
+  await expect(page.locator('#loc-name')).toHaveValue('Fixture Company LLC'); await expect(page.locator('#loc-website')).toHaveValue('http://sw-fixture');
+  // start over puts the item back to undecided
+  await page.goto('/sites'); await page.locator('#sites-list .list-item', { hasText: 'Fixture Co' }).locator('[data-action=site-profile]').click();
+  const again = page.locator('#site-profile .profile-row', { hasText: 'Business name' });
+  await again.locator('[data-action=profile-reset]').click();
+  await expect(again).toContainText('Nothing found');
+  await page.selectOption('#site-switch', { label: 'All sites' });
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {

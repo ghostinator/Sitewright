@@ -75,6 +75,14 @@ Create, list and delete redirect rules (301, 302, 307, 308, 410, 451). For a **c
 ### Sites (admin)
 Add every website you want to analyse and monitor. Untick *WordPress with the Sitewright plugin* for a site that does not use it. For a WordPress site, connect it with the plugin: Sitewright calls the site; the site never calls Sitewright, so Sitewright can stay private. Steps: download the plugin, install it, add the site here, copy the one-time secret into `wp-config.php` (`define('SITEWRIGHT_SECRET', '…');`), then press **Sync now**. The plugin records 404s (path and referrer only, no visitor addresses) and enforces your redirect rules even if Sitewright is offline. **New secret** replaces the secret if it was exposed.
 
+#### Setup guide (per site)
+Adding a site reads its public pages (home page, `robots.txt`, sitemap) and opens the **Setup guide**: what the site says about itself, listed so you decide what Sitewright uses. It works for every site, with or without the plugin. Per item you choose **Use this** (follows the site when it changes), **Type my own** (yours, never overwritten; if the site later says something different it is shown next to your text), **Skip**, or **Start over**. Items: home page title and description, language, what it is built with, sitemap address, business name, phone and address (from the site's structured data), plus two checks: HTTPS, and whether `robots.txt` shuts every search engine out (a site that does is flagged **Look at this**). Only items you use or type are used elsewhere:
+* choosing a site in the header fills the address on the analysis, watch, image and sitemap forms (anything you typed is kept);
+* **Fill empty fields from this site's details** on the Local SEO form copies the business name, phone and address;
+* the Search Console property that matches the site's address is preselected;
+* **Watch the home page** and **Run a first audit** are one click at the bottom of the guide.
+Sitewright reads each site again every 7 days (Settings, Crawling and jobs, *Re-read site details every*; 0 turns it off) and on **Read the site again**. Whatever a site says is treated as untrusted text: markup is removed, lengths are capped, and a phone number or sitemap address that is the wrong shape is ignored.
+
 ### Alerts (admin)
 See every alert Sitewright raised and what happened to it: *Sent*, *Held back* (with the reason: cooldown, hourly limit, event not enabled), *Batched*, *Daily digest* or *Paused*. **Pause alerts** for one site or everything for 1, 4 or 24 hours while you work on something. Two presets: **Calm** (only real problems arrive at once, the rest is batched or in one daily digest, and nights are quiet) and **Everything**. Every rule is under Settings → Alert controls.
 
