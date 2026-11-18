@@ -36,7 +36,7 @@ final class Settings
     public static function readonlyKeys(): array
     {
         return ['db.host', 'db.port', 'db.name', 'db.user', 'db.pass', 'db.prefix', 'app_key', 'base_url', 'allowed_hosts', 'trusted_proxies', 'debug', 'hsts',
-            'fetch.allow_ports', 'fetch.dev_allow_cidrs', 'gemini.endpoint', 'session.secure', 'session.name', 'limits.body_bytes', 'log.file'];
+            'fetch.allow_ports', 'fetch.dev_allow_cidrs', 'gemini.endpoint', 'session.secure', 'session.name', 'limits.body_bytes', 'log.file', 'acme.directory'];
     }
 
     /** @return array<string,array> key => definition */

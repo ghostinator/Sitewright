@@ -261,3 +261,4 @@ These cannot be changed from the Settings page: they are needed to start the app
 * `session.name`
 * `limits.body_bytes`
 * `log.file`
+* `acme.directory`
