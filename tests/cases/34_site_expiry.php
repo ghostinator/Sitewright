@@ -152,3 +152,15 @@ test('domain expiry: when the public registry has no answer (.co), a registrar t
     $r = $row($id, 'domain'); eq([$r['state'], $r['expires_at'], $r['error']], ['ok', gmdate('Y-m-d H:i:s', 1_810_000_000), null]); ok(str_contains($r['detail'], 'Registered as registered.co at TestReg'), $r['detail']);
     $id2 = $mk('https://www.unknown.co'); SiteExpiry::check($id2, $NOW); eq($row($id2, 'domain')['state'], 'error', 'a registrar that does not know the domain changes nothing');
 });
+
+test('a site served by Cloudflare (its certificate renews itself 30 days out) is warned about only in the last 7 days; any other site keeps every step', function () use ($mk, $certIn, $alerts, $row, $noRdap, $db, $NOW) {
+    $noRdap(); $id = $mk();
+    foreach ([['104.21.53.11', [60, 25, 13, 8], []], ['93.184.216.34', [25, 13], ['cert_expiring:warning', 'cert_expiring:warning']]] as [$ip, $days, $want]) {
+        $db->query('TRUNCATE sw_site_expiry'); $db->query('TRUNCATE sw_jobs'); fakeWeb([], ['www.corner.test' => [$ip]]);
+        foreach ($days as $d) { $certIn($d); SiteExpiry::check($id, $NOW); }
+        eq($alerts(), $want, "ips $ip");
+    }
+    $db->query('TRUNCATE sw_site_expiry'); $db->query('TRUNCATE sw_jobs'); fakeWeb([], ['www.corner.test' => ['104.21.53.11']]); $certIn(6); SiteExpiry::check($id, $NOW); eq($alerts(), ['cert_expiring:error'], 'the last week still warns, as an error');
+    ok(str_contains($row($id)['detail'], 'Served through Cloudflare'), $row($id)['detail']);
+    eq([SiteExpiry::cdnOf(['104.21.53.11', '172.67.1.1']), SiteExpiry::cdnOf(['104.21.53.11', '93.184.216.34']), SiteExpiry::cdnOf(['2606:4700:3037::ac43:cf71']), SiteExpiry::cdnOf([]), SiteExpiry::cdnOf(['10.0.0.1'])], ['Cloudflare', null, 'Cloudflare', null, null], 'every address must be Cloudflare\'s');
+});

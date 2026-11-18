@@ -17,6 +17,23 @@ final class SiteExpiry
     public const THRESHOLDS = [30, 14, 7, 3, 1];
     public const KINDS = ['cert' => 'Certificate (HTTPS)', 'domain' => 'Domain registration'];
     private const BOOTSTRAP = 'https://data.iana.org/rdap/dns.json';
+    /** Cloudflare's published address ranges (cloudflare.com/ips). A site served from these has a certificate Cloudflare renews by itself, starting about 30 days before it ends. */
+    private const CLOUDFLARE = ['173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17',
+        '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22', '2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32'];
+    /** For a certificate renewed by a CDN, only the last days matter: earlier warnings would fire on every renewal cycle. */
+    private const CDN_STEPS = [7, 3, 1];
+
+    /** "Cloudflare" when every address of the host is Cloudflare's, else null. @param list<string> $ips */
+    public static function cdnOf(array $ips): ?string
+    {
+        if (!$ips) { return null; }
+        foreach ($ips as $ip) {
+            $bin = @inet_pton($ip); $in = false;
+            foreach (self::CLOUDFLARE as $range) { if ($bin !== false && SafeHttpClient::inCidr($bin, $range)) { $in = true; break; } }
+            if (!$in) { return null; }
+        }
+        return 'Cloudflare';
+    }
 
     /** Test seam: fn(string $host, array $ips): array{expires?:int,issuer?:string,names?:string,trusted?:bool,problem?:?string,error?:string}. */
     public static $certReader = null;
@@ -55,8 +72,10 @@ final class SiteExpiry
 
     private static function checkCert(array $site, string $host, int $now): string
     {
+        $cdn = null;
         try {
             $ips = SafeHttpClient::default()->validate('https://' . $host . '/')['ips'];
+            $cdn = self::cdnOf($ips);
             $c = (self::$certReader ?? [self::class, 'readCert'])($host, $ips);
         } catch (FetchException $e) {   // includes a blocked address and a name that does not resolve
             return self::record((int)$site['id'], 'cert', 'error', null, null, mb_substr($e->getMessage(), 0, 250), $now, $site, $host);
@@ -65,7 +84,8 @@ final class SiteExpiry
         $detail = 'Issued by ' . (SiteProfile::clean($c['issuer'] ?? '', 80) ?? 'an unknown issuer');
         if (!empty($c['names'])) { $detail .= '; covers ' . (SiteProfile::clean($c['names'], 120) ?? ''); }
         if (!empty($c['problem'])) { $detail .= '. ' . $c['problem']; }
-        return self::record((int)$site['id'], 'cert', ($c['trusted'] ?? false) ? 'ok' : 'problem', (int)$c['expires'], mb_substr($detail, 0, 300), null, $now, $site, $host);
+        if ($cdn !== null) { $detail .= '. Served through ' . $cdn . ', which renews it by itself (you are warned only in the last 7 days)'; }
+        return self::record((int)$site['id'], 'cert', ($c['trusted'] ?? false) ? 'ok' : 'problem', (int)$c['expires'], mb_substr($detail, 0, 300), null, $now, $site, $host, $cdn !== null ? self::CDN_STEPS : self::THRESHOLDS);
     }
 
     /** The default certificate reader. @return array<string,mixed> */
@@ -176,7 +196,7 @@ final class SiteExpiry
 
     // ------------------------------------------------------------------ storing and warning
 
-    private static function record(int $siteId, string $kind, string $state, ?int $expires, ?string $detail, ?string $error, int $now, array $site, string $host): string
+    private static function record(int $siteId, string $kind, string $state, ?int $expires, ?string $detail, ?string $error, int $now, array $site, string $host, array $steps = self::THRESHOLDS): string
     {
         $db = Database::getInstance();
         $t = $db->t('site_expiry');
@@ -190,7 +210,7 @@ final class SiteExpiry
         if ($state !== 'error' && $days !== null) {
             $step = null;
             if ($days <= 0) { $step = 0; }
-            else { foreach (self::THRESHOLDS as $th) { if ($days <= $th) { $step = $th; } } }   // THRESHOLDS descend, so this ends on the tightest one reached
+            else { foreach ($steps as $th) { if ($days <= $th) { $step = $th; } } }   // THRESHOLDS descend, so this ends on the tightest one reached
             if ($step === null) { $alerted = null; }                                   // renewed (or never close): the next approach warns again
             elseif ($alerted === null || $step < $alerted) {
                 self::warn($kind, $site, $host, $days, (int)$expTs, $step);
