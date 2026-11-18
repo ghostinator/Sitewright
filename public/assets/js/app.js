@@ -103,15 +103,42 @@
         if (onCopy) onCopy(String(data.content));
     }
 
-    function renderImageResults(container, data) {
-        const items = data.images.map(img => listItem([
-            el('strong', { class: 'break-all', text: img.src }), el('br'),
-            el('small', { class: 'text-muted' }, checkTag(img.has_alt), ' ' + (img.has_alt ? 'Has alt text' : 'Missing alt text') + ' | Size: ' + fmtKB(img.size) + ' | ' + (img.dimensions || 'unknown dimensions')
-                + ' | Optimized: ' + (img.optimized === null ? 'unknown' : (img.optimized ? 'yes' : 'no')))]));
+    /** Image analysis results. With a site chosen, each image has boxes for its alt text and title (kept in Sitewright with Save; sent to the site with Apply, if its owner allowed that). */
+    function renderImageResults(container, data, canEdit = false) {
+        const project = Number(data.project_id) || 0;
+        const items = data.images.map(img => {
+            const editable = canEdit && img.id;
+            const main = [el('strong', { class: 'break-all', text: img.src }), el('br'),
+                el('small', { class: 'text-muted' }, checkTag(img.has_alt), ' ' + (img.has_alt ? 'Has alt text' : 'Missing alt text') + ' | Size: ' + fmtKB(img.size) + ' | ' + (img.dimensions || 'unknown dimensions')
+                    + ' | Optimized: ' + (img.optimized === null ? 'unknown' : (img.optimized ? 'yes' : 'no')))];
+            if (!editable) return listItem(main);
+            const alt = el('input', { class: 'image-alt', attrs: { type: 'text', maxlength: '500', placeholder: 'Alt text: what the picture shows', 'aria-label': 'Alt text for ' + img.src } });
+            const title = el('input', { class: 'image-title', attrs: { type: 'text', maxlength: '200', placeholder: 'Title (optional)', 'aria-label': 'Title for ' + img.src } });
+            alt.value = img.alt || ''; title.value = img.title || '';
+            main.push(el('div', { class: 'form-row image-text' }, alt, title));
+            const btn = (label, action, cls) => el('button', { class: 'btn btn-sm ' + (cls || 'btn-secondary'), text: label, attrs: { type: 'button' }, data: { action, id: img.id, src: img.src, project } });
+            return listItem(main, [btn('Suggest', 'image-suggest'), btn('Save', 'image-save'), project ? btn('Apply to the site', 'image-apply', 'btn-primary') : null]);
+        });
         const notes = [];
         if (data.truncated) notes.push(muted('Only the first ' + data.limit + ' of ' + data.found + ' images were analyzed.'));
         if (data.skipped) notes.push(muted(data.skipped + ' image(s) skipped (unreachable, not an image, or not allowed).'));
-        setContent(container, el('h4', { text: 'Image Analysis Results' }), ...notes, el('div', { class: 'list-area' }, ...(items.length ? items : [muted('No images found.')])));
+        if (canEdit && data.images.some(i => i.id)) notes.push(muted(project
+            ? 'Type the alt text (and title) you want, then Apply to the site. Save keeps it in Sitewright only. Applying needs the site\'s owner to have ticked "Change image text" in the Sitewright plugin, and every change can be undone below.'
+            : 'Choose a site in the header and analyse again to send alt text to it. Save keeps your text in Sitewright.'));
+        if (canEdit && project && data.images.some(i => i.id)) notes.push(el('p', {}, el('button', { class: 'btn btn-primary btn-sm', text: 'Apply all text above to the site', attrs: { type: 'button' }, data: { action: 'image-apply-all', project } })));
+        setContent(container, el('h4', { text: 'Image Analysis Results' }), ...notes, el('div', { class: 'list-area' }, ...(items.length ? items : [muted('No images found.')])), el('div', { attrs: { id: 'image-changes' } }));
+    }
+
+    /** What Sitewright has changed on a site's images, newest first, each with Undo while it can still be undone. */
+    function renderMediaChanges(container, data) {
+        const rows = (data.changes || []).map(c => {
+            const what = [];
+            if (c.new_alt !== null && c.new_alt !== undefined) what.push('alt text: "' + (c.old_alt || '') + '" → "' + c.new_alt + '"');
+            if (c.new_title !== null && c.new_title !== undefined) what.push('title: "' + (c.old_title || '') + '" → "' + c.new_title + '"');
+            return el('tr', {}, el('td', { class: 'break-all', text: c.image_url }), el('td', { text: what.join('; ') }), el('td', { text: c.applied_at + ' UTC' }),
+                el('td', {}, c.undone_at ? el('span', { class: 'badge', text: 'undone' }) : el('button', { class: 'btn btn-secondary btn-sm', text: 'Undo', attrs: { type: 'button' }, data: { action: 'media-undo', id: c.id } })));
+        });
+        setContent(container, ...(rows.length ? [el('h4', { text: 'Changes made to the site' }), tableOf(['Image', 'What changed', 'When', ''], rows)] : []));
     }
 
     function renderAnalytics(container, data) {
@@ -813,7 +840,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderSiteImport, renderImportPicker, renderImportResult, renderCertificates, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderMediaChanges, renderSiteImport, renderImportPicker, renderImportResult, renderCertificates, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -1028,6 +1055,7 @@
     let psiOn = false;
     apiRequest('GET', '/pagespeed/status').then(s => { psiOn = !!s.enabled; }).catch(() => {});
     const canEdit = () => !!(cfg.user && cfg.user.role !== 'viewer');
+    const isAdmin = () => !!(cfg.user && cfg.user.role === 'admin');
     const loadWatchlist = () => { setContent(document.getElementById('watch-history'), null); return loadInto('watch-list', '/watch' + siteQuery('?'), (box, d) => renderWatchlist(box, d, canEdit(), psiOn), 'the watchlist'); };
     const loadOpportunities = () => { const t = document.getElementById('opp-type'); return loadInto('opp-list', '/opportunities' + siteQuery('?') + (t && t.value ? (siteId > 0 ? '&' : '?') + 'type=' + encodeURIComponent(t.value) : ''), renderOpportunities, 'search opportunities'); };
     async function loadAlerts() {
@@ -1050,6 +1078,10 @@
             if (d.audits.some(a => a.status === 'queued' || a.status === 'running') && viewFromLocation() === 'site-audit') auditPoll = setTimeout(loadSiteAudits, 4000);
         } catch (e) { showError(box, 'Could not load audits: ' + e.message); }
     }
+    const loadMediaChanges = async () => {
+        const box = document.getElementById('image-changes'); if (!box || !siteId || !isAdmin()) return;
+        try { renderMediaChanges(box, await apiRequest('GET', '/sites/' + encodeURIComponent(siteId) + '/media-changes')); } catch (e) { setContent(box); }
+    };
     const loadSites = () => loadInto('sites-list', '/sites', (box, d) => { renderSites(box, d.sites); const imp = document.getElementById('site-import'); if (imp && !imp.querySelector('#import-list .import-grid')) renderSiteImport(imp, d.dns_accounts); }, 'sites');
     const loadCertificates = () => loadInto('cert-area', '/certificates', renderCertificates, 'certificates');
     let profileSiteId = 0, profilePoll = null;
@@ -1121,6 +1153,16 @@
         loadDevices();
     }
 
+    async function saveImageText(row, id) {
+        await apiRequest('PUT', '/image-seo/' + encodeURIComponent(id), { alt_text: row.querySelector('.image-alt').value.trim(), title: row.querySelector('.image-title').value.trim() });
+    }
+
+    async function applyImages(project, ids) {
+        const d = await apiRequest('POST', '/sites/' + encodeURIComponent(project) + '/media-text', { image_ids: ids });
+        showToast(d.applied + ' image' + (d.applied === 1 ? '' : 's') + ' updated on the site' + (d.failed.length ? '; ' + d.failed.length + ' refused: ' + d.failed[0].error : '') + (d.skipped ? '; ' + d.skipped + ' had no text to send' : ''), d.failed.length && !d.applied ? 'error' : undefined);
+        loadMediaChanges();
+    }
+
     // ------------------------------------------------------------------ background jobs
 
     /** Submit a job (202 + job_id), then poll its status until it finishes. Resolves with the job's result data. */
@@ -1181,7 +1223,7 @@
         'image-bulk-form': async form => {
             const box = document.getElementById('image-results');
             setContent(box, muted('Analyzing images… this can take a minute.'));
-            try { renderImageResults(box, await runJob('/image-seo/bulk-analyze', { url: form.querySelector('#image-url').value, project_id: siteId }, box, 'Analyzing images')); } catch (e) { showError(box, e.message); }
+            try { renderImageResults(box, await runJob('/image-seo/bulk-analyze', { url: form.querySelector('#image-url').value, project_id: siteId }, box, 'Analyzing images'), canEdit()); loadMediaChanges(); } catch (e) { showError(box, e.message); }
         },
         'sitemap-crawl-form': async form => {
             const box = document.getElementById('sitemap-results');
@@ -1379,6 +1421,22 @@
     // ------------------------------------------------------------------ delegated clicks
 
     const clickActions = {
+        'image-suggest': async t => {
+            const row = t.closest('.list-item'), d = await apiRequest('GET', '/image-seo/suggest-alt?image_url=' + encodeURIComponent(t.dataset.src));
+            row.querySelector('.image-alt').value = d.suggestion; showToast('Suggestion filled in. It comes from the file name, so please improve it.');
+        },
+        'image-save': async t => { await saveImageText(t.closest('.list-item'), t.dataset.id); showToast('Saved in Sitewright'); },
+        'image-apply': async t => { await saveImageText(t.closest('.list-item'), t.dataset.id); await applyImages(Number(t.dataset.project), [Number(t.dataset.id)]); },
+        'image-apply-all': async t => {
+            const ids = [];
+            for (const row of document.querySelectorAll('#image-results .list-item')) {
+                const b = row.querySelector('[data-action="image-save"]'); if (!b) continue;
+                if (row.querySelector('.image-alt').value.trim() || row.querySelector('.image-title').value.trim()) { await saveImageText(row, b.dataset.id); ids.push(Number(b.dataset.id)); }
+            }
+            if (!ids.length) { showToast('Type some alt text first', 'error'); return; }
+            await applyImages(Number(t.dataset.project), ids);
+        },
+        'media-undo': async t => { if (confirm('Put the previous text back on the site?')) { await apiRequest('POST', '/media-changes/' + encodeURIComponent(t.dataset.id) + '/undo', {}); showToast('The previous text is back on the site'); loadMediaChanges(); } },
         'import-find': async () => {
             const id = document.getElementById('import-account').value, box = document.getElementById('import-list');
             setContent(box, muted('Looking up the domains…'));

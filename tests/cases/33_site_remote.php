@@ -17,7 +17,7 @@ $NONE = array_map(fn () => false, $ALL);
 /** A site whose plugin answers every route; $over replaces or removes (null) individual routes. */
 $wp = function (?array $features, array $over = []) use ($B, $json) {
     $pages = [
-        "$B/status" => $json(['plugin_version' => $features === null ? '1.0.1' : '1.1.0'] + ($features === null ? [] : ['features' => $features])),
+        "$B/status" => $json(['plugin_version' => $features === null ? '1.0.1' : '1.2.0'] + ($features === null ? [] : ['features' => $features])),
         "$B/404s&since_seq=0&limit=500" => $json(['items' => [], 'max_seq' => 0]),
         "$B/redirects" => $json(['accepted' => 0]),
         "$B/site" => $json(['title' => 'Corner <b>Bakery</b>', 'tagline' => 'Bread, daily', 'language' => 'en-US', 'timezone' => 'America/Denver', 'url' => 'https://p.example/']),

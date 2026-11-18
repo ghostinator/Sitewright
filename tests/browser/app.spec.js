@@ -437,6 +437,26 @@ test('certificates: add a DNS account (shown untested, secret never shown again)
   await expect(page.locator('#cert-area')).toContainText('No DNS account yet');
 });
 
+test('image SEO: images behind a lazy-loading placeholder are found; alt text can be edited and saved; applying to a site without the plugin is refused in plain words', async ({ page }) => {
+  await login(page, ADMIN);
+  await page.selectOption('#site-switch', { label: 'Fixture Co' });
+  await page.goto('/image-seo');
+  await page.fill('#image-url', 'http://sw-fixture/lazy.html');
+  await page.click('#image-bulk-form button[type=submit]');
+  const rows = page.locator('#image-results .list-item');
+  await expect(rows.first()).toBeVisible({ timeout: 60000 });
+  await expect(page.locator('#image-results')).toContainText('img/pixel.png');                              // the real address in data-src, not the placeholder
+  await expect(page.locator('#image-results')).not.toContainText('data:image');
+  await expect(rows).toHaveCount(2);                                                                        // the 1x1 tracking pixel is ignored
+  const first = rows.first();
+  await first.locator('.image-alt').fill('A one pixel test picture');
+  await first.locator('[data-action=image-save]').click();
+  await expect(page.locator('#toast')).toContainText('Saved in Sitewright');
+  await first.locator('[data-action=image-apply]').click();
+  await expect(page.locator('#toast')).toContainText('does not use the Sitewright plugin');                  // Fixture Co has no plugin: nothing was sent anywhere
+  await page.selectOption('#site-switch', { label: 'All sites' });
+});
+
 test('require two-step verification: an admin without it is steered to My Account until they enrol', async ({ page }) => {
   const ADA = { user: 'ada', pass: 'ada admin passphrase 123', email: 'ada@example.test' };
   async function enrol(who) {

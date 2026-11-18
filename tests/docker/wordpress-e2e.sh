@@ -36,6 +36,9 @@ $CLI wp option update woocommerce_store_city Pueblo >/dev/null 2>&1
 $CLI wp option update woocommerce_store_postcode 81008 >/dev/null 2>&1
 $CLI wp option update woocommerce_default_country US:CO >/dev/null 2>&1
 $CLI wp eval 'global $wpdb; $wpdb->query("CREATE TABLE wp_redirection_items (id INT AUTO_INCREMENT PRIMARY KEY, url VARCHAR(2000), match_url VARCHAR(2000), regex TINYINT, action_type VARCHAR(20), action_code INT, action_data LONGTEXT, match_type VARCHAR(20), status VARCHAR(20))"); $wpdb->query("INSERT INTO wp_redirection_items (url, regex, action_type, action_code, action_data, match_type, status) VALUES (\"/old-r/\", 0, \"url\", 301, \"/new-r/\", \"url\", \"enabled\"), (\"/rx/(.*)\", 1, \"url\", 301, \"/y/\", \"url\", \"enabled\"), (\"/off/\", 0, \"url\", 301, \"/z/\", \"url\", \"disabled\")"); echo $wpdb->last_error;' 2>&1 | grep -v '^$' | head -3
+# an image in the media library, with an alt text and a title that Sitewright may change (only if the owner allows it)
+IMG_URL=$($CLI wp eval 'require_once ABSPATH . "wp-admin/includes/image.php"; $f = wp_upload_dir()["path"] . "/e2e-picture.png"; file_put_contents($f, base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")); $id = wp_insert_attachment(["post_mime_type" => "image/png", "post_title" => "Old title", "post_status" => "inherit"], $f); wp_update_attachment_metadata($id, wp_generate_attachment_metadata($id, $f)); update_post_meta($id, "_wp_attachment_image_alt", "old alt"); echo wp_get_attachment_url($id);' 2>&1 | tail -1)
+echo "e2e image: $IMG_URL"
 # the consent form's own handler (real WordPress, as an administrator): a bogus type is ignored, only what is ticked turns on
 got=$($CLI wp --user=admin eval '$_POST = $_REQUEST = ["sitewright_consent_form" => "1", "sitewright_consent" => ["media", "bogus", "versions"], "_wpnonce" => wp_create_nonce("sitewright_consent_save")]; ob_start(); Sitewright_Agent::settings_page(); $o = ob_get_clean(); echo json_encode(array_keys(array_filter(Sitewright_Agent::consent()))) . (strpos($o, "Saved") !== false ? " saved" : " NOT-saved");' 2>&1)
 [ "$got" = '["media","versions"] saved' ] || { echo "FAIL consent form: $got"; exit 1; }
@@ -50,7 +53,7 @@ got=$($CLI wp eval 'echo json_encode([Sitewright_Agent::normalise_secret(" \"" .
 want='["abababababababababababababababababababababababababababababababab",null,null,null,null]'
 [ "$got" = "$want" ] || { echo "FAIL plugin secret validation: $got"; exit 1; }
 echo "plugin secret validation: ok"
-docker run --rm --network $NET -v "$PWD":/app -w /app -e WP_URL=http://sw-wp -e WP_SECRET=$SECRET -e WP_DB_HOST=sw-wp-db \
+docker run --rm --network $NET -v "$PWD":/app -w /app -e WP_URL=http://sw-wp -e WP_SECRET=$SECRET -e WP_DB_HOST=sw-wp-db -e WP_IMAGE_URL="$IMG_URL" \
   -e SW_TEST_DB_HOST=sw-db-mariadb-10-11 -e SW_TEST_DB_USER=root -e SW_TEST_DB_PASS=test-root-pw sw-php:8.3 php tests/e2e/wordpress.php
 rc=$?
 [ $rc -ne 0 ] && { echo "--- WordPress PHP log (tail)"; docker logs --tail 15 sw-wp 2>&1 | grep -iE "fatal|warning|error|sitewright" | head -10; }

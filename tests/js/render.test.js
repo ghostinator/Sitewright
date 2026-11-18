@@ -770,6 +770,31 @@ test('add sites from a DNS account: the picker marks what is already a site, the
     const a = box.ownerDocument.createElement('div'); SW.renderSiteImport(a, [{ id: 1, name: p, type_label: p }]); for (const i of [...a.querySelectorAll('select')]) i.remove(); assertInert(a, p, 'import head');
   }
 });
+test('image results: with a site chosen each image has alt text and title boxes, Suggest, Save and Apply; without one, no Apply; viewers and old results get no editing', () => {
+  const { SW, box } = load();
+  const data = (over = {}) => ({ images: [{ id: 5, src: 'https://s.example/a.png', alt: 'Existing alt', title: 'T', has_alt: true, size: 1000, dimensions: '1x1', optimized: true }, { id: 6, src: 'https://s.example/b.png', alt: '', title: '', has_alt: false, size: 1000, dimensions: '1x1', optimized: false }], found: 2, skipped: 0, truncated: false, limit: 50, project_id: 3, ...over });
+  SW.renderImageResults(box, data(), true);
+  const items = [...box.querySelectorAll('.list-item')]; assert.equal(items.length, 2);
+  assert.deepEqual([items[0].querySelector('.image-alt').value, items[0].querySelector('.image-title').value, items[1].querySelector('.image-alt').value], ['Existing alt', 'T', '']);
+  assert.deepEqual([...items[0].querySelectorAll('[data-action]')].map(b => b.dataset.action), ['image-suggest', 'image-save', 'image-apply']);
+  const apply = items[1].querySelector('[data-action="image-apply"]'); assert.deepEqual([apply.dataset.id, apply.dataset.project, apply.dataset.src], ['6', '3', 'https://s.example/b.png']);
+  assert.ok(box.querySelector('[data-action="image-apply-all"]') && box.querySelector('#image-changes')); assert.match(box.textContent, /owner to have ticked "Change image text"/);
+  box.replaceChildren(); SW.renderImageResults(box, data({ project_id: 0 }), true); assert.equal(box.querySelector('[data-action="image-apply"]'), null); assert.equal(box.querySelector('[data-action="image-apply-all"]'), null); assert.ok(box.querySelector('[data-action="image-save"]')); assert.match(box.textContent, /Choose a site in the header/);
+  box.replaceChildren(); SW.renderImageResults(box, data(), false); assert.equal(box.querySelector('input'), null, 'a viewer sees no boxes'); assert.equal(box.querySelector('[data-action]'), null);
+  box.replaceChildren(); SW.renderImageResults(box, { images: [{ src: 'a', has_alt: false, size: 10, dimensions: '1x1', optimized: null }], found: 1, skipped: 0, truncated: false, limit: 50 }, true); assert.equal(box.querySelector('input'), null, 'results without ids cannot be edited');
+  for (const p of PAYLOADS) { box.replaceChildren(); SW.renderImageResults(box, data({ images: [{ id: 1, src: p, alt: p, title: p, has_alt: true, size: 1, dimensions: p, optimized: null }] }), true);
+    const inputs = [...box.querySelectorAll('input')]; assert.equal(inputs[0].value, p, 'the text is in the box as text'); inputs.forEach(i => i.remove()); assertInert(box, p, 'image text'); }
+});
+test('image changes: what changed on the site is listed with Undo only while it can still be undone; all text is plain text', () => {
+  const { SW, box } = load();
+  SW.renderMediaChanges(box, { changes: [{ id: 1, image_url: 'https://s.example/a.png', old_alt: 'old', new_alt: 'new', old_title: 'Old', new_title: null, applied_at: '2026-11-18 10:00:00', undone_at: null },
+    { id: 2, image_url: 'https://s.example/b.png', old_alt: '', new_alt: 'b', old_title: '', new_title: 'B', applied_at: '2026-11-18 09:00:00', undone_at: '2026-11-18 11:00:00' }] });
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 2);
+  assert.match(rows[0].textContent, /alt text: "old" → "new"/); assert.doesNotMatch(rows[0].textContent, /title:/, 'an unchanged title is not listed');
+  assert.deepEqual([...rows[0].querySelectorAll('[data-action]')].map(b => [b.dataset.action, b.dataset.id]), [['media-undo', '1']]); assert.equal(rows[1].querySelector('[data-action]'), null); assert.match(rows[1].textContent, /undone/);
+  box.replaceChildren(); SW.renderMediaChanges(box, { changes: [] }); assert.equal(box.textContent, '');
+  for (const p of PAYLOADS) { box.replaceChildren(); SW.renderMediaChanges(box, { changes: [{ id: 1, image_url: p, old_alt: p, new_alt: p, old_title: p, new_title: p, applied_at: p, undone_at: null }] }); assertInert(box, p, 'media changes'); assert.ok(box.textContent.includes(p)); }
+});
 test('Search Console: the property that matches the site is preselected (domain property first)', () => {
   const { SW, box } = load();
   const state = { configured: true, redirect_uri: 'x', connections: [{ id: 9, property_url: null, site_id: 5, last_status: 'ok', last_sync_at: null, rows_synced: 0, last_error: null }] };

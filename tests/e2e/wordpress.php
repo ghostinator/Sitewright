@@ -58,7 +58,7 @@ $check('static-file 404 also captured', (bool)$db->fetchOne("SELECT 1 x FROM sw_
 $http("$WP/does-not-exist-1/");
 SiteSync::handleJob(['site_id' => $id]);
 $check('later hits update the same row (absolute count)', (int)$db->fetchOne("SELECT hits FROM sw_404_monitor WHERE uri = '/does-not-exist-1/'")['hits'] === 3);
-$check('cursor advanced and status ok', (int)$site()['cursor_seq'] > 0 && $site()['last_status'] === 'ok' && $site()['plugin_version'] === '1.1.0');
+$check('cursor advanced and status ok', (int)$site()['cursor_seq'] > 0 && $site()['last_status'] === 'ok' && $site()['plugin_version'] === '1.2.0');
 
 // ---- redirects pushed and enforced -------------------------------------------------------------------------------------------
 $ins = fn (string $s, string $t, string $ty) => $db->query("INSERT INTO sw_redirections (project_id, source_url, target_url, redirect_type, status) VALUES (:p, :s, :t, :ty, 'active')", ['p' => $id, 's' => $s, 't' => $t, 'ty' => $ty]);
@@ -94,12 +94,12 @@ $get = fn (string $route, array $q = []) => (function () use ($WP, $SECRET, $rou
 })();
 $wpdb = new PDO('mysql:host=' . getenv('WP_DB_HOST') . ';dbname=wp;charset=utf8mb4', 'wp', 'wp', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $setConsent = function (array $on) use ($wpdb): void {
-    $types = ['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions'];
+    $types = ['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions', 'media_write'];
     $val = serialize(array_combine($types, array_map(fn ($t) => in_array($t, $on, true), $types)));
     $wpdb->prepare("INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('sitewright_consent', ?, 'no') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)")->execute([$val]);
 };
 $st = $get('/sitewright/v1/status');
-$check('fresh install: the status lists every data type and all are off', $st['status'] === 200 && array_keys($st['json']['features'] ?? []) === ['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions'] && !in_array(true, $st['json']['features'], true), json_encode($st['json']['features'] ?? null));
+$check('fresh install: the status lists every data type and all are off', $st['status'] === 200 && array_keys($st['json']['features'] ?? []) === ['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions', 'media_write'] && !in_array(true, $st['json']['features'], true), json_encode($st['json']['features'] ?? null));
 $check('the base status answer carries no WordPress or PHP version (that is the owner\'s "versions" choice)', !array_key_exists('wp_version', $st['json']) && !array_key_exists('php_version', $st['json']), json_encode(array_keys($st['json'])));
 $denied = [];
 foreach (['site', 'content', 'seo', 'existing-redirects', 'store', 'media', 'versions'] as $r) { $x = $get("/sitewright/v1/$r"); if ($x['status'] !== 403 || ($x['json']['code'] ?? '') !== 'sitewright_not_approved') { $denied[] = $r . ':' . $x['status']; } }
@@ -132,6 +132,32 @@ $setConsent(['site', 'media']);
 SiteSync::handleJob(['site_id' => $id]);
 $check('the owner withdraws page list and search data: Sitewright deletes what it stored', (int)$db->fetchOne('SELECT COUNT(*) n FROM sw_site_pages')['n'] === 0 && (int)$db->fetchOne('SELECT COUNT(*) n FROM sw_site_seo')['n'] === 0 && $states()['content'] === 'not_allowed' && $states()['site'] === 'ok', json_encode($states()));
 $x = $get('/sitewright/v1/content'); $check('...and the plugin itself refuses the route again', $x['status'] === 403);
+
+// ---- writing image text back: a separate approval, only alt text and title, undoable ---------------------------------------------------
+$post = fn (array $body) => (function () use ($WP, $SECRET, $body): array {
+    $route = '/sitewright/v1/media-text'; $json = json_encode($body); $t = time(); $n = bin2hex(random_bytes(12));
+    $r = SafeHttpClient::default()->request('POST', "$WP/?rest_route=$route", ['headers' => ['Content-Type: application/json', 'X-Sitewright-Signature: t=' . $t . ',n=' . $n . ',s=' . SiteSync::sign($SECRET, 'POST', $route, $t, $n, $json)], 'body' => $json, 'follow' => false]);
+    return ['status' => (int)$r['status'], 'json' => json_decode((string)$r['body'], true) ?: []];
+})();
+$img = (string)getenv('WP_IMAGE_URL'); $check('the e2e image exists in the media library', str_starts_with($img, 'http') && str_contains($img, 'e2e-picture'), $img);
+$meta = fn (int $id, string $k) => (string)$wpdb->query("SELECT meta_value FROM wp_postmeta WHERE post_id = $id AND meta_key = '$k'")->fetchColumn();
+$x = $post(['items' => [['url' => $img, 'alt' => 'new alt']]]); $check('changing image text is refused until the owner allows exactly that (the read-only choices do not allow it)', $x['status'] === 403 && ($x['json']['code'] ?? '') === 'sitewright_not_approved', json_encode($x));
+$setConsent(['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions']);
+$x = $post(['items' => [['url' => $img, 'alt' => 'new alt']]]); $check('ticking every read-only choice still does not allow changes', $x['status'] === 403, json_encode($x));
+$setConsent(['media_write']);
+$x = $post(['items' => [['url' => $img, 'alt' => 'A <b>fresh</b>   alt text', 'title' => 'New title']]]); $r0 = $x['json']['results'][0] ?? [];
+$check('allowed: the alt text and title are changed, tags and extra spaces removed, and the previous values come back', $x['status'] === 200 && ($r0['ok'] ?? false) === true && ($r0['previous'] ?? null) === ['alt' => 'old alt', 'title' => 'Old title'], json_encode($x));
+$attId = (int)($r0['id'] ?? 0); $check('WordPress now holds the new text', $meta($attId, '_wp_attachment_image_alt') === 'A fresh alt text' && (string)$wpdb->query("SELECT post_title FROM wp_posts WHERE ID = $attId")->fetchColumn() === 'New title');
+$x = $post(['items' => [['url' => $img, 'alt' => $r0['previous']['alt'], 'title' => $r0['previous']['title']]]]);
+$check('undo: sending the previous values puts them back', $x['status'] === 200 && $meta($attId, '_wp_attachment_image_alt') === 'old alt' && (string)$wpdb->query("SELECT post_title FROM wp_posts WHERE ID = $attId")->fetchColumn() === 'Old title', json_encode($x));
+$x = $post(['items' => [['url' => $img, 'alt' => '']]]); $check('an empty alt text is allowed (a decorative image)', ($x['json']['results'][0]['ok'] ?? false) === true && $meta($attId, '_wp_attachment_image_alt') === '');
+$x = $post(['items' => [['url' => $img, 'title' => '']]]); $check('an empty title and no alt means nothing to change', ($x['json']['results'][0]['ok'] ?? true) === false && ($x['json']['results'][0]['error'] ?? '') === 'nothing to change');
+$other = $WP . '/wp-content/uploads/not-in-library.png'; $x = $post(['items' => [['url' => $other, 'alt' => 'x'], ['url' => 'javascript:alert(1)', 'alt' => 'x'], ['url' => $WP . '/', 'alt' => 'x'], ['url' => $img . '?x=1', 'alt' => ['array']]]]);
+$check('anything that is not an image in the media library is refused item by item (a file that is not there, a script address, a page)', count(array_filter($x['json']['results'] ?? [], fn ($r) => ($r['ok'] ?? true) === false)) === 4, json_encode($x['json']['results'] ?? $x));
+$check('the request is bounded: no items, too many items and a non-list are refused', $post(['items' => []])['status'] === 400 && $post(['items' => array_fill(0, 51, ['url' => $img, 'alt' => 'x'])])['status'] === 400 && $post(['items' => 'nope'])['status'] === 400);
+$x = $get('/sitewright/v1/media-text'); $check('the route cannot be read, only posted to', $x['status'] === 404 || $x['status'] === 405, (string)$x['status']);
+$postCount = (int)$wpdb->query("SELECT COUNT(*) FROM wp_posts WHERE post_type = 'attachment'")->fetchColumn(); $check('nothing was uploaded or created along the way', $postCount === 1, (string)$postCount);
+$setConsent(['site', 'media']);
 
 // ---- failure modes ----------------------------------------------------------------------------------------------------------
 $db->update('sites', ['secret_enc' => Crypto::encrypt(str_repeat('b', 64), "site:$id")], ['id' => $id]);

@@ -110,7 +110,7 @@ class ImageSeoController
                 'has_alt' => $f['alt'] !== '', 'optimized' => $this->optimized($f['alt'], $info['size']),
             ];
         }
-        Response::success('Analyzed ' . count($out) . ' images', ['images' => $out, 'found' => count($found), 'skipped' => $skipped, 'truncated' => $truncated, 'limit' => $maxImages]);
+        Response::success('Analyzed ' . count($out) . ' images', ['images' => $out, 'found' => count($found), 'skipped' => $skipped, 'truncated' => $truncated, 'limit' => $maxImages, 'project_id' => $projectId]);
     }
 
     /** Filename-derived suggestion. Not AI: it only turns "red-shoes_2.jpg" into "Red Shoes 2". */

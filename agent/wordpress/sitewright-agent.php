@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sitewright Agent
  * Description: Lets a Sitewright server (which calls this site; this site never calls out) read the 404 log, push redirect rules that this plugin enforces locally, and read only the extra details the site owner approves under Settings > Sitewright.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Requires PHP: 7.4
  * License: MIT
  *
@@ -10,6 +10,7 @@
  * or paste it under Settings > Sitewright. Redirect rules are cached in the database and enforced without contacting Sitewright, so the
  * site keeps working if Sitewright is offline. Stored per 404: path (no query string), referer origin+path, hit counter, last-seen time.
  * No IP addresses and no user agents are stored.
+ * Image text can only be CHANGED (alt text and title of images in the media library, nothing else) when the owner ticks "Change image text".
  * Extra details (site info, page list, search titles, existing redirects, store address, media counts, version counts) are OFF until the owner ticks
  * each one under Settings > Sitewright. Never offered: users, e-mail addresses, customers, orders, page text, comments, plugin names.
  */
@@ -17,7 +18,7 @@ if (!defined('ABSPATH')) { exit; }
 
 final class Sitewright_Agent
 {
-    const VERSION = '1.1.0';
+    const VERSION = '1.2.0';
     const MAX_SKEW = 300;          // seconds a signature stays valid
     const MAX_RULES = 5000;
     const MAX_404_ROWS = 5000;
@@ -33,6 +34,7 @@ final class Sitewright_Agent
         'store' => ['Shop address', 'The shop address saved in WooCommerce settings. No customers, orders or products.'],
         'media' => ['Media library counts', 'How many images there are and how many have no alt text. Counts only; no files or file names.'],
         'versions' => ['Version and update counts', 'WordPress and PHP versions, and how many updates are waiting. Counts only; no plugin or theme names.'],
+        'media_write' => ['Change image text', 'Lets Sitewright SET the alt text and title of images that are already in your media library, only when someone presses Apply in Sitewright (up to 50 at a time). It cannot upload, delete or change anything else, and every change can be undone from Sitewright. This is the only choice here that lets Sitewright change your site.'],
     ];
 
     public static function boot(): void
@@ -182,6 +184,10 @@ final class Sitewright_Agent
         register_rest_route('sitewright/v1', '/404s', ['methods' => 'GET', 'callback' => [self::class, 'route_404s'], 'permission_callback' => $perm]);
         register_rest_route('sitewright/v1', '/redirects', ['methods' => 'POST', 'callback' => [self::class, 'route_redirects'], 'permission_callback' => $perm]);
         foreach (array_keys(self::CONSENT) as $type) {
+            if ($type === 'media_write') {   // the only choice that lets Sitewright change something: a POST, nothing else
+                register_rest_route('sitewright/v1', '/media-text', ['methods' => 'POST', 'callback' => [self::class, 'route_media_text'], 'permission_callback' => $perm]);
+                continue;
+            }
             // 'redirects' is the data type; its route is /existing-redirects because POST /redirects already pushes rules the other way
             $path = $type === 'redirects' ? 'existing-redirects' : $type;
             $cb = $type === 'redirects' ? 'route_redirects_list' : 'route_' . $type;
@@ -397,6 +403,41 @@ final class Sitewright_Agent
         $noAlt = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} p LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_wp_attachment_image_alt'
             WHERE p.post_type = 'attachment' AND p.post_mime_type LIKE 'image/%' AND (m.meta_value IS NULL OR m.meta_value = '')");
         return ['images' => $images, 'images_without_alt' => $noAlt];
+    }
+
+    /** The media library entry (an image) that this address belongs to, or 0. Resized copies ("-300x200") map to their original. */
+    private static function image_id(string $url): int
+    {
+        if ($url === '' || strlen($url) > 1000 || !preg_match('#^https?://#i', $url)) { return 0; }
+        $id = (int)attachment_url_to_postid($url);
+        return $id > 0 && get_post_type($id) === 'attachment' && wp_attachment_is_image($id) ? $id : 0;
+    }
+
+    /**
+     * POST /media-text {items:[{url, alt?, title?}]} (at most 50). Sets the alt text and/or the title of images already in the media library and returns
+     * what each one was before, so the change can be undone. An empty alt text is allowed (decorative image); an empty title is ignored.
+     */
+    public static function route_media_text(WP_REST_Request $req)
+    {
+        if ($e = self::gate('media_write')) { return $e; }
+        $p = $req->get_json_params();
+        $items = is_array($p['items'] ?? null) ? $p['items'] : null;
+        if ($items === null || $items === [] || count($items) > 50) { return new WP_Error('sitewright_bad_items', 'items must be a list of 1 to 50', ['status' => 400]); }
+        $out = [];
+        foreach ($items as $it) {
+            $url = is_array($it) && is_string($it['url'] ?? null) ? $it['url'] : '';
+            $id = self::image_id($url);
+            if ($id === 0) { $out[] = ['url' => mb_substr($url, 0, 300), 'ok' => false, 'error' => 'not an image in the media library']; continue; }
+            $alt = is_string($it['alt'] ?? null) ? self::text($it['alt'], 500) : null;
+            $title = is_string($it['title'] ?? null) ? self::text($it['title'], 200) : null;
+            if ($title === '') { $title = null; }
+            if ($alt === null && $title === null) { $out[] = ['url' => mb_substr($url, 0, 300), 'ok' => false, 'error' => 'nothing to change']; continue; }
+            $prev = ['alt' => (string)get_post_meta($id, '_wp_attachment_image_alt', true), 'title' => (string)get_the_title($id)];
+            if ($alt !== null) { update_post_meta($id, '_wp_attachment_image_alt', $alt); }
+            if ($title !== null) { wp_update_post(['ID' => $id, 'post_title' => $title]); }
+            $out[] = ['url' => mb_substr($url, 0, 300), 'ok' => true, 'id' => $id, 'previous' => $prev];
+        }
+        return ['results' => $out];
     }
 
     public static function route_versions(WP_REST_Request $req)
