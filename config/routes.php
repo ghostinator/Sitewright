@@ -37,6 +37,8 @@ return [
     ['GET',    '/api/overview',                 $C . 'OverviewController@sites', ['role' => 'viewer']],
     ['GET',    '/api/sites',                    $C . 'SiteController@list',      ['role' => 'admin']],
     ['POST',   '/api/sites',                    $C . 'SiteController@create',    ['role' => 'admin']],
+    ['POST',   '/api/sites/import',             $C . 'SiteController@import',    ['role' => 'admin', 'limit' => 'import']],
+    ['GET',    '/api/dns-accounts/{id}/domains', $C . 'SiteController@accountDomains', ['role' => 'admin']],
     ['GET',    '/api/sites/plugin',             $C . 'SiteController@plugin',    ['role' => 'admin']],
     ['GET',    '/api/sites/{id}/profile',       $C . 'SiteProfileController@show',    ['role' => 'viewer']],
     ['POST',   '/api/sites/{id}/profile',       $C . 'SiteProfileController@choose',  ['role' => 'admin']],

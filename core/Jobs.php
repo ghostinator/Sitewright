@@ -150,6 +150,7 @@ final class Jobs
         if ($type === 'site_profile') { return SiteProfile::handleJob($payload); }
         if ($type === 'site_expiry') { return SiteExpiry::handleJob($payload); }
         if ($type === 'cert_issue') { return Certificates::handleJob($payload); }
+        if ($type === 'site_import') { return SiteImport::handleJob($payload); }
         if ($type === 'gsc_sync') { return Gsc::handleJob($payload); }
         if ($type === 'watch_run') { return Watchlist::handleJob($payload); }
         if ($type === 'site_audit') { return SiteAudit::handleJob($payload); }

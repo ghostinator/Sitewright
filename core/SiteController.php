@@ -10,7 +10,30 @@ final class SiteController
     {
         $db = Database::getInstance();
         $rows = $db->fetchAll('SELECT id, name, base_url, created_at, last_sync_at, last_status, last_error, plugin_version, sync_enabled FROM `' . $db->t('sites') . '` ORDER BY id');
-        Response::success('Sites', ['sites' => $rows, 'encryption_ready' => Crypto::configured()]);
+        $accounts = array_map(static fn (array $a): array => ['id' => (int)$a['id'], 'name' => $a['name'], 'type_label' => DnsProvider::TYPES[$a['type']] ?? $a['type']], $db->fetchAll('SELECT id, name, type FROM `' . $db->t('dns_providers') . '` ORDER BY name'));
+        Response::success('Sites', ['sites' => $rows, 'encryption_ready' => Crypto::configured(), 'dns_accounts' => $accounts]);
+    }
+
+    /** The domains a DNS account manages, and which already are sites. */
+    public function accountDomains(array $params): never
+    {
+        $id = Validator::id($params['id'] ?? null);
+        $db = Database::getInstance();
+        if (!$db->fetchOne('SELECT 1 x FROM `' . $db->t('dns_providers') . '` WHERE id = :i', ['i' => $id])) { Response::notFound('DNS account not found'); }
+        try { $domains = Certificates::provider($id)->domains(); }
+        catch (DnsProviderException $e) { Response::error(Certificates::scrub($e->getMessage(), $id), 502); }
+        if ($domains === null) { Response::error('This provider cannot list its domains', 409); }
+        Response::success('Domains', ['domains' => SiteImport::listing($domains)]);
+    }
+
+    /** Check the chosen domains for a website and add those that have one (a background job). */
+    public function import(array $params): never
+    {
+        $in = Request::json();
+        $domains = SiteImport::clean(is_array($in['domains'] ?? null) ? $in['domains'] : []);
+        if (!$domains) { Validator::fail('domains', 'choose at least one domain'); }
+        Audit::log('site_import_started', null, '', count($domains) . ' domain(s)');
+        Response::success('Checking the domains', ['job_id' => Jobs::enqueue('site_import', ['domains' => $domains], (int)Auth::user()['id'], 0, 1)], 202);
     }
 
     /** Id, name and address, for the site switcher (every signed-in role needs it; the full list with sync state and errors is admin-only). */

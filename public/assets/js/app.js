@@ -249,6 +249,31 @@
         setContent(container, ...nodes);
     }
 
+    // ------------------------------------------------------------------ add sites from a DNS account
+    function renderSiteImport(container, accounts) {
+        const head = [el('h4', { text: 'Add sites from a DNS account' })];
+        if (!(accounts || []).length) return setContent(container, ...head, muted('Add a DNS account under Certificates first. Sitewright can then list the domains it manages and add the ones that have a website.'));
+        const sel = el('select', { attrs: { id: 'import-account', 'aria-label': 'DNS account' } }, ...accounts.map(a => el('option', { text: a.name + ' (' + a.type_label + ')', attrs: { value: String(a.id) } })));
+        setContent(container, ...head, muted('Sitewright looks at each domain and adds only those that serve a website. Parked domains, mail-only domains and domains that just redirect elsewhere are skipped, with the reason.'),
+            el('div', { class: 'form-row' }, sel, smallButton('Find domains', 'import-find', '', 'btn-primary')), el('div', { attrs: { id: 'import-list' } }));
+    }
+
+    function renderImportPicker(container, d) {
+        const domains = d.domains || [];
+        if (!domains.length) return setContent(container, muted('This account manages no domains.'));
+        const boxes = domains.map(x => el('label', { class: 'check-row' }, el('input', { attrs: { type: 'checkbox', value: x.name }, class: 'import-domain' }), ' ', el('span', { text: x.name }), x.added ? el('span', { class: 'badge', text: 'already a site' }) : null));
+        boxes.forEach((b, i) => { const c = b.querySelector('input'); if (domains[i].added) c.disabled = true; else c.checked = true; });
+        setContent(container, el('p', { class: 'text-muted', text: domains.filter(x => !x.added).length + ' of ' + domains.length + ' domains are not sites yet. Untick any you do not want.' }), el('div', { class: 'import-grid' }, ...boxes),
+            el('p', {}, smallButton('Add the selected sites', 'import-run', '', 'btn-primary'), ' ', smallButton('Untick all', 'import-none', ''), ' ', smallButton('Tick all', 'import-all', '')));
+    }
+
+    function renderImportResult(container, r) {
+        const added = r.added || [], skipped = r.skipped || [];
+        setContent(container, el('div', { class: 'alert alert-info', text: 'Added ' + added.length + ' site' + (added.length === 1 ? '' : 's') + (skipped.length ? ', skipped ' + skipped.length : '') + '. New sites are read and checked in the background; open their Setup guide in a minute.' }),
+            added.length ? el('p', { class: 'break-all', text: 'Added: ' + added.map(a => a.url).join(', ') }) : null,
+            skipped.length ? tableOf(['Domain', 'Why it was skipped'], skipped.map(s => el('tr', {}, el('td', { class: 'break-all', text: s.domain }), el('td', { text: s.reason })))) : null);
+    }
+
     // ------------------------------------------------------------------ certificates
     const CERT_STATE = { new: 'Waiting to start', issuing: 'Getting it now', issued: 'Issued', failed: 'Failed' };
     const certField = (id, label, input) => el('div', { class: 'form-group' }, el('label', { text: label, attrs: { for: id } }), input);
@@ -788,7 +813,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderCertificates, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderSiteImport, renderImportPicker, renderImportResult, renderCertificates, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -1025,7 +1050,7 @@
             if (d.audits.some(a => a.status === 'queued' || a.status === 'running') && viewFromLocation() === 'site-audit') auditPoll = setTimeout(loadSiteAudits, 4000);
         } catch (e) { showError(box, 'Could not load audits: ' + e.message); }
     }
-    const loadSites = () => loadInto('sites-list', '/sites', (box, d) => renderSites(box, d.sites), 'sites');
+    const loadSites = () => loadInto('sites-list', '/sites', (box, d) => { renderSites(box, d.sites); const imp = document.getElementById('site-import'); if (imp && !imp.querySelector('#import-list .import-grid')) renderSiteImport(imp, d.dns_accounts); }, 'sites');
     const loadCertificates = () => loadInto('cert-area', '/certificates', renderCertificates, 'certificates');
     let profileSiteId = 0, profilePoll = null;
     /** Show the setup guide of one site; while the first read is still queued, look again every 2 seconds (at most 10 times). */
@@ -1354,6 +1379,18 @@
     // ------------------------------------------------------------------ delegated clicks
 
     const clickActions = {
+        'import-find': async () => {
+            const id = document.getElementById('import-account').value, box = document.getElementById('import-list');
+            setContent(box, muted('Looking up the domains…'));
+            try { renderImportPicker(box, await apiRequest('GET', '/dns-accounts/' + encodeURIComponent(id) + '/domains')); } catch (e) { setContent(box, el('div', { class: 'alert alert-error', text: e.message })); }
+        },
+        'import-all': () => { for (const c of document.querySelectorAll('#import-list .import-domain:not(:disabled)')) c.checked = true; },
+        'import-none': () => { for (const c of document.querySelectorAll('#import-list .import-domain')) c.checked = false; },
+        'import-run': async () => {
+            const domains = [...document.querySelectorAll('#import-list .import-domain:checked')].map(c => c.value), box = document.getElementById('import-list');
+            if (!domains.length) { showToast('Tick at least one domain', 'error'); return; }
+            try { renderImportResult(box, await runJob('/sites/import', { domains }, box, 'Checking ' + domains.length + ' domains for a website')); loadSites(); loadSiteOptions(); } catch (e) { setContent(box, el('div', { class: 'alert alert-error', text: e.message })); }
+        },
         'dns-test': async t => { const inp = t.parentElement.querySelector('.cert-test-domain'); const d = await apiRequest('POST', '/dns-accounts/' + encodeURIComponent(t.dataset.id) + '/test', { domain: inp ? inp.value.trim() : '' }); showToast(d.message, d.ok ? 'success' : 'error'); loadCertificates(); },
         'dns-delete': async t => { if (confirm('Delete this DNS account?')) { await apiRequest('DELETE', '/dns-accounts/' + encodeURIComponent(t.dataset.id)); showToast('DNS account deleted'); loadCertificates(); } },
         'cert-renew': async t => { await apiRequest('POST', '/certificates/' + encodeURIComponent(t.dataset.id) + '/renew', {}); showToast('Getting a new certificate now'); setTimeout(loadCertificates, 15000); loadCertificates(); },

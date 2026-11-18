@@ -371,6 +371,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <div id="site-secret" class="hidden"></div>
                     <div id="sites-list" class="list-area"></div>
                     <div id="site-profile" class="list-area hidden"></div>
+                    <div id="site-import" class="list-area"></div>
                 </div></div>
 
                 <div class="view" id="view-certificates"><div class="card">

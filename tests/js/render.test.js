@@ -753,6 +753,23 @@ test('audit report: repeated link problems are listed once with how many pages, 
   for (const p of PAYLOADS) { box.replaceChildren(); const a2 = JSON.parse(JSON.stringify(audit)); a2.summary.fix_once[0].target = 'https://x.example/' + p; a2.summary.fix_once[0].destination = p; a2.summary.fix_once[1].suggestion.target = p; a2.summary.fix_once[0].sample = [p];
     SW.renderSiteAuditReport(box, { audit: a2, types: [] }, true); assertInert(box, p, 'audit fix-once'); }
 });
+test('add sites from a DNS account: the picker marks what is already a site, the result says what was added and why the rest was skipped, everything as text', () => {
+  const { SW, box } = load();
+  SW.renderSiteImport(box, []); assert.match(box.textContent, /Add a DNS account under Certificates first/);
+  SW.renderSiteImport(box, [{ id: 4, name: 'Main CF', type_label: 'Cloudflare' }, { id: 5, name: 'Other', type_label: 'Spaceship' }]);
+  assert.deepEqual([...box.querySelectorAll('#import-account option')].map(o => o.textContent), ['Main CF (Cloudflare)', 'Other (Spaceship)']); assert.equal(box.querySelector('[data-action="import-find"]').textContent, 'Find domains');
+  const list = box.ownerDocument.createElement('div'); SW.renderImportPicker(list, { domains: [{ name: 'new.example', added: false }, { name: 'old.example', added: true }, { name: 'two.example', added: false }] });
+  const cb = [...list.querySelectorAll('.import-domain')]; assert.deepEqual(cb.map(c => [c.value, c.checked, c.disabled]), [['new.example', true, false], ['old.example', false, true], ['two.example', true, false]]);
+  assert.match(list.textContent, /2 of 3 domains are not sites yet/); assert.match(list.textContent, /already a site/); assert.deepEqual([...list.querySelectorAll('[data-action]')].map(b => b.dataset.action), ['import-run', 'import-none', 'import-all']);
+  const res = box.ownerDocument.createElement('div'); SW.renderImportResult(res, { added: [{ domain: 'new.example', url: 'https://new.example', id: 1 }], skipped: [{ domain: 'park.example', reason: 'Answered with HTTP 500' }, { domain: 'r.example', reason: 'Redirects to shop.example' }] });
+  assert.match(res.textContent, /Added 1 site, skipped 2/); assert.match(res.textContent, /Added: https:\/\/new\.example/); assert.match(res.textContent, /park\.example.*Answered with HTTP 500/);
+  SW.renderImportPicker(list, { domains: [] }); assert.match(list.textContent, /manages no domains/);
+  for (const p of PAYLOADS) {
+    const l = box.ownerDocument.createElement('div'); SW.renderImportPicker(l, { domains: [{ name: p, added: false }] }); for (const i of [...l.querySelectorAll('input')]) i.remove(); assertInert(l, p, 'import picker'); assert.ok(l.textContent.includes(p));
+    const r = box.ownerDocument.createElement('div'); SW.renderImportResult(r, { added: [{ url: p }], skipped: [{ domain: p, reason: p }] }); assertInert(r, p, 'import result'); assert.ok(r.textContent.includes(p));
+    const a = box.ownerDocument.createElement('div'); SW.renderSiteImport(a, [{ id: 1, name: p, type_label: p }]); for (const i of [...a.querySelectorAll('select')]) i.remove(); assertInert(a, p, 'import head');
+  }
+});
 test('Search Console: the property that matches the site is preselected (domain property first)', () => {
   const { SW, box } = load();
   const state = { configured: true, redirect_uri: 'x', connections: [{ id: 9, property_url: null, site_id: 5, last_status: 'ok', last_sync_at: null, rows_synced: 0, last_error: null }] };
