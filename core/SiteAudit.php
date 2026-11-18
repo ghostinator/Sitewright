@@ -31,6 +31,9 @@ final class SiteAudit
         'images_missing_alt'    => ['low',    'Images without alt text', 'Describe each meaningful image in its alt attribute.'],
         'missing_canonical'     => ['low',    'No canonical address', 'Add a canonical link so duplicate addresses do not compete.'],
         'redirected_link'       => ['low',    'Link goes through a redirect', 'Link straight to the final address.'],
+        'nap_phone_differs'     => ['medium', 'Phone number differs from yours', 'Use the same number everywhere, or remove the old one. If it is a second line on purpose, ignore this.'],
+        'nap_address_differs'   => ['medium', 'Address differs from yours', 'Use the same street and postal code everywhere, including the structured data some plugins add.'],
+        'nap_phone_varies'      => ['low',    'Several phone numbers across the site', 'Pick the main number in the setup guide; Sitewright then shows which pages use another one.'],
     ];
     private const SEVERITY_ORDER = ['high' => 0, 'medium' => 1, 'low' => 2];
     private const MAX_ISSUES = 5000;
@@ -96,7 +99,7 @@ final class SiteAudit
         set_time_limit($budget + 120);
         $thin = (int)Config::get('audit.thin_words'); $slow = (float)Config::get('seo.load_ok');
 
-        $pages = []; $issues = []; $fetches = []; $linksFrom = []; $external = []; $lastTouch = 0;
+        $pages = []; $issues = []; $nap = []; $fetches = []; $linksFrom = []; $external = []; $lastTouch = 0;
         $seeds = array_column($db->fetchAll('SELECT url FROM `' . $db->t('sitemaps') . '` WHERE project_id = :p ORDER BY id LIMIT 500', ['p' => $project]), 'url');
         $out = Crawler::run($base, $max, $deadline, [
             'seeds' => $seeds,
@@ -108,7 +111,7 @@ final class SiteAudit
                 $linksFrom[$url] = $internal;
                 foreach ($ext as $e) { if (count($external) < 2000 || isset($external[$e])) { $external[$e] ??= $url; } }
             },
-            'on_page' => static function (string $url, array $res, \DOMDocument $dom) use (&$pages, &$issues, $thin, $slow): void {
+            'on_page' => static function (string $url, array $res, \DOMDocument $dom) use (&$pages, &$issues, &$nap, $thin, $slow): void {
                 $r = SeoAnalyzer::analyseHtml($res);
                 $score = SeoAnalyzer::calculateScore($r);
                 $title = $r['basic']['title']; $desc = $r['meta']['description'];
@@ -125,6 +128,7 @@ final class SiteAudit
                 if ($r['performance']['load_time'] > $slow) { $add('slow_page', $r['performance']['load_time'] . ' s'); }
                 if (!$r['viewport']['has_viewport']) { $add('missing_viewport'); }
                 if ($r['basic']['canonical'] === '') { $add('missing_canonical'); }
+                $n = Nap::extract($dom); if ($n['phones'] || $n['addresses']) { $nap[$url] = $n; }
             },
         ]);
         if ($pages === []) { return ['error' => $out['error'] ?? 'No page of the site could be read.']; }
@@ -135,6 +139,7 @@ final class SiteAudit
             foreach ($pages as $url => $f) { if ($f[$field] !== '') { $groups[mb_strtolower($f[$field])][] = $url; } }
             foreach ($groups as $urls) { if (count($urls) > 1) { foreach ($urls as $u) { $issues[] = [$code, $u, 'Shared with ' . (count($urls) - 1) . ' other page(s)']; } } }
         }
+        foreach (Nap::issues($nap, $project > 0 ? SiteProfile::values($project) : []) as $i) { $issues[] = $i; }
         $finalOf = [];
         foreach ($fetches as $req => $f) { if ($f['final'] !== null) { $finalOf[$req] = Url::normalize($f['final']) ?? $f['final']; } }
         $inbound = [];

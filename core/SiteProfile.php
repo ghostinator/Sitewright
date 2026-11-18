@@ -159,7 +159,7 @@ final class SiteProfile
     }
 
     /** Depth- and count-limited walk for objects that carry an @type (handles @graph and nested lists). */
-    private static function collectNodes(array $v, int $depth, array &$nodes): void
+    public static function collectNodes(array $v, int $depth, array &$nodes): void
     {
         if ($depth > 6 || count($nodes) >= 200) { return; }
         if (isset($v['@type'])) { $nodes[] = ['d' => $depth, 'n' => $v]; }
