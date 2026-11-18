@@ -58,6 +58,16 @@ test('a sitemap that robots.txt does not mention is found at the usual places; n
     eq($s['sitemap_url']['found'], 'https://corner.example/sitemap.xml'); eq($s['robots']['found'], 'Allowed'); ok(!isset($s['business_name']));
 });
 
+test('the business is the top-level node with an address or phone, not a place nested inside an event or an offer', function () use ($mkSite, $web, $page, $state) {
+    $id = $mkSite();
+    $graph = json_encode(['@graph' => [
+        ['@type' => 'Event', 'name' => 'Bread fair', 'location' => ['@type' => 'Place', 'name' => 'Fairgrounds', 'telephone' => '+1 505 000 0000', 'address' => ['streetAddress' => '1 Fair Rd']]],
+        ['@type' => 'Person', 'name' => 'Pat', 'telephone' => '+1 505 111 1111'],
+        ['@type' => 'Bakery', 'name' => 'Corner Bakery', 'telephone' => '+1 505 555 0100', 'address' => ['streetAddress' => '12 Main St']]]]);
+    $web([], $page('<title>x</title><script type="application/ld+json">' . $graph . '</script>')); SiteProfile::refresh($id); $s = $state($id);
+    eq([$s['business_name']['found'], $s['phone']['found'], $s['street']['found']], ['Corner Bakery', '+1 505 555 0100', '12 Main St']);
+});
+
 test('choices: use follows the site, my own text is never overwritten, skip stays skipped, reset starts over; unfound items can be typed', function () use ($db, $mkSite, $web, $page, $state) {
     $id = $mkSite(); $web(); SiteProfile::refresh($id);
     SiteProfile::choose($id, 'business_name', 'use'); SiteProfile::choose($id, 'phone', 'manual', '  +1 505 555 0199 '); SiteProfile::choose($id, 'description', 'skip');

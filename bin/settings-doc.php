@@ -27,7 +27,7 @@ foreach (Settings::GROUPS as $id => [$label, $desc]) {
     echo "## $label\n\n$desc\n\n| Setting | Key | Default | Allowed | Environment variable | Notes |\n|---|---|---|---|---|---|\n";
     foreach ($byGroup[$id] as $key => $d) {
         $allowed = match (true) {
-            $d['enum'] !== null && in_array($d['type'], ['enum', 'list'], true) => implode(' / ', $d['enum']),
+            $d['enum'] !== null && in_array($d['type'], ['enum', 'list'], true) => count($d['enum']) > 40 ? 'a long list (' . implode(' / ', array_slice($d['enum'], 0, 3)) . ' ...); it depends on the PHP build, so it is not printed here' : implode(' / ', $d['enum']),
             $d['min'] !== null || $d['max'] !== null => ($d['min'] ?? '') . ' to ' . ($d['max'] ?? '') . ($d['unit'] !== '' ? ' ' . $d['unit'] : ''),
             default => $d['type'] . ($d['unit'] !== '' ? ' (' . $d['unit'] . ')' : ''),
         };

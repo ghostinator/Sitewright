@@ -132,7 +132,7 @@ final class Jobs
         $db = Database::getInstance();
         $db->query("UPDATE `{$db->t('jobs')}` SET status = 'failed', finished_at = NOW(), error = :e, error_status = :s WHERE id = :id", ['e' => mb_substr($message, 0, 500), 's' => $status, 'id' => $id]);
         Logger::warn('job_failed', ['job' => $id, 'type' => $job['type'], 'status' => $status, 'reason' => $message]);
-        if (!in_array($job['type'], ['mail', 'alert', 'site_sync', 'gsc_sync'], true)) {   // a failing alert must not raise another alert; syncs raise their own, more specific one
+        if (!in_array($job['type'], ['mail', 'alert', 'site_sync', 'gsc_sync', 'site_profile'], true)) {   // a failing alert must not raise another alert; syncs raise their own, more specific one; a site that cannot be read is no outage
             Alerts::notify('job_failed', "Job #$id ({$job['type']}) failed: $message", 'warning');
         }
     }

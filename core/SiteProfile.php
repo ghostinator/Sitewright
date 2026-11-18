@@ -128,9 +128,13 @@ final class SiteProfile
             if (is_array($data)) { self::collectNodes($data, 0, $nodes); }
             if (count($nodes) >= 200) { break; }
         }
+        // the business itself: the shallowest node with an address or phone (a top-level node or one in @graph beats a place nested inside an event or offer)
+        $other = '/^(Event|Person|JobPosting|Offer|Product|Article|BlogPosting|NewsArticle|Review|Recipe|Course|Place|PostalAddress|ContactPoint)$/';
+        $isOther = static fn (array $n): bool => (bool)array_filter((array)($n['@type'] ?? ''), static fn ($t) => is_string($t) && preg_match($other, $t));
+        usort($nodes, static fn (array $a, array $b): int => $a['d'] <=> $b['d']);   // stable in PHP 8: document order inside one depth
         $biz = null;
-        foreach ($nodes as $n) { if (isset($n['address']) || isset($n['telephone'])) { $biz = $n; break; } }
-        if ($biz === null) { foreach ($nodes as $n) { if (preg_match('/Organization|Business|Store|Restaurant/i', json_encode($n['@type'] ?? '') ?: '') && isset($n['name'])) { $biz = $n; break; } } }
+        foreach ($nodes as ['n' => $n]) { if ((isset($n['address']) || isset($n['telephone'])) && !$isOther($n)) { $biz = $n; break; } }
+        if ($biz === null) { foreach ($nodes as ['n' => $n]) { if (preg_match('/Organization|Business|Store|Restaurant/i', json_encode($n['@type'] ?? '') ?: '') && isset($n['name'])) { $biz = $n; break; } } }
         if ($biz !== null) {
             $set('business_name', self::clean($biz['name'] ?? null, $max('business_name')));
             $tel = self::clean($biz['telephone'] ?? null, 30);
@@ -158,7 +162,7 @@ final class SiteProfile
     private static function collectNodes(array $v, int $depth, array &$nodes): void
     {
         if ($depth > 6 || count($nodes) >= 200) { return; }
-        if (isset($v['@type'])) { $nodes[] = $v; }
+        if (isset($v['@type'])) { $nodes[] = ['d' => $depth, 'n' => $v]; }
         foreach ($v as $child) { if (is_array($child)) { self::collectNodes($child, $depth + 1, $nodes); } }
     }
 
@@ -177,7 +181,10 @@ final class SiteProfile
             $d = ['found' => [], 'error' => 'Could not read the site (unexpected error; see the log)'];
         }
         $now = gmdate('Y-m-d H:i:s');
-        if ($d['error'] === null) { self::store($siteId, $d['found'], $now); }
+        if ($d['error'] === null) {
+            try { self::store($siteId, $d['found'], $now); }
+            catch (\Throwable $e) { Logger::warn('site_profile_failed', ['site' => $siteId, 'error' => get_class($e)]); $d['error'] = 'Could not save what the site says (see the log)'; }
+        }
         $db->update('sites', ['profile_at' => $now, 'profile_error' => $d['error'] === null ? null : mb_substr($d['error'], 0, 250)], ['id' => $siteId]);
         return ['error' => $d['error'], 'found' => count($d['found'])];
     }
@@ -194,7 +201,7 @@ final class SiteProfile
                 $state = $rows[$field] ?? null;
                 $key = ['s' => $siteId, 'f' => $field];
                 if ($state === null) {
-                    if ($f !== null) { $db->query("INSERT INTO `$t` (site_id, field, found, state, found_at, updated_at) VALUES (:s, :f, :v, :st, :n1, :n2)", $key + ['v' => $f, 'st' => $info ? 'info' : 'pending', 'n1' => $now, 'n2' => $now]); }
+                    if ($f !== null) { $db->query("INSERT INTO `$t` (site_id, field, found, state, found_at, updated_at) VALUES (:s, :f, :v, :st, :n1, :n2) ON DUPLICATE KEY UPDATE found = VALUES(found), found_at = VALUES(found_at)", $key + ['v' => $f, 'st' => $info ? 'info' : 'pending', 'n1' => $now, 'n2' => $now]); }
                 } elseif ($state === 'pending' && $f === null) {
                     $db->query("DELETE FROM `$t` WHERE site_id = :s AND field = :f", $key);   // nothing left to decide
                 } elseif ($state === 'used' && $f !== null) {
