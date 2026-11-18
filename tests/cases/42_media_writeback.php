@@ -31,7 +31,7 @@ test('apply: only the chosen images of THIS site, only text that was typed, sent
     $a = $img($site, 'a', 'Fresh alt for a', 'New A'); $b = $img($site, 'b', 'Alt for b'); $empty = $img($site, 'c', '', ''); $foreign = $img($other, 'a', 'must not be sent'); $unchosen = $img($site, 'd', 'not chosen');
     $wp('1.2.0', true, $sent);
     $r = MediaWriteback::apply($site, [$a, $b, $empty, $foreign, 99999], 7);
-    eq($r, ['applied' => 2, 'failed' => [], 'skipped' => 3], json_encode($r));
+    unset($r['ok_urls']); eq($r, ['applied' => 2, 'failed' => [], 'skipped' => 3], json_encode($r));
     eq($sent, [[['url' => 'https://p.example/wp-content/uploads/a.png', 'alt' => 'Fresh alt for a', 'title' => 'New A'], ['url' => 'https://p.example/wp-content/uploads/b.png', 'alt' => 'Alt for b']]], 'nothing else was sent: no empty text, nothing from another site, nothing unchosen');
     $c = $db->fetchAll('SELECT image_url, old_alt, new_alt, old_title, new_title, applied_by, undone_at FROM sw_media_changes ORDER BY id');
     eq([$c[0]['old_alt'], $c[0]['new_alt'], $c[0]['old_title'], $c[0]['new_title'], (int)$c[0]['applied_by']], ['old alt a', 'Fresh alt for a', 'Old A', 'New A', 7]); eq([$c[1]['old_alt'], $c[1]['new_alt'], $c[1]['new_title']], ['', 'Alt for b', null], 'a title that was not sent is not logged as changed');
@@ -47,7 +47,7 @@ test('apply is refused, with the way forward, when the plugin is too old, the ow
     $db->query('UPDATE sw_sites SET sync_enabled = 1'); fakeWeb(["https://p.example/?rest_route=/sitewright/v1/status" => [401, ['Content-Type' => 'application/json'], '{"message":"Bad signature"}']]);
     $e = throws(Sitewright\Core\ResponseException::class, fn () => MediaWriteback::apply($site, [$a], null)); eq($e->status, 502); ok(str_contains($e->body, 'secret'), $e->body);
     throws(Sitewright\Core\ResponseException::class, fn () => MediaWriteback::apply($site, [], null)); throws(Sitewright\Core\ResponseException::class, fn () => MediaWriteback::apply($site, range(1, 201), null));
-    $wp('1.2.0', true, $sent); eq(MediaWriteback::apply($site, [$img($site, 'z', '')], null), ['applied' => 0, 'failed' => [], 'skipped' => 1]); eq($sent, [], 'only empty boxes: the site is not even contacted');
+    $wp('1.2.0', true, $sent); eq(MediaWriteback::apply($site, [$img($site, 'z', '')], null), ['applied' => 0, 'failed' => [], 'skipped' => 1, 'ok_urls' => []]); eq($sent, [], 'only empty boxes: the site is not even contacted');
 });
 
 test('a plugin that refuses one item: that one is reported and not logged, the others are applied', function () use ($reset, $db, $img, $wp) {

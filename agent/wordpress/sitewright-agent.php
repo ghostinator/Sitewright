@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sitewright Agent
  * Description: Lets a Sitewright server (which calls this site; this site never calls out) read the 404 log, push redirect rules that this plugin enforces locally, and read only the extra details the site owner approves under Settings > Sitewright.
- * Version: 1.2.1
+ * Version: 1.3.0
  * Requires PHP: 7.4
  * License: MIT
  *
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) { exit; }
 
 final class Sitewright_Agent
 {
-    const VERSION = '1.2.1';
+    const VERSION = '1.3.0';
     const MAX_SKEW = 300;          // seconds a signature stays valid
     const MAX_RULES = 5000;
     const MAX_404_ROWS = 5000;
@@ -34,6 +34,7 @@ final class Sitewright_Agent
         'store' => ['Shop address', 'The shop address saved in WooCommerce settings. No customers, orders or products.'],
         'media' => ['Media library counts', 'How many images there are and how many have no alt text. Counts only; no files or file names.'],
         'versions' => ['Version and update counts', 'WordPress and PHP versions, and how many updates are waiting. Counts only; no plugin or theme names.'],
+        'media_list' => ['Image list (images without alt text)', 'For images that have no alt text: the address, the title, and the title and address of the page or product each image belongs to, so Sitewright can suggest alt text. Nothing about images that already have alt text, and no files are copied.'],
         'media_write' => ['Change image text', 'Lets Sitewright SET the alt text and title of images that are already in your media library, only when someone presses Apply in Sitewright (up to 50 at a time). It cannot upload, delete or change anything else, and every change can be undone from Sitewright. This is the only choice here that lets Sitewright change your site.'],
     ];
 
@@ -184,6 +185,7 @@ final class Sitewright_Agent
         register_rest_route('sitewright/v1', '/404s', ['methods' => 'GET', 'callback' => [self::class, 'route_404s'], 'permission_callback' => $perm]);
         register_rest_route('sitewright/v1', '/redirects', ['methods' => 'POST', 'callback' => [self::class, 'route_redirects'], 'permission_callback' => $perm]);
         foreach (array_keys(self::CONSENT) as $type) {
+            if ($type === 'media_list') { register_rest_route('sitewright/v1', '/media-list', ['methods' => 'GET', 'callback' => [self::class, 'route_media_list'], 'permission_callback' => $perm]); continue; }
             if ($type === 'media_write') {   // the only choice that lets Sitewright change something: a POST, nothing else
                 register_rest_route('sitewright/v1', '/media-text', ['methods' => 'POST', 'callback' => [self::class, 'route_media_text'], 'permission_callback' => $perm]);
                 continue;
@@ -407,6 +409,34 @@ final class Sitewright_Agent
         $noAlt = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} p LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_wp_attachment_image_alt'
             WHERE p.post_type = 'attachment' AND p.post_mime_type LIKE 'image/%' AND (m.meta_value IS NULL OR m.meta_value = '')");
         return ['images' => $images, 'images_without_alt' => $noAlt];
+    }
+
+    /**
+     * GET /media-list?cursor=<id>&limit=<n>: image attachments with an EMPTY alt text, in id order, with the page or product each belongs to (when that is public).
+     * Images that already have alt text are not listed. Paged by id; at most 100 per page.
+     */
+    public static function route_media_list(WP_REST_Request $req)
+    {
+        if ($e = self::gate('media_list')) { return $e; }
+        global $wpdb;
+        $cursor = max(0, (int)$req->get_param('cursor'));
+        $limit = max(1, min(100, (int)($req->get_param('limit') ?: 100)));
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT p.ID, p.post_title, p.post_parent FROM {$wpdb->posts} p LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_wp_attachment_image_alt'
+             WHERE p.post_type = 'attachment' AND p.post_mime_type LIKE 'image/%' AND p.ID > %d AND (m.meta_value IS NULL OR m.meta_value = '') ORDER BY p.ID ASC LIMIT %d",
+            $cursor, $limit + 1
+        ), ARRAY_A) ?: [];
+        $more = count($rows) > $limit; $rows = array_slice($rows, 0, $limit);
+        $items = [];
+        foreach ($rows as $r) {
+            $url = wp_get_attachment_url((int)$r['ID']);
+            if (!$url) { continue; }
+            $parent = (int)$r['post_parent'];
+            $public = $parent > 0 && get_post_status($parent) === 'publish' && get_post_field('post_password', $parent) === '';
+            $items[] = ['id' => (int)$r['ID'], 'url' => mb_substr($url, 0, 500), 'title' => self::text($r['post_title'], 200),
+                'parent_title' => $public ? self::text(get_the_title($parent), 200) : '', 'parent_url' => $public ? mb_substr((string)get_permalink($parent), 0, 500) : ''];
+        }
+        return ['items' => $items, 'next' => $more && $rows ? (int)end($rows)['ID'] : null];
     }
 
     /** The media library entry (an image) that this address belongs to, or 0. Resized copies ("-300x200") map to their original. */

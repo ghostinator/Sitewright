@@ -21,7 +21,7 @@ try {
     if ($stuck > 0 && ($age === null || $age > 180)) { $problems[] = "worker is not running: $stuck job(s) waiting for more than 5 minutes"; }
     elseif ($stuck > 0) { $problems[] = "queue backlog: $stuck job(s) waiting for more than 5 minutes"; }
     // A site or Search Console that cannot be synced is its own alert (site_sync_failed / gsc_sync_failed) and is the owner's to fix: it is not an outage of this app.
-    $failed = (int)$db->fetchOne("SELECT COUNT(*) n FROM `$t` WHERE status = 'failed' AND finished_at > NOW() - INTERVAL 1 HOUR AND type NOT IN ('mail','alert','site_sync','gsc_sync','site_profile','site_expiry','cert_issue')")['n'];
+    $failed = (int)$db->fetchOne("SELECT COUNT(*) n FROM `$t` WHERE status = 'failed' AND finished_at > NOW() - INTERVAL 1 HOUR AND type NOT IN ('mail','alert','site_sync','gsc_sync','site_profile','site_expiry','cert_issue','media_scan','site_import')")['n'];
     if ($failed >= 5) { $problems[] = "$failed jobs failed in the last hour"; }
 } catch (\Throwable $e) {
     $problems[] = 'database unreachable';

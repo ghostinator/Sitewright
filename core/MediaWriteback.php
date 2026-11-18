@@ -13,9 +13,16 @@ final class MediaWriteback
     public const MIN_PLUGIN = '1.2.0';
     private const ROUTE = '/sitewright/v1/media-text';
 
-    /** @return array{site:array,secret:string} the site, after checking the plugin is there, new enough and allowed to write @throws ResponseException */
-    private static function ready(int $siteId): array
+    /** The plugin version and the owner's tick each feature needs, and the words that tell the owner where to tick it. */
+    private const NEEDS = [
+        'media_write' => ['1.2.0', 'The site owner has not allowed this. In WordPress open Settings, Sitewright and tick "Change image text".'],
+        'media_list' => ['1.3.0', 'The site owner has not allowed this. In WordPress open Settings, Sitewright and tick "Image list (images without alt text)".'],
+    ];
+
+    /** @return array{site:array,secret:string} the site, after checking the plugin is there, new enough and that its owner allowed $feature (asked of the site itself, every time) @throws ResponseException */
+    public static function ready(int $siteId, string $feature = 'media_write'): array
     {
+        [$min, $tick] = self::NEEDS[$feature];
         $db = Database::getInstance();
         $site = $db->fetchOne('SELECT * FROM `' . $db->t('sites') . '` WHERE id = :i', ['i' => $siteId]) ?? Response::notFound('Site not found');
         if (!(int)$site['sync_enabled']) { Response::error('This site does not use the Sitewright plugin, so its image text cannot be changed from here.', 409); }
@@ -25,8 +32,8 @@ final class MediaWriteback
         } catch (JobRetryException | JobFailedException | ConfigException $e) {
             Response::error('Could not reach the site: ' . $e->getMessage(), 502);
         }
-        if (version_compare((string)($status['plugin_version'] ?? '0'), self::MIN_PLUGIN, '<')) { Response::error('Update the Sitewright plugin on the site to ' . self::MIN_PLUGIN . ' or newer first (download it from the Sites page).', 409); }
-        if (($status['features']['media_write'] ?? false) !== true) { Response::error('The site owner has not allowed this. In WordPress open Settings, Sitewright and tick "Change image text".', 409); }
+        if (version_compare((string)($status['plugin_version'] ?? '0'), $min, '<')) { Response::error('Update the Sitewright plugin on the site to ' . $min . ' or newer first (download it from the Sites page).', 409); }
+        if (($status['features'][$feature] ?? false) !== true) { Response::error($tick, 409); }
         return ['site' => $site, 'secret' => $secret];
     }
 
@@ -43,7 +50,7 @@ final class MediaWriteback
         return $out;
     }
 
-    /** @param list<int> $imageIds rows of image_seo that belong to this site @return array{applied:int,failed:list<array{url:string,error:string}>,skipped:int} */
+    /** @param list<int> $imageIds rows of image_seo that belong to this site @return array{applied:int,failed:list<array{url:string,error:string}>,skipped:int,ok_urls:list<string>} */
     public static function apply(int $siteId, array $imageIds, ?int $userId): array
     {
         $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $i): bool => $i > 0)));
@@ -59,18 +66,18 @@ final class MediaWriteback
             $meta[] = $r;
         }
         $skipped = count($imageIds) - count($items);
-        if (!$items) { return ['applied' => 0, 'failed' => [], 'skipped' => $skipped]; }
+        if (!$items) { return ['applied' => 0, 'failed' => [], 'skipped' => $skipped, 'ok_urls' => []]; }
         $ctx = self::ready($siteId);
         $results = self::send($ctx['site'], $ctx['secret'], $items);
-        $applied = 0; $failed = [];
+        $applied = 0; $failed = []; $okUrls = [];
         foreach ($results as $i => $res) {
             if (($res['ok'] ?? false) !== true) { $failed[] = ['url' => (string)$items[$i]['url'], 'error' => mb_substr((string)($res['error'] ?? 'refused'), 0, 120)]; continue; }
             $prev = is_array($res['previous'] ?? null) ? $res['previous'] : [];
             $db->insert('media_changes', ['site_id' => $siteId, 'image_url' => mb_substr((string)$items[$i]['url'], 0, 1000), 'attachment_id' => (int)($res['id'] ?? 0), 'old_alt' => mb_substr((string)($prev['alt'] ?? ''), 0, 600),
                 'new_alt' => $items[$i]['alt'] ?? null, 'old_title' => mb_substr((string)($prev['title'] ?? ''), 0, 300), 'new_title' => $items[$i]['title'] ?? null, 'applied_by' => $userId]);
-            $applied++;
+            $applied++; $okUrls[] = (string)$items[$i]['url'];
         }
-        return ['applied' => $applied, 'failed' => $failed, 'skipped' => $skipped];
+        return ['applied' => $applied, 'failed' => $failed, 'skipped' => $skipped, 'ok_urls' => $okUrls];
     }
 
     /** Put the previous text back. @throws ResponseException */

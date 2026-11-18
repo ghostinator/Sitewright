@@ -129,6 +129,33 @@
         setContent(container, el('h4', { text: 'Image Analysis Results' }), ...notes, el('div', { class: 'list-area' }, ...(items.length ? items : [muted('No images found.')])), el('div', { attrs: { id: 'image-changes' } }));
     }
 
+    const CONF_WORDS = { good: 'from the page or product', fair: 'from the file name: check it', none: 'needs a person' };
+    /**
+     * The worklist of a site's images that have no alt text. data = {summary:{open,good,fair,none,applied,skipped,scanned_at}, items:[{id,url,title,parent_title,parent_url,suggestion,confidence}]};
+     * state = {conf, offset, limit}. Suggestions are boxes a person can correct before applying.
+     */
+    function renderMediaFill(container, data, state = { conf: 'all', offset: 0, limit: 50 }) {
+        const s = data.summary, items = data.items || [], head = [el('h4', { text: 'Images without alt text in the media library' })];
+        if (!s.scanned_at && !s.open && !s.applied) return setContent(container, ...head, muted('Not read yet. Sitewright can list the images in this site\'s media library that have no alt text, suggest text for each, and apply it in bulk. It needs the site owner to have ticked "Image list" in the Sitewright plugin (Settings, Sitewright).'), el('p', {}, smallButton('Read the media library', 'media-scan', '', 'btn-primary')));
+        const sel = el('select', { attrs: { id: 'media-conf', 'aria-label': 'Show' }, data: { change: 'media-conf' } }, ...[['all', 'All'], ['good', 'Good suggestions'], ['fair', 'Check these'], ['none', 'Need a person']].map(([v, l]) => el('option', { text: l, attrs: { value: v } })));
+        sel.value = state.conf;
+        const rows = items.map(i => {
+            const box = el('input', { class: 'media-pick', attrs: { type: 'checkbox', value: String(i.id), 'aria-label': 'Select ' + i.url }, data: { conf: i.confidence } });
+            const alt = el('input', { class: 'media-alt', attrs: { type: 'text', maxlength: '300', placeholder: 'Alt text', 'aria-label': 'Alt text for ' + i.url } }); alt.value = i.suggestion || '';
+            const file = i.url.split('/').pop();
+            return el('tr', {}, el('td', {}, box), el('td', { class: 'break-all' }, el('strong', { text: file }), i.parent_title ? el('br') : null, i.parent_title ? el('small', { class: 'text-muted', text: 'on: ' + i.parent_title }) : null),
+                el('td', {}, alt), el('td', {}, el('span', { class: 'badge' + (i.confidence === 'good' ? ' badge-ok' : ''), text: CONF_WORDS[i.confidence] || i.confidence })));
+        });
+        const more = s.open > state.offset + items.length;
+        setContent(container, ...head, el('p', { text: fmtInt(s.open) + ' image' + (s.open === 1 ? '' : 's') + ' still without alt text: ' + fmtInt(s.good) + ' with a suggestion from their page or product, ' + fmtInt(s.fair) + ' from the file name to check, ' + fmtInt(s.none) + ' that need a person.'
+            + (s.applied ? ' ' + fmtInt(s.applied) + ' done.' : '') + (s.skipped ? ' ' + fmtInt(s.skipped) + ' left as they are.' : '') }),
+            muted((s.scanned_at ? 'Read on ' + s.scanned_at + ' UTC. ' : '') + 'Correct the text where needed, tick the images, then Apply. Applying needs the owner to have ticked "Change image text"; every change is listed under Image SEO and can be undone.'),
+            el('p', {}, smallButton('Read the media library again', 'media-scan', ''), ' ', sel),
+            rows.length ? tableOf(['', 'Image', 'Suggested alt text (edit it)', 'Where it came from'], rows) : muted('Nothing to show here.'),
+            el('p', {}, smallButton('Tick all good suggestions', 'media-tick-good', ''), ' ', smallButton('Apply ticked', 'media-apply', '', 'btn-primary'), ' ', smallButton('Leave ticked as they are', 'media-skip', ''),
+                ' ', state.offset > 0 ? smallButton('Previous ' + state.limit, 'media-page-prev', '') : null, ' ', more ? smallButton('Next ' + state.limit, 'media-page-next', '') : null));
+    }
+
     /** What Sitewright has changed on a site's images, newest first, each with Undo while it can still be undone. */
     function renderMediaChanges(container, data) {
         const rows = (data.changes || []).map(c => {
@@ -840,7 +867,7 @@
 
     // ------------------------------------------------------------------ test export (no side effects)
 
-    const exported = { el, renderMediaChanges, renderSiteImport, renderImportPicker, renderImportResult, renderCertificates, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
+    const exported = { el, renderMediaFill, renderMediaChanges, renderSiteImport, renderImportPicker, renderImportResult, renderCertificates, renderSiteProfile, renderAlertSummary, renderAlertLog, renderDevices, renderPageSpeed, renderOpportunities, renderRedirectSuggestions, renderSiteAudits, renderSiteAuditReport, renderSiteAuditIssues, renderSiteAuditPages, renderOverview, renderWatchlist, renderWatchHistory, sparkline, renderSeoResults, renderContentResult, renderImageResults, renderAnalytics, render404Logs, renderRedirections, renderLocations, renderSitemapResult, renderDashboard, renderUsers, renderAudit, renderSites, renderGsc, hoursFromForm, editLocation, renderSettings, renderSettingsBar, diffSettings, newSettingsState };
     window.SW = exported;
 
     const cfgNode = document.getElementById('app-config');
@@ -975,7 +1002,7 @@
         document.getElementById('page-title').textContent = TITLES[view];
         document.title = 'Sitewright - ' + TITLES[view];
         if (push) history.pushState({ view }, '', viewUrl(view));
-        const loaders = { dashboard: loadDashboard, watchlist: loadWatchlist, alerts: loadAlerts, 'site-audit': loadSiteAudits, opportunities: loadOpportunities, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, certificates: loadCertificates, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
+        const loaders = { 'image-seo': () => { loadMediaFill(); }, dashboard: loadDashboard, watchlist: loadWatchlist, alerts: loadAlerts, 'site-audit': loadSiteAudits, opportunities: loadOpportunities, analytics: () => { loadAnalytics(); loadGsc(); }, 'content-ai': loadAiStatus, 'local-seo': loadLocations, '404-monitor': load404, redirections: loadRedirections, sitemaps: loadSitemaps, account: loadAccount, sites: loadSites, certificates: loadCertificates, users: loadUsers, audit: () => loadAudit(false), settings: loadSettings };
         syncExportLinks();
         if (loaders[view]) loaders[view]();
     }
@@ -1078,6 +1105,14 @@
             if (d.audits.some(a => a.status === 'queued' || a.status === 'running') && viewFromLocation() === 'site-audit') auditPoll = setTimeout(loadSiteAudits, 4000);
         } catch (e) { showError(box, 'Could not load audits: ' + e.message); }
     }
+    const mediaFill = { conf: 'all', offset: 0, limit: 50 };
+    const loadMediaFill = async () => {
+        const box = document.getElementById('media-fill'); if (!box) return;
+        if (!siteId || !isAdmin()) { setContent(box, ...(isAdmin() ? [muted('Choose a site in the header to see its images without alt text.')] : [])); return; }
+        try { renderMediaFill(box, await apiRequest('GET', '/sites/' + encodeURIComponent(siteId) + '/media-missing?confidence=' + mediaFill.conf + '&limit=' + mediaFill.limit + '&offset=' + mediaFill.offset), mediaFill); }
+        catch (e) { setContent(box, el('div', { class: 'alert alert-error', text: e.message })); }
+    };
+    const pickedMedia = () => [...document.querySelectorAll('#media-fill .media-pick:checked')].map(c => ({ id: Number(c.value), alt: c.closest('tr').querySelector('.media-alt').value.trim() }));
     const loadMediaChanges = async () => {
         const box = document.getElementById('image-changes'); if (!box || !siteId || !isAdmin()) return;
         try { renderMediaChanges(box, await apiRequest('GET', '/sites/' + encodeURIComponent(siteId) + '/media-changes')); } catch (e) { setContent(box); }
@@ -1409,6 +1444,7 @@
     window.addEventListener('beforeunload', e => { if (settingsData && Object.keys(settingsState.edits).length) { e.preventDefault(); e.returnValue = ''; } });
     document.addEventListener('input', e => {
         if (e.target.id === 'settings-search') { settingsState.q = e.target.value.trim(); if (settingsData) drawSettings(); return; }
+        if (e.target.dataset && e.target.dataset.change === 'media-conf') { mediaFill.conf = e.target.value; mediaFill.offset = 0; loadMediaFill(); return; }
         if (e.target.dataset && e.target.dataset.change === 'dns-type') { for (const g of document.querySelectorAll('#dns-create-form [data-type-group]')) g.classList.toggle('hidden', g.dataset.typeGroup !== e.target.value); return; }
         if (e.target.matches && e.target.matches('[data-setting]')) settingFromControl(e.target);
     });
@@ -1421,6 +1457,22 @@
     // ------------------------------------------------------------------ delegated clicks
 
     const clickActions = {
+        'media-scan': async () => {
+            const box = document.getElementById('media-fill');
+            try { const r = await runJob('/sites/' + encodeURIComponent(siteId) + '/media-scan', {}, box, 'Reading the media library'); showToast('Found ' + r.seen + ' images without alt text'); mediaFill.offset = 0; loadMediaFill(); }
+            catch (e) { setContent(box, el('div', { class: 'alert alert-error', text: e.message })); }
+        },
+        'media-tick-good': () => { for (const c of document.querySelectorAll('#media-fill .media-pick')) c.checked = c.dataset.conf === 'good'; },
+        'media-apply': async () => {
+            const items = pickedMedia().filter(i => i.alt);
+            if (!items.length) { showToast('Tick images that have alt text filled in', 'error'); return; }
+            if (!confirm('Send the alt text of ' + items.length + ' image' + (items.length === 1 ? '' : 's') + ' to the site? Each change is logged and can be undone.')) return;
+            const d = await apiRequest('POST', '/sites/' + encodeURIComponent(siteId) + '/media-missing/apply', { items });
+            showToast(d.applied + ' updated on the site' + (d.failed.length ? '; ' + d.failed.length + ' refused: ' + d.failed[0].error : ''), d.failed.length && !d.applied ? 'error' : undefined); loadMediaFill(); loadMediaChanges();
+        },
+        'media-skip': async () => { const ids = pickedMedia().map(i => i.id); if (!ids.length) { showToast('Tick some images first', 'error'); return; } await apiRequest('POST', '/sites/' + encodeURIComponent(siteId) + '/media-missing/skip', { ids }); showToast('Left as they are'); loadMediaFill(); },
+        'media-page-next': () => { mediaFill.offset += mediaFill.limit; loadMediaFill(); },
+        'media-page-prev': () => { mediaFill.offset = Math.max(0, mediaFill.offset - mediaFill.limit); loadMediaFill(); },
         'image-suggest': async t => {
             const row = t.closest('.list-item'), d = await apiRequest('GET', '/image-seo/suggest-alt?image_url=' + encodeURIComponent(t.dataset.src));
             row.querySelector('.image-alt').value = d.suggestion; showToast('Suggestion filled in. It comes from the file name, so please improve it.');

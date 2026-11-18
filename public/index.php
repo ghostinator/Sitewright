@@ -273,6 +273,7 @@ $navLink = function (string $slugName, string $title) use ($h, $base): string {
                     <p class="text-muted">Reads <code>&lt;img&gt;</code> tags from the page's HTML (not JavaScript-rendered images), downloads up to 50 images and reports alt text, size and dimensions.</p>
                     <form id="image-bulk-form" class="form"><div class="form-group"><label for="image-url">Page URL</label><input type="url" id="image-url" placeholder="https://example.com" required maxlength="2048"></div><button type="submit" class="btn btn-primary">Analyze Images</button></form>
                     <div id="image-results" class="results-area"></div>
+                    <div id="media-fill" class="results-area"></div>
                 </div></div>
 
                 <div class="view" id="view-sitemaps"><div class="card">

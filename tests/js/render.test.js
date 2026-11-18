@@ -793,6 +793,24 @@ test('image results: with a site chosen each image has alt text and title boxes,
   for (const p of PAYLOADS) { box.replaceChildren(); SW.renderImageResults(box, data({ images: [{ id: 1, src: p, alt: p, title: p, has_alt: true, size: 1, dimensions: p, optimized: null }] }), true);
     const inputs = [...box.querySelectorAll('input')]; assert.equal(inputs[0].value, p, 'the text is in the box as text'); inputs.forEach(i => i.remove()); assertInert(box, p, 'image text'); }
 });
+test('media worklist: counts by how good the suggestion is, one editable box per image, bulk actions, paging; before the first read it explains what is needed; everything is text', () => {
+  const { SW, box } = load();
+  const data = (over = {}) => ({ summary: { open: 120, good: 10, fair: 60, none: 50, applied: 5, skipped: 2, scanned_at: '2026-11-18 14:00:00' }, items: [
+    { id: 11, url: 'https://s.example/wp-content/uploads/a.png', title: 'A', parent_title: 'Chili Tote Bag', parent_url: 'https://s.example/shop/x/', suggestion: 'Chili Tote Bag (front view)', confidence: 'good' },
+    { id: 12, url: 'https://s.example/wp-content/uploads/Spicy-clothing.jpg', title: '', parent_title: '', parent_url: null, suggestion: 'Spicy clothing', confidence: 'fair' },
+    { id: 13, url: 'https://s.example/wp-content/uploads/g.jpg', title: '', parent_title: '', parent_url: null, suggestion: null, confidence: 'none' }], ...over });
+  SW.renderMediaFill(box, data());
+  assert.match(box.textContent, /120 images still without alt text: 10 with a suggestion from their page or product, 60 from the file name to check, 50 that need a person\. 5 done\. 2 left as they are/); assert.match(box.textContent, /Read on 2026-11-18 14:00:00 UTC/);
+  const rows = [...box.querySelectorAll('tbody tr')]; assert.equal(rows.length, 3);
+  assert.deepEqual(rows.map(r => r.querySelector('.media-alt').value), ['Chili Tote Bag (front view)', 'Spicy clothing', '']); assert.deepEqual(rows.map(r => r.querySelector('.media-pick').dataset.conf), ['good', 'fair', 'none']);
+  assert.match(rows[0].textContent, /a\.png.*on: Chili Tote Bag.*from the page or product/); assert.ok(rows[0].querySelector('.badge-ok')); assert.match(rows[2].textContent, /needs a person/);
+  assert.deepEqual([...box.querySelectorAll('[data-action]')].map(b => b.dataset.action), ['media-scan', 'media-tick-good', 'media-apply', 'media-skip', 'media-page-next']);
+  assert.equal(box.querySelector('#media-conf').dataset.change, 'media-conf');
+  box.replaceChildren(); SW.renderMediaFill(box, data({ summary: { open: 103, good: 10, fair: 43, none: 50, applied: 0, skipped: 0, scanned_at: 'x' } }), { conf: 'all', offset: 100, limit: 50 }); assert.deepEqual([...box.querySelectorAll('[data-action]')].map(b => b.dataset.action).filter(a => a.startsWith('media-page')), ['media-page-prev'], 'last page: Previous only');
+  box.replaceChildren(); SW.renderMediaFill(box, { summary: { open: 0, good: 0, fair: 0, none: 0, applied: 0, skipped: 0, scanned_at: null }, items: [] }); assert.match(box.textContent, /Not read yet.*"Image list"/); assert.ok(box.querySelector('[data-action="media-scan"]'));
+  for (const p of PAYLOADS) { box.replaceChildren(); SW.renderMediaFill(box, data({ items: [{ id: 1, url: 'https://s.example/' + p, title: p, parent_title: p, parent_url: p, suggestion: p, confidence: 'good' }] }));
+    const inputs = [...box.querySelectorAll('input,select')]; assert.equal(inputs.find(i => i.classList.contains('media-alt')).value, p); inputs.forEach(i => i.remove()); assertInert(box, p, 'media worklist'); assert.ok(box.textContent.includes(p) || p.length > 200); }
+});
 test('image changes: what changed on the site is listed with Undo only while it can still be undone; all text is plain text', () => {
   const { SW, box } = load();
   SW.renderMediaChanges(box, { changes: [{ id: 1, image_url: 'https://s.example/a.png', old_alt: 'old', new_alt: 'new', old_title: 'Old', new_title: null, applied_at: '2026-11-18 10:00:00', undone_at: null },
