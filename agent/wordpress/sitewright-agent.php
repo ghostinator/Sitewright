@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sitewright Agent
  * Description: Lets a Sitewright server (which calls this site; this site never calls out) read the 404 log, push redirect rules that this plugin enforces locally, and read only the extra details the site owner approves under Settings > Sitewright.
- * Version: 1.2.0
+ * Version: 1.2.1
  * Requires PHP: 7.4
  * License: MIT
  *
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) { exit; }
 
 final class Sitewright_Agent
 {
-    const VERSION = '1.2.0';
+    const VERSION = '1.2.1';
     const MAX_SKEW = 300;          // seconds a signature stays valid
     const MAX_RULES = 5000;
     const MAX_404_ROWS = 5000;
@@ -261,7 +261,11 @@ final class Sitewright_Agent
     /** @return array<string,bool> every data type; true only when the owner ticked it (anything else, including a missing option, is off). */
     public static function consent(): array
     {
-        $saved = get_option('sitewright_consent', []);
+        // Read from the database, not through get_option(): a persistent object cache (Redis, Memcached; W3 Total Cache keeps separate keys per host) can hold an
+        // old copy, and a revoked choice must stop working at once, whatever caches exist or whoever changed the setting (WP-CLI, a restored backup, a database tool).
+        global $wpdb;
+        $raw = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", 'sitewright_consent'));
+        $saved = $raw === null ? [] : maybe_unserialize($raw);
         $saved = is_array($saved) ? $saved : [];
         $out = [];
         foreach (array_keys(self::CONSENT) as $type) { $out[$type] = ($saved[$type] ?? false) === true; }
