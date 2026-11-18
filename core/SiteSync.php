@@ -30,6 +30,7 @@ final class SiteSync
             $status = self::call($site, $secret, 'GET', '/sitewright/v1/status');
             $out['pulled'] = self::pull($site, $secret);
             $out['pushed'] = self::push($site, $secret, !empty($p['force']));
+            SiteRemote::run($site, $secret, $status, !empty($p['force']));   // optional, owner-approved extras; never fails the sync
             $db->query('UPDATE `' . $db->t('sites') . "` SET last_sync_at = NOW(), last_status = 'ok', last_error = NULL, sync_requested = 0, plugin_version = :v WHERE id = :i", ['v' => mb_substr((string)($status['plugin_version'] ?? ''), 0, 20), 'i' => $id]);
             return ['message' => 'Synced', 'data' => $out];
         } catch (JobRetryException | JobFailedException | ConfigException $e) {
@@ -119,6 +120,7 @@ final class SiteSync
             'Bad signature' => new JobFailedException('The secret in WordPress does not match this site\'s secret. Press New secret here, paste the new one into WordPress (no spaces or quotes; if wp-config.php defines an older SITEWRIGHT_SECRET, that one wins), then sync again.', 502),
             'Stale signature' => new JobFailedException('The clocks differ by more than 5 minutes. Sitewright\'s clock says ' . gmdate('H:i:s') . ' UTC; check the date and time of the WordPress server.', 502),
             'Secret not set' => new JobFailedException('The plugin has no secret yet. Add define(\'SITEWRIGHT_SECRET\', \'...\'); to wp-config.php, or paste it under Settings, Sitewright in WordPress.', 502),
+            'The site owner has not approved sharing this' => new JobFailedException('The site owner has not approved this data type (Settings, Sitewright in WordPress).', 403),
             'Replay' => new JobRetryException('The plugin saw the same signature twice; trying again.', 60),
             default => new JobFailedException('The site refused the request, and the answer did not come from the Sitewright plugin: a firewall or security plugin (for example Wordfence or Cloudflare) may be blocking the REST API. Allow this server, or check the secret.', 502),
         };

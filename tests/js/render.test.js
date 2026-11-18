@@ -620,6 +620,32 @@ test('setup guide: everything a site said is shown as text, never as markup', ()
     assertInert(box, p, 'profile'); assert.ok(box.textContent.includes(p));
   }
 });
+const remoteRows = (over = {}) => [
+  { kind: 'site', label: 'Site details', state: 'ok', items: 3, fetched_at: '2026-11-17 10:00:00', error: null, summary: '3 details read' },
+  { kind: 'content', label: 'Page list', state: 'not_allowed', items: 0, fetched_at: null, error: null, summary: null },
+  { kind: 'seo', label: 'Search titles and descriptions', state: 'error', items: 0, fetched_at: null, error: 'The site answered HTTP 500', summary: null },
+  { kind: 'media', label: 'Media library counts', state: 'unsupported', items: 0, fetched_at: null, error: null, summary: null },
+  { kind: 'versions', label: 'Version and update counts', state: 'unknown', items: 0, fetched_at: null, error: null, summary: null },
+].map(r => ({ ...r, ...(over[r.kind] || {}) }));
+test('setup guide: what the WordPress owner has approved is shown per kind, in words, with the next step when it is not approved', () => {
+  const { SW, box } = load();
+  SW.renderSiteProfile(box, profileData({ remote: remoteRows() }));
+  const row = t => [...box.querySelectorAll('h5')].find(h => h.textContent === 'Shared by the WordPress plugin').nextElementSibling.nextElementSibling.querySelectorAll('tbody tr').length && [...box.querySelectorAll('tbody tr')].find(r => r.querySelector('th').textContent === t);
+  assert.match(row('Site details').textContent, /Approved.*3 details read.*2026-11-17 10:00:00 UTC/);
+  assert.match(row('Page list').textContent, /Not approved.*ticked this in WordPress/);
+  assert.match(row('Search titles and descriptions').textContent, /Problem.*HTTP 500/); assert.ok(row('Search titles and descriptions').querySelector('.badge-bad'));
+  assert.match(row('Media library counts').textContent, /Plugin too old.*version 1\.1/);
+  assert.match(row('Version and update counts').textContent, /Not checked yet/);
+  box.replaceChildren(); SW.renderSiteProfile(box, profileData()); assert.doesNotMatch(box.textContent, /Shared by the WordPress plugin/, 'sites without the plugin show no such section');
+});
+test('setup guide: whatever the plugin sent (summary, error) is shown as text, never as markup', () => {
+  const { SW, box } = load();
+  for (const p of PAYLOADS) {
+    box.replaceChildren(); SW.renderSiteProfile(box, profileData({ remote: remoteRows({ site: { summary: p }, seo: { error: p }, content: { label: p } }) }));
+    for (const i of [...box.querySelectorAll('input')]) i.remove();
+    assertInert(box, p, 'remote'); assert.ok(box.textContent.includes(p));
+  }
+});
 test('Search Console: the property that matches the site is preselected (domain property first)', () => {
   const { SW, box } = load();
   const state = { configured: true, redirect_uri: 'x', connections: [{ id: 9, property_url: null, site_id: 5, last_status: 'ok', last_sync_at: null, rows_synced: 0, last_error: null }] };

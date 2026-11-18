@@ -182,7 +182,7 @@ final class SiteProfile
         }
         $now = gmdate('Y-m-d H:i:s');
         if ($d['error'] === null) {
-            try { self::store($siteId, $d['found'], $now); }
+            try { self::store($siteId, array_replace($d['found'], SiteRemote::profileFound($siteId)), $now); }   // what the owner let the plugin tell us beats what the public page shows
             catch (\Throwable $e) { Logger::warn('site_profile_failed', ['site' => $siteId, 'error' => get_class($e)]); $d['error'] = 'Could not save what the site says (see the log)'; }
         }
         $db->update('sites', ['profile_at' => $now, 'profile_error' => $d['error'] === null ? null : mb_substr($d['error'], 0, 250)], ['id' => $siteId]);
@@ -270,7 +270,7 @@ final class SiteProfile
         return $out;
     }
 
-    /** Everything the setup guide shows for one site. @return array{site:array,fields:array} */
+    /** Everything the setup guide shows for one site. @return array{site:array,fields:array,remote:array} */
     public static function view(int $siteId): array
     {
         $db = Database::getInstance();
@@ -283,7 +283,7 @@ final class SiteProfile
                 'found' => $r['found'] ?? null, 'value' => $r['value'] ?? null, 'state' => $r['state'] ?? 'empty', 'found_at' => $r['found_at'] ?? null];
         }
         return ['site' => ['id' => (int)$site['id'], 'name' => $site['name'], 'base_url' => $site['base_url'], 'wordpress' => (int)$site['sync_enabled'] === 1,
-            'profile_at' => $site['profile_at'], 'profile_error' => $site['profile_error']], 'fields' => $fields];
+            'profile_at' => $site['profile_at'], 'profile_error' => $site['profile_error']], 'fields' => $fields, 'remote' => (int)$site['sync_enabled'] === 1 ? SiteRemote::view($siteId) : []];
     }
 
     // ------------------------------------------------------------------ jobs and scheduling
@@ -301,6 +301,14 @@ final class SiteProfile
         return Jobs::enqueue('site_profile', ['site_id' => $siteId], $userId, 0, 1);
     }
 
+    /** Queue a read unless one is already waiting or running for this site. */
+    public static function queueUnlessOpen(int $siteId): void
+    {
+        $db = Database::getInstance();
+        $open = $db->fetchOne('SELECT 1 x FROM `' . $db->t('jobs') . "` WHERE type = 'site_profile' AND status IN ('queued','running') AND payload = :p", ['p' => (string)json_encode(['site_id' => $siteId])]);
+        if (!$open) { self::queue($siteId); }
+    }
+
     /** Worker tick: queue a read for sites never read, or read more than sites.profile_days ago (0 = never again on a schedule). */
     public static function scheduleDue(): int
     {
@@ -309,9 +317,7 @@ final class SiteProfile
         $db = Database::getInstance();
         $n = 0;
         foreach ($db->fetchAll('SELECT id FROM `' . $db->t('sites') . '` WHERE profile_at IS NULL OR profile_at < :c', ['c' => gmdate('Y-m-d H:i:s', time() - $days * 86400)]) as $s) {
-            $payload = (string)json_encode(['site_id' => (int)$s['id']]);
-            $open = $db->fetchOne('SELECT 1 x FROM `' . $db->t('jobs') . "` WHERE type = 'site_profile' AND status IN ('queued','running') AND payload = :p", ['p' => $payload]);
-            if (!$open) { self::queue((int)$s['id']); $n++; }
+            self::queueUnlessOpen((int)$s['id']); $n++;
         }
         return $n;
     }

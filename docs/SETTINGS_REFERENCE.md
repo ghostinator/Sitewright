@@ -104,6 +104,7 @@ How much a crawl or image batch may do, and how often sites sync.
 | Declare a job stuck after | `limits.job_stale_seconds` | 600 | 60 to 7200 seconds |  | A job whose worker stopped reporting is re-queued after this long. |
 | Site sync interval | `sites.sync_minutes` | 10 | 1 to 1440 minutes |  | How often connected WordPress sites are synced. |
 | Re-read site details every | `sites.profile_days` | 7 | 0 to 90 days |  | How often each site's public pages (home page, robots.txt, sitemap) are read again for the setup guide. 0 turns the schedule off; you can still press "Read the site again". Choices you made are never overwritten. |
+| Refresh approved site details every | `sites.remote_hours` | 6 | 1 to 168 hours |  | How often the details a WordPress site's owner has approved (page list, search titles, redirects, counts) are read again. Sync itself still runs on its own interval; this only limits the heavier reads. |
 
 ## Data & logging
 

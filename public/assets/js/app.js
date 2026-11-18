@@ -170,6 +170,7 @@
             [smallButton('Setup guide', 'site-profile', s.id, 'btn-primary')].concat(Number(s.sync_enabled) === 0 ? [] : [smallButton('Sync now', 'site-sync', s.id), smallButton('New secret', 'site-rotate', s.id)]).concat([deleteButton('delete-site', s.id)]))));
     }
 
+    const REMOTE_STATE = { ok: ['Approved', ''], not_allowed: ['Not approved', 'The site owner has not ticked this in WordPress (Settings, Sitewright).'], unsupported: ['Plugin too old', 'Update the Sitewright plugin on the site to version 1.1 or newer to choose what to share.'], error: ['Problem', ''], unknown: ['Not checked yet', 'Sitewright has not synced this site since the plugin was updated.'] };
     const PROFILE_STATE = { pending: 'Not decided yet', used: 'Using what the site says', manual: 'Your own text', skipped: 'Skipped', empty: 'Nothing found' };
     const PROFILE_GROUPS = [['site', 'About the site'], ['business', 'Business details'], ['check', 'Checks']];
     const profileButton = (label, action, siteId, field, cls) => { const b = smallButton(label, action, siteId, cls); b.dataset.field = field; return b; };
@@ -207,6 +208,18 @@
             nodes.push(el('h5', { text: title }), el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, head, el('tbody', {}, ...rows))));
         }
         nodes.push(el('p', {}, profileButton('Read the site again', 'profile-refresh', site.id, '')));
+        if ((d.remote || []).length) {
+            const rrows = d.remote.map(r => {
+                const st = REMOTE_STATE[r.state] || REMOTE_STATE.unknown;
+                const what = r.state === 'ok' ? (r.summary || '') : r.state === 'error' ? (r.error || 'Could not read it') : st[1];
+                return el('tr', {}, el('th', { text: r.label, attrs: { scope: 'row' } }), el('td', {}, el('span', { class: 'badge' + (r.state === 'ok' ? ' badge-ok' : r.state === 'error' ? ' badge-bad' : ''), text: st[0] })),
+                    el('td', { class: 'break-all', text: what }), el('td', { text: r.state === 'ok' && r.fetched_at ? r.fetched_at + ' UTC' : '' }));
+            });
+            const rhead = el('thead', {}, el('tr', {}, ...['Detail', 'Owner\'s choice', 'What Sitewright has', 'Read'].map(h => el('th', { text: h, attrs: { scope: 'col' } }))));
+            nodes.push(el('h5', { text: 'Shared by the WordPress plugin' }),
+                el('p', { class: 'text-muted', text: 'Each of these is off until the site owner ticks it in WordPress (Settings, Sitewright). Sitewright reads only what is ticked and deletes what it stored when a tick is removed. Everything a site sends is checked and shortened before it is saved.' }),
+                el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' }, rhead, el('tbody', {}, ...rrows))));
+        }
         nodes.push(el('h5', { text: 'Next steps' }), el('p', { class: 'text-muted', text: 'Two things worth doing for every site:' }),
             el('p', {}, profileButton('Watch the home page', 'profile-watch', site.id, ''), ' ', profileButton('Run a first audit', 'profile-audit', site.id, '')));
         setContent(container, ...nodes);

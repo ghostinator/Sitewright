@@ -5,7 +5,8 @@ error_reporting(E_ALL);
 set_error_handler(static function (int $no, string $str, string $file, int $line): bool { throw new ErrorException($str, 0, $no, $file, $line); });
 require __DIR__ . '/../../core/autoload.php';
 require __DIR__ . '/../lib.php';
-use Sitewright\Core\{Config, Crypto, Database, SafeHttpClient, SiteSync, JobFailedException, JobRetryException};
+use Sitewright\Core\{Config, Crypto, Database, SafeHttpClient, SiteSync, SiteRemote, JobFailedException, JobRetryException};
+function SiteProfile_found(int $id): array { return SiteRemote::profileFound($id); }
 
 putenv('SW_BASE_URL'); putenv('SW_ALLOWED_HOSTS');
 Config::useFile('/nonexistent/config.php'); Config::set('log.file', '/dev/null');
@@ -57,7 +58,7 @@ $check('static-file 404 also captured', (bool)$db->fetchOne("SELECT 1 x FROM sw_
 $http("$WP/does-not-exist-1/");
 SiteSync::handleJob(['site_id' => $id]);
 $check('later hits update the same row (absolute count)', (int)$db->fetchOne("SELECT hits FROM sw_404_monitor WHERE uri = '/does-not-exist-1/'")['hits'] === 3);
-$check('cursor advanced and status ok', (int)$site()['cursor_seq'] > 0 && $site()['last_status'] === 'ok' && $site()['plugin_version'] === '1.0.1');
+$check('cursor advanced and status ok', (int)$site()['cursor_seq'] > 0 && $site()['last_status'] === 'ok' && $site()['plugin_version'] === '1.1.0');
 
 // ---- redirects pushed and enforced -------------------------------------------------------------------------------------------
 $ins = fn (string $s, string $t, string $ty) => $db->query("INSERT INTO sw_redirections (project_id, source_url, target_url, redirect_type, status) VALUES (:p, :s, :t, :ty, 'active')", ['p' => $id, 's' => $s, 't' => $t, 'ty' => $ty]);
@@ -84,6 +85,52 @@ $res = $bad([['source' => '/ok-a', 'target' => 'javascript:alert(1)', 'type' => 
 $check('plugin keeps only valid rules (javascript:, //host, no leading slash, bad type, CRLF all dropped)', $res['accepted'] === 1, json_encode($res));
 $check('...and the one valid rule is enforced', $http("$WP/fine")['status'] === 301);
 SiteSync::handleJob(['site_id' => $id, 'force' => true]);
+
+// ---- owner consent (plugin 1.1): everything optional is off until the owner turns it on --------------------------------------------
+$get = fn (string $route, array $q = []) => (function () use ($WP, $SECRET, $route, $q): array {
+    $t = time(); $n = bin2hex(random_bytes(12)); $qs = $q ? '&' . http_build_query($q) : '';
+    $r = SafeHttpClient::default()->request('GET', "$WP/?rest_route=$route$qs", ['headers' => ['X-Sitewright-Signature: t=' . $t . ',n=' . $n . ',s=' . SiteSync::sign($SECRET, 'GET', $route, $t, $n, '')], 'follow' => false]);
+    return ['status' => (int)$r['status'], 'json' => json_decode((string)$r['body'], true) ?: []];
+})();
+$wpdb = new PDO('mysql:host=' . getenv('WP_DB_HOST') . ';dbname=wp;charset=utf8mb4', 'wp', 'wp', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$setConsent = function (array $on) use ($wpdb): void {
+    $types = ['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions'];
+    $val = serialize(array_combine($types, array_map(fn ($t) => in_array($t, $on, true), $types)));
+    $wpdb->prepare("INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('sitewright_consent', ?, 'no') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)")->execute([$val]);
+};
+$st = $get('/sitewright/v1/status');
+$check('fresh install: the status lists every data type and all are off', $st['status'] === 200 && array_keys($st['json']['features'] ?? []) === ['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions'] && !in_array(true, $st['json']['features'], true), json_encode($st['json']['features'] ?? null));
+$denied = [];
+foreach (['site', 'content', 'seo', 'existing-redirects', 'store', 'media', 'versions'] as $r) { $x = $get("/sitewright/v1/$r"); if ($x['status'] !== 403 || ($x['json']['code'] ?? '') !== 'sitewright_not_approved') { $denied[] = $r . ':' . $x['status']; } }
+$check('every optional route refuses with "not approved" until the owner ticks it', $denied === [], implode(',', $denied));
+$check('an unsigned call to an optional route is refused as unsigned', (int)SafeHttpClient::default()->request('GET', "$WP/?rest_route=/sitewright/v1/content", ['follow' => false])['status'] === 401);
+SiteSync::handleJob(['site_id' => $id, 'force' => true]);
+$states = fn () => array_column($db->fetchAll('SELECT kind, state FROM sw_site_remote WHERE site_id = :s', ['s' => $id]), 'state', 'kind');
+$check('Sitewright sees nothing approved and stores nothing', array_unique(array_values($states())) === ['not_allowed'] && (int)$db->fetchOne('SELECT COUNT(*) n FROM sw_site_pages')['n'] === 0);
+
+$setConsent(['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions']);
+$res = SiteSync::handleJob(['site_id' => $id, 'force' => true]);
+$check('approved: sync still succeeds and every kind is ok', $res['message'] === 'Synced' && array_unique(array_values($states())) === ['ok'], json_encode($states()));
+$pages = array_column($db->fetchAll('SELECT path, type, title FROM sw_site_pages WHERE site_id = :s', ['s' => $id]), null, 'path');
+$check('page list: published pages and posts only (no draft, no password-protected page, no attachment)', isset($pages['/hello/'], $pages['/new-page/']) && !isset($pages['/draft-only/'], $pages['/locked/']), implode(',', array_keys($pages)));
+$check('page titles arrive as plain text', ($pages['/hello/']['title'] ?? '') === 'Hello world', (string)($pages['/hello/']['title'] ?? ''));
+$seo = array_column($db->fetchAll('SELECT path, seo_title, seo_description, noindex FROM sw_site_seo WHERE site_id = :s', ['s' => $id]), null, 'path');
+$check('search data: title and description read; a template ("%%title%%") is left out; noindex found', ($seo['/hello/']['seo_title'] ?? '') === 'Hello | E2E' && ($seo['/hello/']['seo_description'] ?? '') === 'Say hello' && !isset($seo['/templated/']) && (int)($seo['/hidden/']['noindex'] ?? 0) === 1, json_encode($seo));
+$red = json_decode($db->fetchOne("SELECT data FROM sw_site_remote WHERE site_id = :s AND kind = 'redirects'", ['s' => $id])['data'], true)['redirects'] ?? [];
+$check('existing redirects: only exact, enabled ones', in_array(['source' => '/old-r/', 'target' => '/new-r/', 'type' => 301], $red, true) && count($red) === 1, json_encode($red));
+$prof = SiteProfile_found($id);
+$check('site details and shop address reach the setup guide', ($prof['site_title'] ?? '') === 'E2E' && ($prof['city'] ?? '') === 'Pueblo' && ($prof['region'] ?? '') === 'CO' && ($prof['postal_code'] ?? '') === '81008' && ($prof['street'] ?? '') === '1 Test St', json_encode($prof));
+$ver = json_decode($db->fetchOne("SELECT data FROM sw_site_remote WHERE site_id = :s AND kind = 'versions'", ['s' => $id])['data'], true);
+$check('version counts: WordPress and PHP versions, no names', preg_match('/^6\./', (string)$ver['wordpress']) === 1 && is_int($ver['plugin_updates']) && !isset($ver['plugins']), json_encode($ver));
+$media = json_decode($db->fetchOne("SELECT data FROM sw_site_remote WHERE site_id = :s AND kind = 'media'", ['s' => $id])['data'], true);
+$check('media counts are numbers only', is_int($media['images']) && is_int($media['images_without_alt']));
+$leak = json_encode([$get('/sitewright/v1/content')['json'], $get('/sitewright/v1/site')['json'], $get('/sitewright/v1/store')['json'], $get('/sitewright/v1/versions')['json']]);
+$check('nothing about users, e-mail addresses or passwords is in any answer', !preg_match('/admin|a@example\.test|e2e-admin-pass|user_login|post_author/i', $leak), '');
+
+$setConsent(['site', 'media']);
+SiteSync::handleJob(['site_id' => $id]);
+$check('the owner withdraws page list and search data: Sitewright deletes what it stored', (int)$db->fetchOne('SELECT COUNT(*) n FROM sw_site_pages')['n'] === 0 && (int)$db->fetchOne('SELECT COUNT(*) n FROM sw_site_seo')['n'] === 0 && $states()['content'] === 'not_allowed' && $states()['site'] === 'ok', json_encode($states()));
+$x = $get('/sitewright/v1/content'); $check('...and the plugin itself refuses the route again', $x['status'] === 403);
 
 // ---- failure modes ----------------------------------------------------------------------------------------------------------
 $db->update('sites', ['secret_enc' => Crypto::encrypt(str_repeat('b', 64), "site:$id")], ['id' => $id]);

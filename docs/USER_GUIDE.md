@@ -81,6 +81,7 @@ Adding a site reads its public pages (home page, `robots.txt`, sitemap) and open
 * **Fill empty fields from this site's details** on the Local SEO form copies the business name, phone and address;
 * the Search Console property that matches the site's address is preselected;
 * **Watch the home page** and **Run a first audit** are one click at the bottom of the guide.
+For a WordPress site with plugin 1.1 or newer the guide has a second part, **Shared by the WordPress plugin**: the site owner decides in WordPress which extra details Sitewright may read (nothing is shared until they tick it). The site title, tagline, language and shop address, once approved, appear in the table above as items you can use, type over or skip.
 Sitewright reads each site again every 7 days (Settings, Crawling and jobs, *Re-read site details every*; 0 turns it off) and on **Read the site again**. Whatever a site says is treated as untrusted text: markup is removed, lengths are capped, and a phone number or sitemap address that is the wrong shape is ignored.
 
 ### Alerts (admin)

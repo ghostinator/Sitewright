@@ -54,7 +54,7 @@ final class Config
                         'words_good' => 5, 'words_great' => 5],
             ],
             'google'           => ['client_id' => '', 'client_secret' => '', 'redirect_uri' => ''],
-            'sites'            => ['sync_minutes' => 10, 'profile_days' => 7],
+            'sites'            => ['sync_minutes' => 10, 'profile_days' => 7, 'remote_hours' => 6],
             'log' => ['file' => '', 'level' => 'info', 'requests' => true],
             'mail' => [
                 'driver' => 'smtp', 'postal_url' => '', 'postal_key' => '',

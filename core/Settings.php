@@ -120,6 +120,7 @@ final class Settings
         $add('limits.job_stale_seconds', 'crawl', 'Declare a job stuck after', 'A job whose worker stopped reporting is re-queued after this long.', 'int', ['min' => 60, 'max' => 7200, 'unit' => 'seconds']);
         $add('sites.sync_minutes', 'crawl', 'Site sync interval', 'How often connected WordPress sites are synced.', 'int', ['min' => 1, 'max' => 1440, 'unit' => 'minutes']);
         $add('sites.profile_days', 'crawl', 'Re-read site details every', 'How often each site\'s public pages (home page, robots.txt, sitemap) are read again for the setup guide. 0 turns the schedule off; you can still press "Read the site again". Choices you made are never overwritten.', 'int', ['min' => 0, 'max' => 90, 'unit' => 'days']);
+        $add('sites.remote_hours', 'crawl', 'Refresh approved site details every', 'How often the details a WordPress site\'s owner has approved (page list, search titles, redirects, counts) are read again. Sync itself still runs on its own interval; this only limits the heavier reads.', 'int', ['min' => 1, 'max' => 168, 'unit' => 'hours']);
         // ---- Data & logging
         $add('retention_days_404', 'data', 'Keep 404 entries', 'Older entries are deleted automatically.', 'int', ['min' => 1, 'max' => 3650, 'unit' => 'days']);
         $add('retention_days_audit', 'data', 'Keep audit log entries', 'Older entries are deleted automatically.', 'int', ['min' => 1, 'max' => 3650, 'unit' => 'days']);
