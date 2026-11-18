@@ -46,7 +46,7 @@ final class Crawler
         $queue = [$start]; $queued = [$start => true];
         foreach ((array)($hooks['seeds'] ?? []) as $seed) {
             $n = is_string($seed) ? Url::normalize($seed) : null;
-            if ($n !== null && !isset($queued[$n]) && Url::origin($n) === Url::origin($start) && count($queued) < $maxPages * 20) { $queued[$n] = true; $queue[] = $n; }
+            if ($n !== null && !self::isActionLink($n) && !isset($queued[$n]) && Url::origin($n) === Url::origin($start) && count($queued) < $maxPages * 20) { $queued[$n] = true; $queue[] = $n; }
         } $pages = []; $fetched = 0; $error = null; $stopped = false; $actions = 0;
 
         while ($queue) {

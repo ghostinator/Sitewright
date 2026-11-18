@@ -162,3 +162,12 @@ test('audit: with the owner\'s page list from the plugin, a published page that 
     eq(array_column($rows, 'url'), ['https://aud.example/hidden-gem/']); ok(str_contains($rows[0]['detail'], 'Published'), $rows[0]['detail']);
     eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_audit_pages WHERE audit_id = :a', ['a' => $r['audit_id']])['n'], 3, 'all three pages were checked');
 });
+
+test('audit: starting addresses saved from an older crawl that are share or add-to-cart links are not fetched and not reported as pages nothing links to', function () use ($db, $reset, $run, $pg) {
+    $reset(); $id = (int)$db->insert('sites', ['name' => 'Aud', 'base_url' => 'https://aud.example', 'secret_enc' => '', 'sync_enabled' => 0]);
+    $db->insert('sitemaps', ['project_id' => $id, 'type' => 'general', 'url' => 'https://aud.example/about/?share=mastodon']); $db->insert('sitemaps', ['project_id' => $id, 'type' => 'general', 'url' => 'https://aud.example/shop/?add-to-cart=3']);
+    $db->insert('sitemaps', ['project_id' => $id, 'type' => 'general', 'url' => 'https://aud.example/about/']);
+    fakeWeb(['https://aud.example/' => $pg('Home page of the audit example site', '<a href="/about/">a</a>'), 'https://aud.example/about/' => $pg('The about page of the audit example site', '<a href="/">h</a>')]);
+    $r = $run('https://aud.example/', $id); foreach (array_column($GLOBALS['__calls'], 'url') as $u) { ok(!str_contains($u, 'share=') && !str_contains($u, 'add-to-cart'), "an action address was fetched: $u"); }
+    eq((int)$db->fetchOne("SELECT COUNT(*) n FROM sw_audit_issues WHERE audit_id = :a AND code = 'orphan_page'", ['a' => $r['audit_id']])['n'], 0);
+});
