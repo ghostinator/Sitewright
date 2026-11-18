@@ -43,4 +43,31 @@ final class Html
     {
         return (int)preg_match_all('/[\p{L}\p{N}]+(?:[\'’\-][\p{L}\p{N}]+)*/u', $text);
     }
+
+    /** Attributes that lazy-loading plugins use for the real address while "src" holds a blank placeholder, in the order they are tried. */
+    private const LAZY_SRC = ['data-src', 'data-lazy-src', 'data-original', 'data-lazy', 'data-url'];
+    private const LAZY_SET = ['data-srcset', 'data-lazy-srcset', 'srcset'];
+
+    /**
+     * The address of the picture an <img> really shows. Lazy-loading plugins (WP Rocket, Smush, Jetpack, a3, …) put a tiny inline placeholder in
+     * "src" (usually a data: URI) and the real address in data-src and friends; the real one wins. Without a lazy attribute "src" is used, and
+     * when there is no usable "src" the first entry of a srcset. A data:, javascript: or empty value is never an address. Null when nothing usable.
+     */
+    public static function imageSource(\DOMElement $img): ?string
+    {
+        $usable = static fn (string $v): bool => $v !== '' && !preg_match('/^(data|javascript|about|blob):/i', $v);
+        $first = static fn (string $set): string => trim(explode(' ', trim(explode(',', $set)[0]))[0]);
+        foreach (self::LAZY_SRC as $a) { $v = trim($img->getAttribute($a)); if ($usable($v)) { return $v; } }
+        $v = trim($img->getAttribute('src'));
+        if ($usable($v)) { return $v; }
+        foreach (self::LAZY_SET as $a) { $v = $first($img->getAttribute($a)); if ($usable($v)) { return $v; } }
+        return null;
+    }
+
+    /** A 1x1 (or 2x2) picture, the way tracking pixels (a Facebook pixel, a beacon) are written: not a picture anyone sees, so not part of an image check. */
+    public static function isTrackingPixel(\DOMElement $img): bool
+    {
+        $w = (int)$img->getAttribute('width'); $h = (int)$img->getAttribute('height');
+        return $w > 0 && $h > 0 && $w <= 2 && $h <= 2;
+    }
 }

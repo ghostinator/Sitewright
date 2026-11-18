@@ -8,7 +8,7 @@ use Sitewright\Core\{Config, Database, FetchException, Html, Request, Response, 
 /**
  * Image checks: alt text present, file size, pixel dimensions. Bytes are downloaded through SafeHttpClient
  * (size-capped) and measured with getimagesizefromstring(); URLs are never handed to getimagesize().
- * Limitation: only <img src>, data-src and the first srcset candidate are read; images injected by JavaScript are not seen.
+ * Limitation: <img> tags are read (the real address from lazy-loading attributes, else src, else the first srcset entry); CSS background images and images injected by JavaScript are not seen.
  */
 class ImageSeoController
 {
@@ -89,9 +89,8 @@ class ImageSeoController
         $dom = Html::load($page['body'], (string)($page['headers']['content-type'] ?? ''));
         $found = []; $seen = [];
         foreach ($dom->getElementsByTagName('img') as $img) {
-            $raw = trim($img->getAttribute('src')) ?: trim($img->getAttribute('data-src'));
-            if ($raw === '' && ($srcset = trim($img->getAttribute('srcset'))) !== '') { $raw = trim(explode(' ', trim(explode(',', $srcset)[0]))[0]); }
-            if ($raw === '' || str_starts_with($raw, 'data:')) { continue; }
+            $raw = Html::imageSource($img);
+            if ($raw === null || Html::isTrackingPixel($img)) { continue; }
             $abs = Url::resolve($page['final_url'], $raw);
             $norm = $abs !== null ? Url::normalize($abs) : null;
             if ($norm === null || isset($seen[$norm])) { continue; }

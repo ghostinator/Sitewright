@@ -94,6 +94,37 @@ test('Image bulk: URL resolution, internal targets skipped, dedupe, cap, unknown
     eq(count($r['json']['data']['images']), 2); eq($r['json']['data']['truncated'], true);
     Config::set('limits.bulk_images', 50);
 });
+test('Image bulk: lazy-loaded pages (placeholder in src, real address in data-src) are read, as on a WordPress site with a lazy-loading plugin; tracking pixels are ignored', function () use ($png) {
+    $ph = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20600%20165%22%3E%3C%2Fsvg%3E';
+    $pageHtml = html('<img width="600" height="165" src="' . $ph . '" data-src="https://lazy.example/wp-content/uploads/logo.png" alt="Logo">'
+        . '<img class="lazy" src="' . $ph . '" data-src="/wp-content/uploads/a-324x243.jpg" alt="">'
+        . '<img src="' . $ph . '" data-lazy-src="/wp-content/uploads/b.png" alt="b">'
+        . '<img src="' . $ph . '" data-srcset="/wp-content/uploads/c-300.png 300w, /wp-content/uploads/c-600.png 600w" alt="c">'
+        . '<img src="/wp-content/uploads/d.png" srcset="/wp-content/uploads/d-2x.png 2x" alt="d">'
+        . '<img src="/wp-content/uploads/e.png" data-src="/wp-content/uploads/e-full.png" alt="e">'
+        . '<img srcset="/wp-content/uploads/f-400.png 400w, /wp-content/uploads/f-800.png 800w" alt="f">'
+        . '<img class="lazy" height="1" width="1" style="display:none" alt="fbpx" src="' . $ph . '" data-src="https://www.facebook.com/tr?id=1&ev=PageView&noscript=1">'
+        . '<img width="1" height="1" src="https://tracker.example/pixel.gif" alt="">'
+        . '<img src="' . $ph . '" alt="nothing usable">');
+    $ok = [200, ['Content-Type' => 'image/png'], $png];
+    fakeWeb(['https://lazy.example/' => $pageHtml, 'https://lazy.example/wp-content/uploads/logo.png' => $ok, 'https://lazy.example/wp-content/uploads/a-324x243.jpg' => $ok, 'https://lazy.example/wp-content/uploads/b.png' => $ok,
+        'https://lazy.example/wp-content/uploads/c-300.png' => $ok, 'https://lazy.example/wp-content/uploads/d.png' => $ok, 'https://lazy.example/wp-content/uploads/e-full.png' => $ok, 'https://lazy.example/wp-content/uploads/f-400.png' => $ok]);
+    Config::set('limits.bulk_images', 50);
+    $r = callJob('bulkImages', ['method' => 'POST', 'body' => ['url' => 'https://lazy.example/']]);
+    eq($r['status'], 200); $srcs = array_column($r['json']['data']['images'], 'src'); sort($srcs);
+    eq($srcs, ['https://lazy.example/wp-content/uploads/a-324x243.jpg', 'https://lazy.example/wp-content/uploads/b.png', 'https://lazy.example/wp-content/uploads/c-300.png', 'https://lazy.example/wp-content/uploads/d.png', 'https://lazy.example/wp-content/uploads/e-full.png', 'https://lazy.example/wp-content/uploads/f-400.png', 'https://lazy.example/wp-content/uploads/logo.png']);
+    eq($r['json']['data']['found'], 7); eq($r['json']['data']['skipped'], 0);
+    foreach ($GLOBALS['__calls'] as $c) { ok(!in_array($c['host'], ['www.facebook.com', 'tracker.example'], true), 'a tracking pixel was fetched: ' . $c['host']); }
+    $alt = array_column($r['json']['data']['images'], 'has_alt', 'src'); eq($alt['https://lazy.example/wp-content/uploads/logo.png'], true); eq($alt['https://lazy.example/wp-content/uploads/a-324x243.jpg'], false, 'the empty alt is reported, not hidden');
+});
+test('Image address: lazy attributes win over a placeholder src, src wins over srcset, nothing usable gives null; pixels are recognised only when both sides are 1 or 2', function () {
+    $img = fn (string $attrs) => Sitewright\Core\Html::load('<html><body><img ' . $attrs . '></body></html>')->getElementsByTagName('img')->item(0);
+    foreach ([['src="a.png"', 'a.png'], ['src="data:image/gif;base64,AAAA" data-src="b.png"', 'b.png'], ['src="p.gif" data-src="b.png"', 'b.png'], ['data-lazy-src="c.png"', 'c.png'], ['data-original="o.png"', 'o.png'],
+        ['srcset="s1.png 1x, s2.png 2x"', 's1.png'], ['src="data:image/png;base64,AAAA" data-srcset="d1.png 300w, d2.png 600w"', 'd1.png'], ['src="javascript:alert(1)"', null], ['src=""', null], ['', null], ['src="blob:https://x/y"', null], ['src="data:image/png;base64,AAAA" data-src="data:image/png;base64,BBBB"', null], ['src="  spaced.png  "', 'spaced.png']] as [$attrs, $want]) {
+        eq(Sitewright\Core\Html::imageSource($img($attrs)), $want, $attrs);
+    }
+    foreach ([['width="1" height="1"', true], ['width="2" height="2"', true], ['width="1" height="100"', false], ['width="100" height="1"', false], ['', false], ['width="0" height="0"', false], ['width="600" height="165"', false]] as [$attrs, $want]) { eq(Sitewright\Core\Html::isTrackingPixel($img($attrs)), $want, $attrs); }
+});
 test('Image: unknown size is NULL optimized, never true (FUNC-012)', function () use ($db) {
     $db->insert('image_seo', ['image_url' => 'https://u.example/u.png']);
     $r = $db->fetchOne("SELECT optimized FROM sw_image_seo WHERE image_url = 'https://u.example/u.png'");

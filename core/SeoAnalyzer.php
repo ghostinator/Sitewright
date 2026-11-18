@@ -65,9 +65,10 @@ final class SeoAnalyzer
         $images = [];
         $withAlt = 0;
         foreach ($dom->getElementsByTagName('img') as $img) {
+            if (Html::isTrackingPixel($img)) { continue; }   // a 1x1 beacon is not a picture on the page
             $alt = trim($img->getAttribute('alt'));
             $withAlt += $alt !== '' ? 1 : 0;
-            $images[] = ['src' => $img->getAttribute('src') ?: $img->getAttribute('data-src'), 'alt' => $alt, 'has_alt' => $alt !== ''];
+            $images[] = ['src' => Html::imageSource($img) ?? '', 'alt' => $alt, 'has_alt' => $alt !== ''];
         }
         $totalImages = count($images);
 
