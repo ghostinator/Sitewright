@@ -149,7 +149,32 @@ test('deleting a site deletes everything its plugin told us', function () use ($
     foreach (['site_remote', 'site_pages', 'site_seo', 'site_profile'] as $t) { eq((int)$db->fetchOne("SELECT COUNT(*) n FROM sw_$t")['n'], 0, $t); }
 });
 
-test('the refresh interval for approved details is a setting (sites.remote_hours, default 6)', function () {
-    eq(Config::get('sites.remote_hours'), 6);
-    ok(isset(\Sitewright\Core\Settings::registry()['sites.remote_hours']), 'registered');
+test('the refresh interval for approved details is a setting (sites.remote_hours) with a safe range', function () {
+    $def = \Sitewright\Core\Settings::registry()['sites.remote_hours'] ?? null;
+    ok($def !== null, 'registered'); eq([$def['min'], $def['max']], [1, 168]);
+});
+
+test('a slow site cannot hold the sync: once the time budget is spent the remaining kinds wait for the next sync', function () use ($mkSite, $wp, $ALL, $json, $B, $states) {
+    $id = $mkSite();
+    $wp($ALL, ['site' => function () use ($json) { SiteRemote::$deadline = 1.0; return $json(['title' => 'T', 'tagline' => '', 'language' => 'en']); }]);
+    eq(SiteSync::handleJob(['site_id' => $id])['message'], 'Synced', 'the base sync is unaffected');
+    eq($states($id), ['site' => 'ok'], 'the first kind finished; the rest were not even started');
+    $wp($ALL); SiteSync::handleJob(['site_id' => $id]);
+    eq(array_unique(array_values($states($id))), ['ok'], 'the next sync finishes the job');
+});
+
+test('running out of time in the middle of a page list keeps the earlier list instead of replacing it with half of one', function () use ($mkSite, $wp, $ALL, $json, $db, $states) {
+    $id = $mkSite(); $wp($ALL); SiteSync::handleJob(['site_id' => $id]);
+    $before = (int)$db->fetchOne('SELECT COUNT(*) n FROM sw_site_pages')['n']; ok($before >= 3);
+    $first = $json(['items' => [['id' => 1, 'type' => 'page', 'path' => '/only-one/', 'title' => 'x', 'modified' => '2026-11-01 10:00:00 UTC']], 'next' => 1]);
+    $wp($ALL, ['content&cursor=0&limit=200' => function () use ($first) { SiteRemote::$deadline = 1.0; return $first; }]);
+    SiteSync::handleJob(['site_id' => $id, 'force' => true]);
+    eq($states($id)['content'], 'error');
+    eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_site_pages')['n'], $before, 'the stored list is untouched');
+});
+
+test('the profile scheduler counts only the reads it really queued', function () use ($mkSite, $db) {
+    $a = $mkSite(); $b = (int)$db->insert('sites', ['name' => 'Q', 'base_url' => 'https://q.example', 'secret_enc' => 'x']);
+    eq(SiteProfile::queueUnlessOpen($a), true); eq(SiteProfile::queueUnlessOpen($a), false, 'already waiting');
+    eq(SiteProfile::scheduleDue(), 1, 'only the other site needed a read'); eq(SiteProfile::scheduleDue(), 0);
 });

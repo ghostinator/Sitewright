@@ -23,12 +23,16 @@ final class SiteRemote
     ];
     public const MAX_ITEMS = 2000;     // pages (and search entries) kept per site
     public const MAX_REDIRECTS = 1000;
+    public const BUDGET_SECONDS = 120;   // the optional reads of one sync stop here; what is left continues on the next sync (a job silent for job_stale_seconds is taken as stuck)
+    /** Unix time (float) after which no further site request is made. Public so tests can move it. */
+    public static float $deadline = 0.0;
 
     /** Never throws. @param array<string,mixed> $status the decoded /status answer */
     public static function run(array $site, string $secret, array $status, bool $force = false): void
     {
         $id = (int)$site['id'];
         $db = Database::getInstance();
+        self::$deadline = microtime(true) + self::BUDGET_SECONDS;
         try {
             $features = is_array($status['features'] ?? null) ? $status['features'] : null;
             $rows = array_column($db->fetchAll('SELECT kind, state, fetched_at FROM `' . $db->t('site_remote') . '` WHERE site_id = :s', ['s' => $id]), null, 'kind');
@@ -44,6 +48,7 @@ final class SiteRemote
                     continue;
                 }
                 if (!$force && $had === 'ok' && (string)$rows[$kind]['fetched_at'] >= $cutoff) { continue; }
+                if (microtime(true) > self::$deadline) { continue; }   // out of time: this kind waits for the next sync
                 try {
                     [$items, $data] = self::fetch($site, $secret, $kind, $route);
                     self::save($id, $kind, 'ok', $data, $items, null);
@@ -78,7 +83,7 @@ final class SiteRemote
 
     private static function fetchSite(array $site, string $secret, string $route): array
     {
-        $r = SiteSync::call($site, $secret, 'GET', $route);
+        $r = self::call($site, $secret, $route);
         $lang = SiteProfile::clean($r['language'] ?? null, 35);
         $d = array_filter([
             'site_title' => SiteProfile::clean($r['title'] ?? null, SiteProfile::FIELDS['site_title'][2]),
@@ -90,7 +95,7 @@ final class SiteRemote
 
     private static function fetchStore(array $site, string $secret, string $route): array
     {
-        $r = SiteSync::call($site, $secret, 'GET', $route);
+        $r = self::call($site, $secret, $route);
         if (empty($r['available'])) { return [0, []]; }
         $street = SiteProfile::clean(trim((string)($r['street'] ?? '') . ' ' . (string)($r['street2'] ?? '')), SiteProfile::FIELDS['street'][2]);
         $d = array_filter([
@@ -107,7 +112,7 @@ final class SiteRemote
     {
         $rows = []; $cursor = 0; $capped = false;
         for ($page = 0; $page < intdiv(self::MAX_ITEMS, 200) + 1; $page++) {
-            $r = SiteSync::call($site, $secret, 'GET', $route, null, ['cursor' => $cursor, 'limit' => 200]);
+            $r = self::call($site, $secret, $route, null, ['cursor' => $cursor, 'limit' => 200]);
             foreach (is_array($r['items'] ?? null) ? $r['items'] : [] as $it) {
                 if (!is_array($it)) { continue; }
                 $path = self::path($it['path'] ?? null);
@@ -136,7 +141,7 @@ final class SiteRemote
     {
         $rows = []; $cursor = 0; $capped = false; $plugin = 'none'; $templated = 0;
         for ($page = 0; $page < intdiv(self::MAX_ITEMS, 200) + 1; $page++) {
-            $r = SiteSync::call($site, $secret, 'GET', $route, null, ['cursor' => $cursor, 'limit' => 200]);
+            $r = self::call($site, $secret, $route, null, ['cursor' => $cursor, 'limit' => 200]);
             $p = is_string($r['plugin'] ?? null) && in_array($r['plugin'], ['yoast', 'rank_math'], true) ? $r['plugin'] : 'none';
             if ($p !== 'none') { $plugin = $p; }
             $templated += max(0, min(100000, (int)($r['templated'] ?? 0)));
@@ -164,7 +169,7 @@ final class SiteRemote
 
     private static function fetchRedirects(array $site, string $secret, string $route): array
     {
-        $r = SiteSync::call($site, $secret, 'GET', $route);
+        $r = self::call($site, $secret, $route);
         $out = [];
         foreach (is_array($r['items'] ?? null) ? $r['items'] : [] as $it) {
             if (!is_array($it) || count($out) >= self::MAX_REDIRECTS) { continue; }
@@ -180,14 +185,14 @@ final class SiteRemote
 
     private static function fetchMedia(array $site, string $secret, string $route): array
     {
-        $r = SiteSync::call($site, $secret, 'GET', $route);
+        $r = self::call($site, $secret, $route);
         $images = max(0, min(100000000, (int)($r['images'] ?? 0)));
         return [$images, ['images' => $images, 'images_without_alt' => min($images, max(0, (int)($r['images_without_alt'] ?? 0)))]];
     }
 
     private static function fetchVersions(array $site, string $secret, string $route): array
     {
-        $r = SiteSync::call($site, $secret, 'GET', $route);
+        $r = self::call($site, $secret, $route);
         $n = static fn ($v): int => max(0, min(9999, (int)$v));
         $checked = (int)($r['checked_at'] ?? 0);
         return [1, [
@@ -195,6 +200,14 @@ final class SiteRemote
             'core_update' => ($r['core_update'] ?? false) === true, 'plugin_updates' => $n($r['plugin_updates'] ?? 0), 'theme_updates' => $n($r['theme_updates'] ?? 0),
             'active_plugins' => $n($r['active_plugins'] ?? 0), 'checked_at' => $checked > 946684800 && $checked <= time() + 86400 ? gmdate('Y-m-d H:i:s', $checked) : null,
         ]];
+    }
+
+    /** One optional request. Refuses to start once the time budget is spent, so a slow site cannot hold the job (earlier data is kept). */
+    private static function call(array $site, string $secret, string $route, ?array $json = null, array $query = []): array
+    {
+        if (microtime(true) > self::$deadline) { throw new JobRetryException('Out of time for this sync; the rest continues on the next one', 60); }
+        Jobs::touch();
+        return SiteSync::call($site, $secret, 'GET', $route, $json, $query);
     }
 
     /** A path from the site: starts with "/", no control characters, at most 500 characters; anything else is dropped. */

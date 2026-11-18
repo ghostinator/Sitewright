@@ -209,7 +209,7 @@ final class Sitewright_Agent
     public static function route_status(WP_REST_Request $req): array
     {
         $rules = get_option('sitewright_rules', []);
-        return ['plugin_version' => self::VERSION, 'wp_version' => get_bloginfo('version'), 'php_version' => PHP_VERSION,
+        return ['plugin_version' => self::VERSION,   // WordPress and PHP versions are not here: they are the owner's "versions" choice
             'rules_version' => (string)get_option('sitewright_rules_version', ''), 'rules_count' => is_array($rules) ? count($rules) : 0, 'time' => time(),
             'features' => self::consent()];
     }

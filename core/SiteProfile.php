@@ -302,11 +302,13 @@ final class SiteProfile
     }
 
     /** Queue a read unless one is already waiting or running for this site. */
-    public static function queueUnlessOpen(int $siteId): void
+    public static function queueUnlessOpen(int $siteId): bool
     {
         $db = Database::getInstance();
         $open = $db->fetchOne('SELECT 1 x FROM `' . $db->t('jobs') . "` WHERE type = 'site_profile' AND status IN ('queued','running') AND payload = :p", ['p' => (string)json_encode(['site_id' => $siteId])]);
-        if (!$open) { self::queue($siteId); }
+        if ($open) { return false; }
+        self::queue($siteId);
+        return true;
     }
 
     /** Worker tick: queue a read for sites never read, or read more than sites.profile_days ago (0 = never again on a schedule). */
@@ -317,7 +319,7 @@ final class SiteProfile
         $db = Database::getInstance();
         $n = 0;
         foreach ($db->fetchAll('SELECT id FROM `' . $db->t('sites') . '` WHERE profile_at IS NULL OR profile_at < :c', ['c' => gmdate('Y-m-d H:i:s', time() - $days * 86400)]) as $s) {
-            self::queueUnlessOpen((int)$s['id']); $n++;
+            if (self::queueUnlessOpen((int)$s['id'])) { $n++; }
         }
         return $n;
     }

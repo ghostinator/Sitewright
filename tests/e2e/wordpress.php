@@ -100,6 +100,7 @@ $setConsent = function (array $on) use ($wpdb): void {
 };
 $st = $get('/sitewright/v1/status');
 $check('fresh install: the status lists every data type and all are off', $st['status'] === 200 && array_keys($st['json']['features'] ?? []) === ['site', 'content', 'seo', 'redirects', 'store', 'media', 'versions'] && !in_array(true, $st['json']['features'], true), json_encode($st['json']['features'] ?? null));
+$check('the base status answer carries no WordPress or PHP version (that is the owner\'s "versions" choice)', !array_key_exists('wp_version', $st['json']) && !array_key_exists('php_version', $st['json']), json_encode(array_keys($st['json'])));
 $denied = [];
 foreach (['site', 'content', 'seo', 'existing-redirects', 'store', 'media', 'versions'] as $r) { $x = $get("/sitewright/v1/$r"); if ($x['status'] !== 403 || ($x['json']['code'] ?? '') !== 'sitewright_not_approved') { $denied[] = $r . ':' . $x['status']; } }
 $check('every optional route refuses with "not approved" until the owner ticks it', $denied === [], implode(',', $denied));
