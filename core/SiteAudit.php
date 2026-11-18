@@ -24,7 +24,7 @@ final class SiteAudit
         'missing_viewport'      => ['medium', 'No mobile viewport tag', 'Add <meta name="viewport" content="width=device-width, initial-scale=1> so phones render the page properly.'],
         'duplicate_title'       => ['medium', 'Same title as another page', 'Give each page its own title so search engines can tell them apart.'],
         'duplicate_description' => ['medium', 'Same description as another page', 'Write a different meta description for each page.'],
-        'orphan_page'           => ['medium', 'No page links to it', 'Link to the page from a related page or your menu, or remove it from the sitemap.'],
+        'orphan_page'           => ['medium', 'No page links to it', 'Link to the page from a related page or your menu, or unpublish it (and remove it from the sitemap) if it is not meant to be found.'],
         'title_length'          => ['low',    'Title length is off', 'Aim for the title length set under Settings, so it is not cut off in results.'],
         'description_length'    => ['low',    'Description length is off', 'Aim for the description length set under Settings.'],
         'multiple_h1'           => ['low',    'More than one H1', 'Use a single H1 and H2/H3 for the sections below it.'],
@@ -101,6 +101,10 @@ final class SiteAudit
 
         $pages = []; $issues = []; $nap = []; $fetches = []; $linksFrom = []; $external = []; $lastTouch = 0;
         $seeds = array_column($db->fetchAll('SELECT url FROM `' . $db->t('sitemaps') . '` WHERE project_id = :p ORDER BY id LIMIT 500', ['p' => $project]), 'url');
+        // every published page the site's owner let the plugin list (Settings, Sitewright: "Page list"): they are crawled too, so a page that no link reaches is found, not missed
+        if ($project > 0) {
+            foreach ($db->fetchAll('SELECT path FROM `' . $db->t('site_pages') . '` WHERE site_id = :p ORDER BY path LIMIT 2000', ['p' => $project]) as $pg) { $seeds[] = rtrim($base, '/') . $pg['path']; }
+        }
         $out = Crawler::run($base, $max, $deadline, [
             'seeds' => $seeds,
             'on_tick' => static function () use (&$lastTouch): void { if (time() - $lastTouch >= 5) { $lastTouch = time(); Jobs::touch(); } },
@@ -165,7 +169,7 @@ final class SiteAudit
         }
         $startFinal = isset($fetches[Url::normalize($base) ?? '']['final']) ? (Url::normalize((string)$fetches[Url::normalize($base)]['final']) ?? '') : '';
         if ($seeds !== []) {
-            foreach ($pages as $url => $f) { if (empty($inbound[$url]) && $url !== $startFinal && $url !== Url::normalize($base)) { $issues[] = ['orphan_page', $url, 'Listed in your sitemap, but no page links to it']; } }
+            foreach ($pages as $url => $f) { if (empty($inbound[$url]) && $url !== $startFinal && $url !== Url::normalize($base)) { $issues[] = ['orphan_page', $url, 'Published (in your sitemap or the site\'s page list), but no page links to it']; } }
         }
         $cap = (int)Config::get('audit.external_links_max');
         if ($cap > 0 && $external !== []) {

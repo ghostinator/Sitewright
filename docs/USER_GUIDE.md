@@ -76,6 +76,12 @@ Create, list and delete redirect rules (301, 302, 307, 308, 410, 451). For a **c
 ### Sites (admin)
 Add every website you want to analyse and monitor. Untick *WordPress with the Sitewright plugin* for a site that does not use it. For a WordPress site, connect it with the plugin: Sitewright calls the site; the site never calls Sitewright, so Sitewright can stay private. Steps: download the plugin, install it, add the site here, copy the one-time secret into `wp-config.php` (`define('SITEWRIGHT_SECRET', '…');`), then press **Sync now**. The plugin records 404s (path and referrer only, no visitor addresses) and enforces your redirect rules even if Sitewright is offline. **New secret** replaces the secret if it was exposed.
 
+#### Site audit: fix once, fixes many
+At the top of an audit report, repeated link problems are listed once ("this link is on 87 pages") with what to do: change the link to its final address, or redirect a missing page to the closest live page with one click. Share buttons and add-to-cart links are not pages and are left out. A page that failed once while the crawl was busy is checked again before it is called broken.
+
+#### Image SEO: editing alt text
+After analysing a page with a site chosen in the header, each image has boxes for alt text and title. *Save* keeps them in Sitewright; *Apply to the site* sends them to WordPress if the site owner allowed it in the plugin (Settings, Sitewright, *Change image text*). Changes are listed under the results and each one can be undone. Lazy-loaded images (a blank placeholder in `src` and the real picture in `data-src`) are now found.
+
 #### Checklist, certificates and the weekly summary
 The top of each site's Setup guide is a **checklist**: site details read, choices made, HTTPS, search engines allowed in, a sitemap, the plugin up to date, certificate and domain checked, the home page watched, an audit run, Search Console connected and business details chosen. Each open step says what to do; where Sitewright can do it for you there is a button.
 **Certificate and domain** shows when the HTTPS certificate and the domain registration run out. You are warned 30, 14, 7, 3 and 1 days before, and when one has expired, once per step. A certificate browsers would not trust (self-signed, incomplete, wrong name) is flagged. A site behind a CDN such as Cloudflare shows the CDN's certificate, which renews itself. If the site's registry does not publish dates, the row says so.

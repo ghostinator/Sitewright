@@ -150,3 +150,15 @@ test('audit: one link repeated on many pages is one thing to fix: the report lis
     ok(!isset($by['https://aud.example/gone-once/']), 'a link found on one page is not a "fix once" item (it is just an issue)');
     ok(count($by['https://aud.example/checkout/']['sample']) === 3, 'a few example pages are named');
 });
+
+test('audit: with the owner\'s page list from the plugin, a published page that no link reaches is found and reported; without it the crawler cannot know it exists', function () use ($db, $reset, $run, $pg) {
+    $reset(); $id = (int)$db->insert('sites', ['name' => 'Aud', 'base_url' => 'https://aud.example', 'secret_enc' => '', 'sync_enabled' => 0]);
+    $site = ['https://aud.example/' => $pg('Home page of the audit example site', '<a href="/linked/">l</a>'), 'https://aud.example/linked/' => $pg('A page that the home page links to', '<a href="/">h</a>'),
+        'https://aud.example/hidden-gem/' => $pg('A published page that nothing links to at all')];
+    fakeWeb($site); $r = $run('https://aud.example/', $id); $codes = array_map(fn ($x) => $x['code'] . ' ' . $x['url'], $db->fetchAll('SELECT code, url FROM sw_audit_issues WHERE audit_id = :a', ['a' => $r['audit_id']]));
+    ok(!array_filter($codes, fn ($c) => str_contains($c, 'hidden-gem')), 'no page list: the page is invisible to a crawler: ' . implode(' | ', $codes));
+    $db->query("INSERT INTO sw_site_pages (site_id, path_hash, path, type, title) VALUES ($id, SHA1('/hidden-gem/'), '/hidden-gem/', 'page', 'x'), ($id, SHA1('/linked/'), '/linked/', 'page', 'x'), ($id, SHA1('/'), '/', 'page', 'x')");
+    fakeWeb($site); $r = $run('https://aud.example/', $id); $rows = $db->fetchAll('SELECT code, url, detail FROM sw_audit_issues WHERE audit_id = :a AND code = \'orphan_page\'', ['a' => $r['audit_id']]);
+    eq(array_column($rows, 'url'), ['https://aud.example/hidden-gem/']); ok(str_contains($rows[0]['detail'], 'Published'), $rows[0]['detail']);
+    eq((int)$db->fetchOne('SELECT COUNT(*) n FROM sw_audit_pages WHERE audit_id = :a', ['a' => $r['audit_id']])['n'], 3, 'all three pages were checked');
+});
