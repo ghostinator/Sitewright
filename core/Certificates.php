@@ -55,7 +55,7 @@ final class Certificates
         $db = Database::getInstance();
         $r = $db->fetchOne('SELECT type, config_enc FROM `' . $db->t('dns_providers') . '` WHERE id = :i', ['i' => $id]) ?? throw new DnsProviderException('The DNS account no longer exists');
         $cfg = (array)json_decode(Crypto::decrypt((string)$r['config_enc'], 'dns:' . $id), true);
-        self::$known[$id] = array_values(array_filter(array_map('strval', $cfg), static fn ($v) => strlen($v) >= 6));
+        self::$known[$id] = array_values(array_filter(array_map('strval', array_diff_key($cfg, array_flip(DnsProvider::NOT_SECRET))), static fn ($v) => strlen($v) >= 6));
         return DnsProvider::make((string)$r['type'], $cfg);
     }
 
@@ -98,7 +98,9 @@ final class Certificates
         }
         $clean = array_keys($clean);
         if (!$clean || count($clean) > 20) { Validator::fail('names', 'give between 1 and 20 domain names'); }
-        if (!$db->fetchOne('SELECT 1 x FROM `' . $db->t('dns_providers') . '` WHERE id = :i', ['i' => $providerId])) { Validator::fail('dns_provider_id', 'choose a DNS account'); }
+        $acct = $db->fetchOne('SELECT type FROM `' . $db->t('dns_providers') . '` WHERE id = :i', ['i' => $providerId]);
+        if (!$acct) { Validator::fail('dns_provider_id', 'choose a DNS account'); }
+        if (!DnsProvider::editsDns((string)$acct['type'])) { Validator::fail('dns_provider_id', 'that account is for domain lists and expiry dates only; choose the account of the provider that hosts the DNS (for example Cloudflare)'); }
         if ($db->fetchOne('SELECT 1 x FROM `' . $db->t('certificates') . '` WHERE name = :n', ['n' => $name])) { Validator::fail('name', 'there is already a certificate with this name'); }
         $problems = self::coverage($clean, $providerId);
         if ($problems) { Validator::fail('names', implode(' ', $problems)); }

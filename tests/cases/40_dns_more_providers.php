@@ -7,7 +7,7 @@ $TOK = 'tok_' . str_repeat('Ab9', 10);
 $V1 = 'AbC-123_x'; $V2 = 'ZyX-987_w';
 
 test('every provider type has its fields, can be made, refuses keys that are the wrong shape, and its verify() names the domains', function () use ($TOK) {
-    $good = ['route53' => ['access_key_id' => 'AKIAEXAMPLE0123456789', 'secret_access_key' => 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY'], 'porkbun' => ['api_key' => 'pk1_' . str_repeat('a', 12), 'api_secret' => 'sk1_' . str_repeat('b', 12)]];
+    $good = ['route53' => ['access_key_id' => 'AKIAEXAMPLE0123456789', 'secret_access_key' => 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY'], 'porkbun' => ['api_key' => 'pk1_' . str_repeat('a', 12), 'api_secret' => 'sk1_' . str_repeat('b', 12)], 'namecheap' => ['api_user' => 'some_user', 'api_key' => 'abcdef0123456789abcdef0123456789', 'client_ip' => '203.0.113.7']];
     foreach (array_keys(DnsProvider::TYPES) as $type) {
         $fields = DnsProvider::fields($type); ok($fields !== [], "$type has fields");
         if (in_array($type, ['cloudflare', 'spaceship'], true)) { continue; }

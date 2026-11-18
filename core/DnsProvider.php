@@ -10,7 +10,14 @@ namespace Sitewright\Core;
 abstract class DnsProvider
 {
     /** type => label */
-    public const TYPES = ['cloudflare' => 'Cloudflare', 'spaceship' => 'Spaceship', 'route53' => 'Amazon Route 53', 'digitalocean' => 'DigitalOcean', 'porkbun' => 'Porkbun', 'desec' => 'deSEC', 'gandi' => 'Gandi', 'linode' => 'Linode (Akamai)', 'vultr' => 'Vultr'];
+    public const TYPES = ['cloudflare' => 'Cloudflare', 'spaceship' => 'Spaceship', 'route53' => 'Amazon Route 53', 'digitalocean' => 'DigitalOcean', 'porkbun' => 'Porkbun', 'desec' => 'deSEC', 'gandi' => 'Gandi', 'linode' => 'Linode (Akamai)', 'vultr' => 'Vultr', 'namecheap' => 'Namecheap (registrar)'];
+    /** Account types that are registrars only: they list domains and expiry dates and never edit DNS, so they cannot be used for certificates. */
+    public const REGISTRAR_ONLY = ['namecheap'];
+
+    /** Credential fields that are not secrets (an address, a user name), so error texts may repeat them. */
+    public const NOT_SECRET = ['client_ip', 'api_user'];
+
+    public static function editsDns(string $type): bool { return !in_array($type, self::REGISTRAR_ONLY, true); }
 
     /** Test seam: type => fn(array $config): DnsProvider. */
     public static array $factories = [];
@@ -29,6 +36,7 @@ abstract class DnsProvider
             'gandi' => new DnsGandi($config),
             'linode' => new DnsLinode($config),
             'vultr' => new DnsVultr($config),
+            'namecheap' => new DnsNamecheap($config),
             default => throw new DnsProviderException('Unknown DNS provider type'),
         };
     }
@@ -46,6 +54,7 @@ abstract class DnsProvider
             'gandi' => ['token' => 'Personal access token (LiveDNS)'],
             'linode' => ['token' => 'Personal access token (Domains read/write)'],
             'vultr' => ['token' => 'API key'],
+            'namecheap' => ['api_user' => 'API user name (your Namecheap user name)', 'api_key' => 'API key', 'client_ip' => 'This server\'s public IPv4 address (the one on Namecheap\'s API whitelist)'],
             default => [],
         };
     }

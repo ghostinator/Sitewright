@@ -23,7 +23,7 @@ final class CertificateController
             unset($c['directory']);
             $certs[] = $c;
         }
-        $providers = array_map(static fn (array $p): array => ['id' => (int)$p['id'], 'name' => $p['name'], 'type' => $p['type'], 'type_label' => DnsProvider::TYPES[$p['type']] ?? $p['type'], 'checked_at' => $p['checked_at'],
+        $providers = array_map(static fn (array $p): array => ['id' => (int)$p['id'], 'name' => $p['name'], 'type' => $p['type'], 'type_label' => DnsProvider::TYPES[$p['type']] ?? $p['type'], 'dns' => DnsProvider::editsDns((string)$p['type']), 'checked_at' => $p['checked_at'],
             'check_ok' => $p['check_ok'] === null ? null : (bool)$p['check_ok'], 'check_msg' => $p['check_msg']], $db->fetchAll('SELECT id, name, type, checked_at, check_ok, check_msg FROM `' . $db->t('dns_providers') . '` ORDER BY name'));
         $fields = []; foreach (array_keys(DnsProvider::TYPES) as $t) { $fields[$t] = DnsProvider::fields($t); }
         Response::success('Certificates', ['certificates' => $certs, 'dns_accounts' => $providers, 'provider_types' => DnsProvider::TYPES, 'provider_fields' => $fields,

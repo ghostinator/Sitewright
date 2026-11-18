@@ -314,7 +314,7 @@
         nodes.push(el('h4', { text: 'DNS accounts' }), muted('Where your names are hosted. Give each account a token limited to editing DNS records in the zones you need; Sitewright adds a TXT record to prove ownership and removes it again.'));
         const accounts = d.dns_accounts || [];
         nodes.push(...(accounts.length ? accounts.map(a => listItem([
-            el('strong', { text: a.name }), ' ', el('span', { class: 'badge', text: a.type_label }), ' ', a.check_ok === null ? el('span', { class: 'badge', text: 'not tested yet' }) : el('span', { class: 'badge ' + (a.check_ok ? 'badge-ok' : 'badge-bad'), text: a.check_ok ? 'works' : 'does not work' }),
+            el('strong', { text: a.name }), ' ', el('span', { class: 'badge', text: a.type_label }), a.dns === false ? el('span', { class: 'badge', text: 'domain lists and expiry only' }) : null, ' ', a.check_ok === null ? el('span', { class: 'badge', text: 'not tested yet' }) : el('span', { class: 'badge ' + (a.check_ok ? 'badge-ok' : 'badge-bad'), text: a.check_ok ? 'works' : 'does not work' }),
             a.check_msg ? el('br') : null, a.check_msg ? el('small', { class: 'text-muted break-all', text: a.check_msg + (a.checked_at ? ' (' + a.checked_at + ' UTC)' : '') }) : null],
             [el('input', { class: 'cert-test-domain', attrs: { type: 'text', placeholder: 'domain to test, e.g. example.com', 'aria-label': 'Domain to test with ' + a.name, maxlength: '253' } }), smallButton('Test', 'dns-test', a.id), deleteButton('dns-delete', a.id)])) : [muted('No DNS account yet.')]));
         const typeSel = el('select', { attrs: { id: 'dns-type' }, data: { change: 'dns-type' } }, ...Object.entries(d.provider_types || {}).map(([k, v]) => el('option', { text: v, attrs: { value: k } })));
@@ -348,9 +348,9 @@
                 el('input', { attrs: { type: 'text', placeholder: 'only from these addresses (optional)', 'aria-label': 'Allowed addresses for ' + c.name, maxlength: '480' }, data: { role: 'cidrs' } }), smallButton('Add server', 'cert-target-add', c.id, 'btn-primary'));
             return listItem([...body, ...servers, add], [smallButton('Renew now', 'cert-renew', c.id), deleteButton('cert-delete', c.id)]);
         }) : [muted('No certificate yet.')]));
-        const sel = el('select', { attrs: { id: 'cert-dns' } }, ...accounts.map(a => el('option', { text: a.name + ' (' + a.type_label + ')', attrs: { value: String(a.id) } })));
+        const sel = el('select', { attrs: { id: 'cert-dns' } }, ...accounts.filter(a => a.dns !== false).map(a => el('option', { text: a.name + ' (' + a.type_label + ')', attrs: { value: String(a.id) } })));
         nodes.push(el('button', { class: 'btn btn-primary btn-sm', text: 'Add certificate', attrs: { type: 'button' }, data: { action: 'toggle-form', target: 'cert-create-form' } }),
-            el('form', { class: 'form hidden', attrs: { id: 'cert-create-form', autocomplete: 'off' } }, accounts.length ? null : muted('Add a DNS account first.'),
+            el('form', { class: 'form hidden', attrs: { id: 'cert-create-form', autocomplete: 'off' } }, accounts.some(a => a.dns !== false) ? null : muted('Add a DNS account first (a registrar-only account such as Namecheap cannot be used for a certificate).'),
                 el('div', { class: 'form-row' }, certField('cert-name', 'Name', el('input', { attrs: { id: 'cert-name', required: 'required', maxlength: '100' } })), certField('cert-dns', 'DNS account', sel)),
                 certField('cert-names', 'Domain names, one per line (a wildcard such as *.example.com is fine; they must be in a domain this DNS account manages)', el('textarea', { attrs: { id: 'cert-names', required: 'required', rows: '3', maxlength: '2000', spellcheck: 'false' } })),
                 el('button', { class: 'btn btn-primary', text: 'Get the certificate', attrs: { type: 'submit' } })));

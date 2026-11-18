@@ -717,6 +717,14 @@ test('certificates: DNS accounts say whether they were tested; the forms exist, 
   assert.deepEqual(shown, ['cloudflare'], 'only the first provider\'s fields show until another is chosen');
   assert.equal(box.querySelector('#dns-type').dataset.change, 'dns-type', 'the select drives which fields show');
 });
+test('certificates: a registrar-only account (Namecheap) is labelled, never offered for a certificate, and does not count as a DNS account', () => {
+  const { SW, box } = load();
+  const d = certData(); d.dns_accounts.push({ id: 8, name: 'Namecheap', type: 'namecheap', type_label: 'Namecheap (registrar)', dns: false, checked_at: null, check_ok: null, check_msg: null });
+  SW.renderCertificates(box, d);
+  assert.deepEqual([...box.querySelectorAll('#cert-dns option')].map(o => o.textContent), ['Main Cloudflare (Cloudflare)', 'Spaceship (Spaceship)']);
+  const nc = [...box.querySelectorAll('.list-item')].find(i => /Namecheap/.test(i.textContent) && i.querySelector('[data-action="dns-test"]')); assert.match(nc.textContent, /domain lists and expiry only/);
+  const only = certData({ dns_accounts: [d.dns_accounts[2]] }); box.replaceChildren(); SW.renderCertificates(box, only); assert.match(box.querySelector('#cert-create-form').textContent, /Add a DNS account first.*registrar-only/);
+});
 test('certificates: test mode, a custom service, a missing app key and an empty page are each explained', () => {
   const { SW, box } = load();
   SW.renderCertificates(box, certData()); assert.match(box.querySelector('.alert-info').textContent, /Test mode.*do not trust them/);
